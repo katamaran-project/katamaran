@@ -243,6 +243,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
   | execute_MRET          : Fun ctx.nil ty_retired
   | execute_CSR           : Fun [csr :: ty_csridx; rs1 :: ty_regno; rd :: ty_regno; is_imm :: ty.bool; op :: ty_csrop] ty_retired
   | execute_MUL           : Fun [rs2 ∷ ty_regno; rs1 ∷ ty_regno; rd ∷ ty_regno; high :: ty.bool; signed1 :: ty.bool; signed2 :: ty.bool] ty_retired
+  | execute_ILLEGAL       : Fun [w ∷ ty_word] ty_retired
   .
 
   (* Restrictions on MMIO needed, because MMIO operations leave a trace and are disallowed for 0-length data *)
@@ -1714,6 +1715,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     |> KMRET pat_unit                                                  => call execute_MRET
     |> KCSR (pat_tuple (csr , rs1 , rd , is_imm , op))                 => call execute_CSR csr rs1 rd is_imm op
     |> KMUL (pat_tuple (rs2 , rs1 , rd , high , signed1 , signed2))    => call execute_MUL rs2 rs1 rd high signed1 signed2
+    |> KILLEGAL (pat_var w)                                            => call execute_ILLEGAL w
     end.
 
 
@@ -1933,6 +1935,10 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
       call set_next_pc tmp3 ;;
       stm_val ty_retired RETIRE_SUCCESS.
 
+  Definition fun_execute_ILLEGAL : Stm [w ∷ ty_word] ty_retired :=
+    call handle_illegal ;;
+    stm_val ty_retired RETIRE_FAIL.
+
   Definition fun_execute_CSR : Stm [csr :: ty_csridx; rs1 :: ty_regno; rd :: ty_regno; is_imm :: ty.bool; op :: ty_csrop] ty_retired :=
     let: rs1_val := if: is_imm
                     then exp_zext rs1
@@ -2090,6 +2096,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     | execute_MRET            => fun_execute_MRET
     | execute_CSR             => fun_execute_CSR
     | execute_MUL             => fun_execute_MUL
+    | execute_ILLEGAL         => fun_execute_ILLEGAL
     end.
 
   Lemma fundef_bindfree (Δ : PCtx) (τ : Ty) (f : Fun Δ τ) :
@@ -2277,6 +2284,8 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     Instance accessible_execute_CSR : AccessibleFun execute_CSR.
     Proof. accessible_proof. Qed.
     Instance accessible_execute_MUL : AccessibleFun execute_MUL.
+    Proof. accessible_proof. Qed.
+    Instance accessible_execute_ILLEGAL : AccessibleFun execute_ILLEGAL.
     Proof. accessible_proof. Qed.
     Instance accessible_execute : AccessibleFun execute.
     Proof. accessible_proof. Qed.

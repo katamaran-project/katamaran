@@ -483,6 +483,7 @@ Inductive AST : Set :=
 | SRET
 | CSR (csr : CSRIdx) (rs1 rd : RegIdx) (is_imm : bool) (csrop : CSROP)
 | MUL (rs2 rs1 rd : RegIdx) (high signed1 signed2 : bool)
+| ILLEGAL (w : Word)
 .
 
 Inductive AccessType : Set :=
@@ -551,6 +552,7 @@ Inductive ASTConstructor : Set :=
 | KSRET
 | KCSR
 | KMUL
+| KILLEGAL
 .
 
 Inductive AccessTypeConstructor : Set :=
@@ -813,7 +815,7 @@ Section Finite.
 
   #[export,program] Instance ASTConstructor_finite :
     Finite ASTConstructor :=
-    {| enum := [KRTYPE;KITYPE;KSHIFTIOP;KUTYPE;KBTYPE;KRISCV_JAL;KRISCV_JALR;KLOAD;KSTORE;KECALL;KEBREAK;KSRET;KMRET;KCSR;KMUL] |}.
+    {| enum := [KRTYPE;KITYPE;KSHIFTIOP;KUTYPE;KBTYPE;KRISCV_JAL;KRISCV_JALR;KLOAD;KSTORE;KECALL;KEBREAK;KSRET;KMRET;KCSR;KMUL;KILLEGAL] |}.
 
   #[export,program] Instance AccessType_finite :
     Finite AccessType :=
@@ -992,6 +994,7 @@ Module Export RiscvPmpBase <: Base.
                             | KMRET       => ty.unit
                             | KCSR        => ty.tuple [ty_csridx; ty_regno; ty_regno; ty.bool; ty_csrop]
                             | KMUL        => ty.tuple [ty_regno; ty_regno; ty_regno; ty.bool; ty.bool; ty.bool]
+                            | KILLEGAL    => ty_word
                             end
     | access_type      => fun _ => ty.unit
     | exception_type   => fun _ => ty.unit
@@ -1051,6 +1054,7 @@ Module Export RiscvPmpBase <: Base.
                             | MRET                          => existT KMRET tt
                             | CSR csr rs1 rd is_imm op      => existT KCSR (tt , csr , rs1 , rd , is_imm , op)
                             | MUL rs2 rs1 rd h s1 s2        => existT KMUL (tt, rs2 , rs1 , rd , h, s1, s2 )
+                            | ILLEGAL w                     => existT KILLEGAL w
                             end
     | access_type      => fun Kv =>
                             match Kv with
@@ -1121,6 +1125,7 @@ Module Export RiscvPmpBase <: Base.
                               | existT KMRET tt                                      => MRET
                               | existT KCSR (tt , csr , rs1 , rd , is_imm , op)      => CSR csr rs1 rd is_imm op
                               | existT KMUL (tt, rs2 , rs1 , rd , h, s1, s2 )        => MUL rs2 rs1 rd h s1 s2
+                              | existT KILLEGAL w                                    => ILLEGAL w
                               end
       | access_type      => fun Kv =>
                               match Kv with

@@ -95,4 +95,5 @@ Goal forall (l bytes : nat) (H : restrict_bytes bytes), True.
   Time show "VCSTAT execute_MRET fuel=1" (vc_stats 1 execute_MRET).
   Time show "VCSTAT execute_CSR fuel=1" (vc_stats 1 execute_CSR).
   Time show "VCSTAT execute_MUL fuel=1" (vc_stats 1 execute_MUL).
+  Time show "VCSTAT execute_ILLEGAL fuel=1" (vc_stats 1 execute_ILLEGAL).
 Abort.

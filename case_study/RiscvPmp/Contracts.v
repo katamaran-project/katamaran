@@ -248,6 +248,9 @@ Module Import RiscvPmpSpecification.
         Definition sep_contract_execute_MUL : SepContractFun execute_MUL :=
           instr_exec_contract.
 
+        Definition sep_contract_execute_ILLEGAL : SepContractFun execute_ILLEGAL :=
+          instr_exec_contract.
+
         Definition sep_contract_execute_ITYPE : SepContractFun execute_ITYPE :=
           instr_exec_contract.
 
@@ -1335,6 +1338,7 @@ Module Import RiscvPmpSpecification.
             | execute_STORE           => Some sep_contract_execute_STORE
             | execute_LOAD            => Some sep_contract_execute_LOAD
             | execute_MUL             => Some sep_contract_execute_MUL
+            | execute_ILLEGAL         => Some sep_contract_execute_ILLEGAL
             | get_arch_pc             => Some sep_contract_get_arch_pc
             | get_next_pc             => Some sep_contract_get_next_pc
             | set_next_pc             => Some sep_contract_set_next_pc
@@ -1922,6 +1926,9 @@ Module RiscvPmpValidContracts.
   Lemma valid_contract_execute_MUL : ValidContract execute_MUL.
   Proof. now vm_compute. Qed.
 
+  Lemma valid_contract_execute_ILLEGAL : ValidContract execute_ILLEGAL.
+  Proof. now vm_compute. Qed.
+
   Lemma pmp_check_perms_gives_access :
     forall acc p L0 A0 X0 W0 R0,
       Pmp_check_perms {| L := L0; A := A0; X := X0; W := W0; R := R0 |} acc p ->
@@ -2050,5 +2057,6 @@ Module RiscvPmpValidContracts.
     - refine (valid_contract _ H valid_contract_execute_MRET).
     - refine (valid_contract _ H valid_contract_execute_CSR).
     - refine (valid_contract _ H valid_contract_execute_MUL).
+    - refine (valid_contract _ H valid_contract_execute_ILLEGAL).
   Qed.
 End RiscvPmpValidContracts.
