@@ -1253,7 +1253,7 @@ Import RVPPRED2.
   Defined.
 
   Lemma adv_is_live y : (y ∈ advAddrs)%stdpp → (y ∈ liveAddrs)%stdpp.
-  Proof. unfold advAddrs, liveAddrs.
+  Proof. rewrite liveAddrs_eq; unfold advAddrs, liveAddrs_def.
          apply bv.seq_subseteq; now compute.
   Qed.
 
@@ -1468,8 +1468,7 @@ Import RVPPRED2.
   (* Note that the split differs depending on whether or not we have an MMIO region! *)
   Lemma liveAddrs_split : (liveAddrs = bv.seq (bv.of_N init_addr) (Z.of_N init_size) ++ bv.seq (bv.of_N handler_entry_addr) (Z.of_N handler_size) ++ bv.seq (bv.of_N data_addr) (Z.of_nat bytes_per_word) ++ advAddrs)%list.
   Proof.
-    (* TODO: scalable proof *)
-    by compute.
+    rewrite liveAddrs_eq. by vm_compute.
   Qed.
 
   Lemma handlerAddrs_split : (@bv.seq xlenbits (bv.of_N handler_entry_addr) (Z.of_N handler_size) = bv.seq (bv.of_N handler_entry_addr) (Z.of_N handler_entry_size) ++ bv.seq (bv.of_N handler_dispatch_addr) (Z.of_N handler_dispatch_size) ++ bv.seq (bv.of_N handler_not_zero_addr) (Z.of_N handler_not_zero_size) ++ bv.seq (bv.of_N handler_is_zero_addr) (Z.of_N handler_is_zero_size) ++ bv.seq (bv.of_N handler_shutdown_check_addr) (Z.of_N handler_shutdown_check_size) ++ bv.seq (bv.of_N handler_shutdown_addr) (Z.of_N handler_shutdown_size) ++ bv.seq (bv.of_N handler_secret_write_addr) (Z.of_N handler_secret_write_size) ++ bv.seq (bv.of_N handler_exit_addr) (Z.of_N handler_exit_size))%list.
@@ -1567,6 +1566,7 @@ Import RVPPRED2.
     iApply (big_sepL_mono with "Hlist"). intros ? ? Hsom. cbn.
     iIntros "$". iPureIntro.
     rewrite /= withinMMIO_one /not; apply mmio_ram_False.
+    rewrite liveAddrs_eq.
     eapply bv.seq_subseteq, list_elem_of_lookup_2, Hsom;
       change (bv.unsigned (bv.of_N minAddr)) with (Z.of_N minAddr); lia.
   Qed.
