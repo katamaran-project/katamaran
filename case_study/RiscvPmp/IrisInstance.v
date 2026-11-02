@@ -673,6 +673,7 @@ Module Type RiscvPmpIrisInstance (LOR : LeftOrRight)
       iApply big_sepL_mono.
       iIntros (? y Hseq) "//".
       iApply interp_addr_access_byte_extr.
+      rewrite liveAddrs_eq.
       eapply bv.seq_subseteq, list_elem_of_lookup_2, Hseq; unfold maxAddr in *;
         change (bv.unsigned (bv.of_N minAddr)) with (Z.of_N minAddr); lia.
     Qed.

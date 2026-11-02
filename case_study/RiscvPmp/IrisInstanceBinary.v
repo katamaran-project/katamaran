@@ -133,11 +133,15 @@ Module Type RiscvPmpIrisAdeqParams2
       iFrame "Hfrag1 Hfrag2 HauthPend1 HauthPend2 HfragPend1 HfragPend2 HfragPow1 HfragPow2".
       iSplitL "Hmapsto1".
       + iPoseProof (big_sepM_list_to_map with "Hmapsto1") as "Hm".
-        { eapply NoDup_liveAddrs. }
+        { change (map ?f liveAddrs) with (fmap f liveAddrs).
+          rewrite -list_fmap_compose (list_fmap_ext _ id); last by intros.
+          rewrite list_fmap_id. apply NoDup_liveAddrs. }
         change (map ?f liveAddrs) with (fmap f liveAddrs).
         now rewrite big_sepL_fmap.
       + iPoseProof (big_sepM_list_to_map with "Hmapsto2") as "Hm".
-        { eapply NoDup_liveAddrs. }
+        { change (map ?f liveAddrs) with (fmap f liveAddrs).
+          rewrite -list_fmap_compose (list_fmap_ext _ id); last by intros.
+          rewrite list_fmap_id. apply NoDup_liveAddrs. }
         change (map ?f liveAddrs) with (fmap f liveAddrs).
         now rewrite big_sepL_fmap.
   Qed.
@@ -434,6 +438,7 @@ Module Type RiscvPmpIrisInstance2
       iApply big_sepL_mono.
       iIntros (? y Hseq) "//".
       iApply interp_addr_access_byte_extr.
+      rewrite liveAddrs_eq.
       eapply bv.seq_subseteq, list_elem_of_lookup_2, Hseq; unfold maxAddr in *;
         change (bv.unsigned (bv.of_N minAddr)) with (Z.of_N minAddr); lia.
     Qed.

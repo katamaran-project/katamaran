@@ -874,7 +874,7 @@ Module inv := invariants.
   Defined.
 
   Lemma adv_is_live y : (y ∈ advAddrs)%stdpp → (y ∈ liveAddrs)%stdpp.
-  Proof. unfold advAddrs, liveAddrs.
+  Proof. rewrite liveAddrs_eq; unfold advAddrs, liveAddrs_def.
          apply bv.seq_subseteq; now compute.
   Qed.
 
@@ -1417,8 +1417,7 @@ Module inv := invariants.
                                         bv.seq (bv.of_N mmio_handler_addr_block2) (Z.of_N mmio_handler_size_block2) ++
                                        (bv.seq (bv.of_N data_addr) (Z.of_N data_size) (* There is no data; conjunct is just here for conformity *)) ++ advAddrs.
   Proof.
-    (* TODO: scalable proof *)
-    by compute.
+    rewrite liveAddrs_eq. by vm_compute.
   Qed.
 
   Lemma intro_ptstomem_word `{sailGS Σ, iostateG IOState Σ} v0 v1 v2 v3 (a : Val ty_word) :
@@ -1511,6 +1510,7 @@ Module inv := invariants.
     iApply (big_sepL_mono with "Hlist"). intros ? ? Hsom. cbn.
     iIntros "$". iPureIntro.
     rewrite /= withinMMIO_one /not; apply mmio_ram_False.
+    rewrite liveAddrs_eq.
     eapply bv.seq_subseteq, list_elem_of_lookup_2, Hsom;
       change (bv.unsigned (bv.of_N minAddr)) with (Z.of_N minAddr); lia.
   Qed.
