@@ -131,7 +131,8 @@ Module RiscvPmpIrisInstanceWithContracts.
          the [Some] branch collapses to a plain boolean [b] (the [SyncVal] and
          coinciding-[NonSyncVal] cases are then literally identical), and the
          [None] branch gives a [False] precondition. *)
-      destruct (pattern_match_relval pat_bool inv) as [[b δpc]|] eqn:Hpm; cbn.
+      destruct (pattern_match_relval (N := string) pat_bool inv) as [[b δpc]|] eqn:Hpm; cbn;
+        cbn in Hpm; rewrite Hpm.
       2: { iDestruct "H" as "%HF". contradiction. }
       destruct (env.view δpc).
       destruct b.
@@ -147,18 +148,12 @@ Module RiscvPmpIrisInstanceWithContracts.
         iApply semWP2_val. do 2 iModIntro.
         iExists δ. iSplitR; first auto.
         destruct ram_val.
-        + iExists (SyncVal (fun_read_ram μ1 bytes (ty.projLeft paddr))). iSplitR; first by rewrite eq_fun_read_ramR.
+        + iExists (NonSyncVal (fun_read_ram μ1 bytes (ty.projLeft paddr)) (fun_read_ram μ2 bytes (ty.projRight paddr))). iSplitR; first auto.
           iFrame "H".
           iSplitR; try auto.
-          iSplitR; first auto.
-          by rewrite eq_fun_read_ramL.
+          iSplitR; cbn; first auto.
+          rewrite eq_fun_read_ramL. by rewrite eq_fun_read_ramR.
           auto. (* TODO: How to dispatch emp goal, also several admits for this below *)
-        + iExists (NonSyncVal (fun_read_ram μ1 bytes (ty.projLeft paddr)) (fun_read_ram μ2 bytes (ty.projRight paddr))). iSplitR; first by rewrite eq_fun_read_ramR.
-          iFrame "H".
-          iSplitR; try auto.
-          iSplitR; first auto.
-          by rewrite eq_fun_read_ramL eq_fun_read_ramR.
-          auto.
       - (* old case *)
         iModIntro.
         iDestruct "H" as "(HL & HR)".
@@ -170,15 +165,9 @@ Module RiscvPmpIrisInstanceWithContracts.
         iFrame "HL". iFrame "HR".
         iExists δ. iModIntro. iSplitR; first auto.
         destruct ram_val.
-        + iExists (SyncVal (fun_read_ram μ1 bytes (ty.projLeft paddr))).
-          iSplitR; first by rewrite eq_fun_read_ramR.
-          iSplitR; try auto.
-          iSplitR; first by rewrite eq_fun_read_ramL.
-          auto.
-        + iExists (NonSyncVal (fun_read_ram μ1 bytes (ty.projLeft paddr)) (fun_read_ram μ2 bytes (ty.projRight paddr))). iSplitR; first by rewrite eq_fun_read_ramR.
-          iSplitR; try auto.
+        + iExists (NonSyncVal (fun_read_ram μ1 bytes (ty.projLeft paddr)) (fun_read_ram μ2 bytes (ty.projRight paddr))).
           iSplitR; first auto.
-          by rewrite eq_fun_read_ramL eq_fun_read_ramR.
+          iSplitR; first (rewrite eq_fun_read_ramR; by rewrite eq_fun_read_ramL).
           auto.
   Qed.
 
@@ -244,11 +233,11 @@ Module RiscvPmpIrisInstanceWithContracts.
     iFrame "Hregs1 Hregs2 HmemL HmemR".
     destruct code; destruct instr; cbn in *;
     destruct (pure_decode _); inversion Hdecode.
-    + rewrite semWP2_val.
-      iExists δ. iSplitR; first auto. iExists (SyncVal v0). auto.
     + destruct (pure_decode); inversion Hdecode.
       rewrite semWP2_val.
-      iExists δ. iSplitR; first auto. iExists (NonSyncVal v1 v2). auto.
+      iExists δ. iSplitR; first auto. iExists (NonSyncVal a a0).
+      iSplitR; first auto.
+      iSplitR; first (by subst). auto.
   Qed.
 
   (* Lemma within_mmio_sound `{!sailGS Σ} `(H: restrict_bytes bytes): *)
@@ -403,6 +392,20 @@ Module RiscvPmpIrisInstanceWithContracts.
   Section CLemSound.
     Add Ring bvring_xlen : (bv.ring_theory xlenbits).
     Local Notation SV := TypeDecl.ty.SyncVal.
+    (* RelVal is a pair: owning an arrv makes its arguments agree; substitute
+       that, then collapse the duplicated (one per projection) pure facts. *)
+    Local Ltac arr_eq1 E :=
+      match type of E with
+      | ?x = ?y => first [ is_var y; subst y | is_var x; subst x | clear E ]
+      end.
+    Local Ltac arr_eqs H :=
+      let E1 := fresh "E" in let E2 := fresh "E" in let E3 := fresh "E" in
+      destruct H as (E1 & E2 & E3); arr_eq1 E1; arr_eq1 E2; arr_eq1 E3.
+    Local Ltac pdup := repeat match goal with H : ?P /\ ?P |- _ => destruct H as [H _] end.
+    Local Ltac arrv_sync H :=
+      iDestruct (interp_arrv_agree with H) as "[%Hag Harr_sync_tmp]";
+      iRename "Harr_sync_tmp" into H;
+      match goal with Hx : _ = _ /\ _ = _ /\ _ = _ |- _ => arr_eqs Hx end.
 
     (* bv ring/bit helpers the arrv proofs below share (named after the `arr`
        catalogue they were written for, deleted in PLAN-arrv Phase E) *)
@@ -444,9 +447,8 @@ Module RiscvPmpIrisInstanceWithContracts.
       exists x r, vs = bop.evalRel bop.cons x r /\ ty.projLeft x = hL /\ ty.projRight x = hR
                   /\ ty.projLeft r = tL /\ ty.projRight r = tR.
     Proof.
-      destruct vs as [l|l r]; cbn; intros HL HR.
-      - subst l. injection HR as <- <-. exists (ty.SyncVal hL), (ty.SyncVal tL). auto.
-      - exists (ty.NonSyncVal hL hR), (ty.NonSyncVal tL tR). subst. auto.
+      destruct vs as [l r]; cbn; intros HL HR.
+      exists (ty.NonSyncVal hL hR), (ty.NonSyncVal tL tR). subst. auto.
     Qed.
 
     Lemma arrv_proj_cons {σ} (x : RelVal σ) (r : RelVal (ty.list σ)) :
@@ -508,37 +510,14 @@ Module RiscvPmpIrisInstanceWithContracts.
         interp_ptstomem (SV a) x ∗
         interp_arrv w s (SV (bv.add a (bv.of_Z s))) (SV (bv.add n (bv.of_Z (-1)))) (SV e) r.
     Proof.
-      intros Hn. cbn [interp_arrv]. iIntros "(%He & %Hlen & %Hn' & Hcells)".
+      intros Hn. rewrite !interp_arrv_SV; unfold interp_arrv_body. iIntros "(%He & %Hlen & %Hn' & Hcells)".
       destruct (ty.projLeft vs) as [|hL tL] eqn:EL.
       { exfalso. apply Hn. rewrite <- Hn'. reflexivity. }
       destruct (ty.projRight vs) as [|hR tR] eqn:ER; [discriminate|].
       destruct (@arrv_cons_split _ vs hL tL hR tR EL ER) as (x & r & -> & HxL & HxR & HrL & HrR).
-      iExists x, r. iSplit; [done|].
+      iExists x, r. iSplit; [done|]. rewrite !interp_arrv_SV; unfold interp_arrv_body.
       cbn [zip big_opL]. iDestruct "Hcells" as "[[%Hr0 Hc0] Hrest]".
       rewrite HrL HrR. cbn [length] in Hlen, Hn'. rewrite bv.of_nat_S in Hn'. subst n e.
-      change (bv.of_nat 0) with (@bv.zero xlenbits) in Hr0. rewrite arrv_ring_zero in Hr0.
-      iSplit; [done|]. iSplitL "Hc0".
-      { change (bv.of_nat 0) with (@bv.zero xlenbits). rewrite arrv_ring_zero.
-        iApply (arrv_ptstomem_proj with "Hc0"); cbn; congruence. }
-      rewrite arr_neg1 -arrv_ring_pred.
-      iSplit; [iPureIntro; apply arrv_ring_end|].
-      iSplit; [iPureIntro; lia|]. iSplit; [done|].
-      iApply (big_sepL_mono with "Hrest"). intros i lr _. cbn.
-      rewrite bv.of_nat_S arrv_ring_end. auto.
-    Qed.
-
-    (* No n≠0 premise: a cons value is non-empty, and a count that wrapped
-       to 0 still gives a consistent n-1 and end fact modulo 2^32. *)
-    Lemma interp_arrv_take_cons `{sailGS2 Σ} (w : nat) (s : Z) (a n e : bv xlenbits) x r :
-      interp_arrv w s (SV a) (SV n) (SV e) (bop.evalRel bop.cons x r) ⊢@{iPropI Σ}
-        ⌜(bv.unsigned a + Z.of_nat w <= Z.of_N maxAddr)%Z⌝ ∗
-        interp_ptstomem (SV a) x ∗
-        interp_arrv w s (SV (bv.add a (bv.of_Z s))) (SV (bv.add n (bv.of_Z (-1)))) (SV e) r.
-    Proof.
-      cbn [interp_arrv]. destruct (arrv_proj_cons x r) as [-> ->].
-      iIntros "(%He & %Hlen & %Hn' & Hcells)".
-      cbn [zip big_opL]. iDestruct "Hcells" as "[[%Hr0 Hc0] Hrest]".
-      cbn [length] in Hlen, Hn'. rewrite bv.of_nat_S in Hn'. subst n e.
       change (bv.of_nat 0) with (@bv.zero xlenbits) in Hr0. rewrite arrv_ring_zero in Hr0.
       iSplit; [done|]. iSplitL "Hc0".
       { change (bv.of_nat 0) with (@bv.zero xlenbits). rewrite arrv_ring_zero.
@@ -557,7 +536,7 @@ Module RiscvPmpIrisInstanceWithContracts.
       interp_arrv w s (SV (bv.add a (bv.of_Z (- s)))) (SV (bv.add n (bv.of_Z 1))) (SV e)
         (bop.evalRel bop.cons x vs).
     Proof.
-      cbn [interp_arrv]. destruct (arrv_proj_cons x vs) as [-> ->].
+      rewrite !interp_arrv_SV; unfold interp_arrv_body. destruct (arrv_proj_cons x vs) as [-> ->].
       iIntros "[(%He & %Hlen & %Hn' & Hcells) [%Hr Hc]]".
       subst n e. rewrite arr_neg_s in Hr. rewrite !arr_neg_s bv.of_Z_one.
       iSplit; [iPureIntro; apply arrv_ring_first_end|].
@@ -577,7 +556,7 @@ Module RiscvPmpIrisInstanceWithContracts.
       interp_arrv w s (SV a) (SV (bv.add n (bv.of_Z 1))) (SV (bv.add e (bv.of_Z s)))
         (bop.evalRel bop.append vs (bop.evalRel bop.cons x (ty.SyncVal []))).
     Proof.
-      cbn [interp_arrv]. destruct (arrv_proj_snoc vs x) as [-> ->].
+      rewrite !interp_arrv_SV; unfold interp_arrv_body. destruct (arrv_proj_snoc vs x) as [-> ->].
       iIntros "[(%He & %Hlen & %Hn' & Hcells) [%Hr Hc]]".
       subst n e. rewrite bv.of_Z_one.
       iSplit; [iPureIntro; apply arrv_ring_last|].
@@ -593,32 +572,21 @@ Module RiscvPmpIrisInstanceWithContracts.
       ValidLemma (clem_lemma (clem_arrv_take_first w s t)).
     Proof.
       intros ι. cbv [clemv_ctx] in ι. destruct_syminstance ι.
-      destruct a as [a|]; destruct n as [n|]; destruct e as [e|];
-        cbn -[interp_arrv interp_ptstomem]; try (iIntros "[[] _]").
-      iIntros "[Harr [%Hne _]]".
+      destruct a as [a a']; destruct n as [n n']; destruct e as [e e'];
+        cbn -[interp_arrv interp_ptstomem].
+      iIntros "[Harr [%Hne _]]". arrv_sync "Harr". pdup.
       iDestruct (interp_arrv_take_first with "Harr") as (x r) "(%Hvs & %Hr & Hc & Harr)";
         [exact Hne|].
       iExists x, r. iFrame "Hc Harr". auto.
-    Qed.
-
-    Lemma clem_arrv_take_cons_sound `{sailGS2 Σ} (w : nat) (s : Z) (t : string) :
-      ValidLemma (clem_lemma (clem_arrv_take_cons w s t)).
-    Proof.
-      intros ι. destruct_syminstance ι.
-      destruct a as [a|]; destruct n as [n|]; destruct e as [e|];
-        cbn -[interp_arrv interp_ptstomem]; try (iIntros "[]").
-      iIntros "Harr".
-      iDestruct (interp_arrv_take_cons with "Harr") as "(%Hr & Hc & Harr)".
-      iFrame "Hc Harr". auto.
     Qed.
 
     Lemma clem_arrv_add_first_sound `{sailGS2 Σ} (w : nat) (s : Z) (t : string) :
       ValidLemma (clem_lemma (clem_arrv_add_first w s t)).
     Proof.
       intros ι. cbv [clemv_ctx] in ι. destruct_syminstance ι.
-      destruct a as [a|]; destruct n as [n|]; destruct e as [e|];
-        cbn -[interp_arrv interp_ptstomem]; try (iIntros "[[] _]").
-      iIntros "[Harr [Hc [%Hr _]]]".
+      destruct a as [a a']; destruct n as [n n']; destruct e as [e e'];
+        cbn -[interp_arrv interp_ptstomem].
+      iIntros "[Harr [Hc [%Hr _]]]". arrv_sync "Harr". pdup.
       iApply interp_arrv_add_first. iFrame "Harr Hc". auto.
     Qed.
 
@@ -626,9 +594,9 @@ Module RiscvPmpIrisInstanceWithContracts.
       ValidLemma (clem_lemma (clem_arrv_add_last w s t)).
     Proof.
       intros ι. cbv [clemv_ctx] in ι. destruct_syminstance ι.
-      destruct a as [a|]; destruct n as [n|]; destruct e as [e|];
-        cbn -[interp_arrv interp_ptstomem]; try (iIntros "[[] _]").
-      iIntros "[Harr [Hc [%Hr _]]]".
+      destruct a as [a a']; destruct n as [n n']; destruct e as [e e'];
+        cbn -[interp_arrv interp_ptstomem].
+      iIntros "[Harr [Hc [%Hr _]]]". arrv_sync "Harr". pdup.
       iApply interp_arrv_add_last. iFrame "Harr Hc". auto.
     Qed.
 
@@ -702,7 +670,7 @@ Module RiscvPmpIrisInstanceWithContracts.
     Lemma interp_arrv_proj `{sailGS2 Σ} w s (a n e : RelVal ty_xlenbits) x y :
       ty.projLeft x = ty.projLeft y -> ty.projRight x = ty.projRight y ->
       interp_arrv w s a n e x ⊣⊢@{iPropI Σ} interp_arrv w s a n e y.
-    Proof. intros HL HR. destruct a, n, e; cbn [interp_arrv]; try done. by rewrite HL HR. Qed.
+    Proof. intros HL HR. unfold interp_arrv, interp_arrv_body. by rewrite HL HR. Qed.
 
     (* a cell of a w ≥ 1 array owns (the left copy of) its first byte *)
     Definition arrv_byteQ `{sailGS2 Σ} (k : nat) : iProp Σ :=
@@ -713,7 +681,7 @@ Module RiscvPmpIrisInstanceWithContracts.
       interp_arrv (S w) s (SV a) (SV n) (SV e) vs ⊢@{iPropI Σ}
       ⌜length (ty.projLeft vs) <= N.to_nat maxAddr⌝.
     Proof.
-      cbn [interp_arrv]. iIntros "(%He & %Hlen & %Hn & Hcells)".
+      rewrite !interp_arrv_SV; unfold interp_arrv_body. iIntros "(%He & %Hlen & %Hn & Hcells)".
       iDestruct (arrv_excl_nodup arrv_byteQ (N.to_nat maxAddr)
          (fun i => Z.to_nat (bv.unsigned (bv.add a (bv.mul (bv.of_Z s) (bv.of_nat i)))))
          with "Hcells") as %[Hnd Hf].
@@ -737,7 +705,7 @@ Module RiscvPmpIrisInstanceWithContracts.
       ⌜ty.projLeft vs = [] /\ ty.projRight vs = []⌝.
     Proof.
       iIntros "H". iDestruct (interp_arrv_length with "H") as %Hb.
-      cbn [interp_arrv]. iDestruct "H" as "(_ & %Hlen & %Hn & _)". iPureIntro.
+      rewrite !interp_arrv_SV; unfold interp_arrv_body. iDestruct "H" as "(_ & %Hlen & %Hn & _)". iPureIntro.
       pose proof maxAddr_rep as Hm.
       assert (Hs : (N.of_nat (length (ty.projLeft vs)) < bv.exp2 xlenbits)%N) by lia.
       apply (f_equal (@bv.bin xlenbits)) in Hn. rewrite (bv.bin_of_nat_small Hs) in Hn. cbn in Hn.
@@ -746,26 +714,13 @@ Module RiscvPmpIrisInstanceWithContracts.
       apply length_zero_iff_nil in Hn, Hn'. split; assumption.
     Qed.
 
-    Lemma interp_arrv_pad `{sailGS2 Σ} (w : nat) (s : Z) (a n e b c : bv xlenbits) vs ws :
-      interp_arrv (S w) s (SV a) (SV n) (SV e) vs ∗ interp_arrv (S w) s (SV b) (SV bv.zero) (SV c) ws
-      ⊢@{iPropI Σ}
-      interp_arrv (S w) s (SV a) (SV n) (SV e) (bop.evalRel bop.append vs ws)
-      ∗ interp_arrv (S w) s (SV b) (SV bv.zero) (SV c) ws.
-    Proof.
-      iIntros "[Ha Hb]". iDestruct (interp_arrv_count0 with "Hb") as %[HL HR].
-      iFrame "Hb". destruct (arrv_proj_app vs ws) as [E1 E2].
-      iApply (interp_arrv_proj with "Ha"); rewrite ?E1 ?E2 ?HL ?HR app_nil_r; done.
-    Qed.
-
     Lemma arrv_snoc_split {σ} (vs : RelVal (ty.list σ)) tL hL tR hR :
       ty.projLeft vs = tL ++ [hL] -> ty.projRight vs = tR ++ [hR] ->
       exists x r, vs = bop.evalRel bop.append r (bop.evalRel bop.cons x (ty.SyncVal []))
         /\ ty.projLeft x = hL /\ ty.projRight x = hR /\ ty.projLeft r = tL /\ ty.projRight r = tR.
     Proof.
-      destruct vs as [l|l r]; cbn; intros HL HR.
-      - subst l. apply app_inj_tail in HR as [<- <-].
-        exists (ty.SyncVal hL), (ty.SyncVal tL). auto.
-      - exists (ty.NonSyncVal hL hR), (ty.NonSyncVal tL tR). subst. auto.
+      destruct vs as [l r]; cbn; intros HL HR.
+      exists (ty.NonSyncVal hL hR), (ty.NonSyncVal tL tR). subst. auto.
     Qed.
 
     Lemma interp_arrv_take_last `{sailGS2 Σ} (w : nat) (s : Z) (a n e : bv xlenbits) vs :
@@ -776,7 +731,7 @@ Module RiscvPmpIrisInstanceWithContracts.
         interp_ptstomem (SV (bv.add e (bv.of_Z (- s)))) x ∗
         interp_arrv w s (SV a) (SV (bv.add n (bv.of_Z (-1)))) (SV (bv.add e (bv.of_Z (- s)))) r.
     Proof.
-      intros Hn. cbn [interp_arrv]. iIntros "(%He & %Hlen & %Hn' & Hcells)".
+      intros Hn. rewrite !interp_arrv_SV; unfold interp_arrv_body. iIntros "(%He & %Hlen & %Hn' & Hcells)".
       destruct (ty.projLeft vs) as [|y0 l0] eqn:EL0.
       { exfalso. apply Hn. rewrite <- Hn'. reflexivity. }
       destruct (exists_last (l := y0 :: l0) ltac:(discriminate)) as (tL & hL & EL).
@@ -784,7 +739,7 @@ Module RiscvPmpIrisInstanceWithContracts.
       destruct (exists_last (l := z0 :: m0) ltac:(discriminate)) as (tR & hR & ER).
       rewrite <- EL0 in EL. rewrite <- ER0 in ER.
       destruct (@arrv_snoc_split _ vs tL hL tR hR EL ER) as (x & r & -> & HxL & HxR & HrL & HrR).
-      iExists x, r. iSplit; [done|].
+      iExists x, r. iSplit; [done|]. rewrite !interp_arrv_SV; unfold interp_arrv_body.
       rewrite EL0 in EL. rewrite ER0 in ER. rewrite EL ER in Hlen Hn' |- *. rewrite HrL HrR.
       rewrite !length_app in Hlen. cbn [length] in Hlen.
       (* not lia: the two lengths' hidden type indices differ *)
@@ -808,26 +763,26 @@ Module RiscvPmpIrisInstanceWithContracts.
       a <> e ->
       interp_arrv w s (SV a) (SV n) (SV e) vs ⊢@{iPropI Σ} ⌜n <> bv.zero⌝.
     Proof.
-      intros Hae. cbn [interp_arrv]. iIntros "(%He & _)". iPureIntro. intros ->.
+      intros Hae. rewrite !interp_arrv_SV; unfold interp_arrv_body. iIntros "(%He & _)". iPureIntro. intros ->.
       apply Hae. subst e. symmetry. apply arrv_ring_zero.
     Qed.
 
     Lemma interp_arrv_empty `{sailGS2 Σ} (w : nat) (s : Z) (a : bv xlenbits) :
       ⊢@{iPropI Σ} interp_arrv w s (SV a) (SV bv.zero) (SV a) (ty.SyncVal []).
     Proof.
-      cbn [interp_arrv]. iSplit; [iPureIntro; symmetry; apply arrv_ring_zero|]. cbn. auto.
+      rewrite !interp_arrv_SV; unfold interp_arrv_body. iSplit; [iPureIntro; symmetry; apply arrv_ring_zero|]. cbn. auto.
     Qed.
 
     Lemma interp_arrv_empty_elim `{sailGS2 Σ} (w : nat) (s : Z) (a e : bv xlenbits) vs :
       interp_arrv w s (SV a) (SV bv.zero) (SV e) vs ⊢@{iPropI Σ} ⌜a = e⌝.
-    Proof. cbn [interp_arrv]. iIntros "(%He & _)". iPureIntro. subst e. symmetry. apply arrv_ring_zero. Qed.
+    Proof. rewrite !interp_arrv_SV; unfold interp_arrv_body. iIntros "(%He & _)". iPureIntro. subst e. symmetry. apply arrv_ring_zero. Qed.
 
     Lemma interp_arrv_flip `{sailGS2 Σ} (w : nat) (s : Z) (a n e : bv xlenbits) vs :
       interp_arrv w s (SV a) (SV n) (SV e) vs ⊢@{iPropI Σ}
       interp_arrv w (- s) (SV (bv.add e (bv.of_Z (- s)))) (SV n) (SV (bv.add a (bv.of_Z (- s))))
         (uop.evalRel uop.rev vs).
     Proof.
-      cbn [interp_arrv]. destruct (arrv_proj_rev vs) as [-> ->].
+      rewrite !interp_arrv_SV; unfold interp_arrv_body. destruct (arrv_proj_rev vs) as [-> ->].
       iIntros "(%He & %Hlen & %Hn & Hcells)". subst e n. rewrite !arr_neg_s.
       iSplit; [iPureIntro; apply arr_ring_flip_end|].
       rewrite !length_rev. iSplit; [done|]. iSplit; [done|].
@@ -847,7 +802,7 @@ Module RiscvPmpIrisInstanceWithContracts.
       interp_arrv w s (SV a) (SV n) (SV e) v1 ∗ interp_arrv w s (SV e) (SV n2) (SV e2) v2
       ⊢@{iPropI Σ} interp_arrv w s (SV a) (SV (bv.add n n2)) (SV e2) (bop.evalRel bop.append v1 v2).
     Proof.
-      cbn [interp_arrv]. destruct (arrv_proj_app v1 v2) as [-> ->].
+      rewrite !interp_arrv_SV; unfold interp_arrv_body. destruct (arrv_proj_app v1 v2) as [-> ->].
       iIntros "[(%He & %Hl1 & %Hn & H1) (%He2 & %Hl2 & %Hn2 & H2)]". subst e2 e n n2.
       iSplit; [iPureIntro; apply arr_ring_join_idx|].
       iSplit; [iPureIntro; rewrite !length_app Hl1 Hl2; reflexivity|].
@@ -862,7 +817,7 @@ Module RiscvPmpIrisInstanceWithContracts.
       interp_arrv w s (SV a1) (SV n) (SV e1) v1 ∗ interp_arrv w s (SV a2) (SV n) (SV e2) v2
       ⊢@{iPropI Σ} ⌜a2 = e2⌝.
     Proof.
-      intros Ha. cbn [interp_arrv]. iIntros "[(%He1 & _) (%He2 & _)]". iPureIntro.
+      intros Ha. rewrite !interp_arrv_SV; unfold interp_arrv_body. iIntros "[(%He1 & _) (%He2 & _)]". iPureIntro.
       subst e1 e2. assert (Hz : bv.mul (bv.of_Z s) n = bv.zero).
       { transitivity (bv.add (bv.add a1 (bv.mul (bv.of_Z s) n)) (bv.negate a1)); [ring|].
         rewrite -He1. ring. }
@@ -874,10 +829,9 @@ Module RiscvPmpIrisInstanceWithContracts.
         ty.projLeft v1 = take k (ty.projLeft vs) /\ ty.projRight v1 = take k (ty.projRight vs) /\
         ty.projLeft v2 = drop k (ty.projLeft vs) /\ ty.projRight v2 = drop k (ty.projRight vs).
     Proof.
-      destruct vs as [l|l r].
-      - exists (ty.SyncVal (take k l)), (ty.SyncVal (drop k l)). cbn. rewrite take_drop. auto.
-      - exists (ty.NonSyncVal (take k l) (take k r)), (ty.NonSyncVal (drop k l) (drop k r)).
-        cbn. rewrite !take_drop. auto.
+      destruct vs as [l r].
+      exists (ty.NonSyncVal (take k l) (take k r)), (ty.NonSyncVal (drop k l) (drop k r)).
+      cbn. rewrite !take_drop. auto.
     Qed.
 
     Lemma interp_arrv_split `{sailGS2 Σ} (w : nat) (s : Z) (k : N) (a n e : bv xlenbits) vs :
@@ -893,14 +847,14 @@ Module RiscvPmpIrisInstanceWithContracts.
       { unfold K. rewrite -bv.of_Z_N bv.of_Z_mul. reflexivity. }
       assert (EnK : bv.add n (@bv.of_Z xlenbits (- Z.of_N k)) = bv.sub n K).
       { unfold K. rewrite -bv.of_Z_negate bv.of_Z_N. reflexivity. }
-      rewrite EsK EnK. cbn [interp_arrv]. iIntros "(%He & %Hlen & %Hn & Hc)".
+      rewrite EsK EnK. rewrite !interp_arrv_SV; unfold interp_arrv_body. iIntros "(%He & %Hlen & %Hn & Hc)".
       set (kn := N.to_nat (bv.bin K)).
       assert (EK : @bv.of_nat xlenbits kn = K).
       { unfold kn, bv.of_nat. rewrite N2Nat.id. apply bv.of_N_bin. }
       assert (Hkn : (kn <= length (ty.projLeft vs))%nat).
       { subst n. unfold kn. pose proof (bv.bin_of_nat_decr (n := xlenbits) (length (ty.projLeft vs))). lia. }
       destruct (@arrv_app_split _ vs kn) as (v1 & v2 & -> & H1L & H1R & H2L & H2R).
-      iExists v1, v2. iSplit; [done|].
+      iExists v1, v2. iSplit; [done|]. rewrite !interp_arrv_SV; unfold interp_arrv_body.
       rewrite H1L H1R H2L H2R.
       set (L := ty.projLeft (bop.evalRel bop.append v1 v2)) in *.
       set (R := ty.projRight (bop.evalRel bop.append v1 v2)) in *.
@@ -932,9 +886,9 @@ Module RiscvPmpIrisInstanceWithContracts.
       ValidLemma (clem_lemma (clem_arrv_take_last w s t)).
     Proof.
       intros ι. cbv [clemv_ctx] in ι. destruct_syminstance ι.
-      destruct a as [a|]; destruct n as [n|]; destruct e as [e|];
-        cbn -[interp_arrv interp_ptstomem]; try (iIntros "[[] _]").
-      iIntros "[Harr [%Hne _]]".
+      destruct a as [a a']; destruct n as [n n']; destruct e as [e e'];
+        cbn -[interp_arrv interp_ptstomem].
+      iIntros "[Harr [%Hne _]]". arrv_sync "Harr". pdup.
       iDestruct (interp_arrv_take_last with "Harr") as (x r) "(%Hvs & %Hr & Hc & Harr)";
         [exact Hne|].
       iExists x, r. iFrame "Hc Harr". auto.
@@ -944,11 +898,11 @@ Module RiscvPmpIrisInstanceWithContracts.
       ValidLemma (clem_lemma (clem_arrv_nonempty w s t)).
     Proof.
       intros ι. cbv [clemv_ctx] in ι. destruct_syminstance ι.
-      destruct a as [a|]; destruct n as [n|]; destruct e as [e|];
-        cbn -[interp_arrv]; try (iIntros "[[] _]").
-      iIntros "[Harr [%Hne _]]".
+      destruct a as [a a']; destruct n as [n n']; destruct e as [e e'];
+        cbn -[interp_arrv].
+      iIntros "[Harr [%Hne _]]". arrv_sync "Harr". pdup.
       iDestruct (interp_arrv_nonempty with "Harr") as %Hn; [exact Hne|].
-      iFrame "Harr". iSplit; [|done]. iPureIntro. exact Hn.
+      iFrame "Harr". iSplit; [|done]. iPureIntro. split; exact Hn.
     Qed.
 
     Lemma clem_arrv_empty_sound `{sailGS2 Σ} (w : nat) (s : Z) (t : string) :
@@ -956,32 +910,52 @@ Module RiscvPmpIrisInstanceWithContracts.
     Proof.
       intros ι. destruct_syminstance ι.
       (* a NonSyncVal address is ruled out by the secLeak precondition *)
-      destruct a as [a|]; cbn -[interp_arrv]; [|iIntros "[[] _]"].
-      iIntros "_". iApply interp_arrv_empty.
+      destruct a as [a a']; cbn -[interp_arrv].
+      iIntros "[%Ha _]". hnf in Ha. cbn in Ha. subst a'. iApply interp_arrv_empty.
     Qed.
 
-    (* count 0 gives start = end, and NOTHING about the value *)
+    (* count 0 gives start = end, and for w ≥ 1 the value [] (both runs hold
+       the empty list, interp_arrv_count0, and that pair IS SyncVal []) *)
     Lemma clem_arrv_empty_elim_sound `{sailGS2 Σ} (w : nat) (s : Z) (t : string) :
       ValidLemma (clem_lemma (clem_arrv_empty_elim w s t)).
     Proof.
       intros ι. destruct_syminstance ι.
-      destruct a as [a|]; destruct e as [e|];
-        cbn -[interp_arrv]; try (iIntros "[]").
-      iIntros "Harr". iDestruct (interp_arrv_empty_elim with "Harr") as %Hae.
-      iSplit; [|done]. iPureIntro. exact Hae.
+      destruct a as [a a']; destruct e as [e e'];
+        cbn -[interp_arrv].
+      iIntros "Harr". arrv_sync "Harr". pdup. iDestruct (interp_arrv_empty_elim with "Harr") as %Hae.
+      destruct w as [|w]; cbn -[interp_arrv].
+      - iSplit; [|done]. iSplit; iPureIntro; [split; exact Hae|done].
+      - iDestruct (interp_arrv_count0 with "Harr") as %[HL HR].
+        iSplit; (iSplit; [iPureIntro|done]).
+        + split; exact Hae.
+        + destruct vs as [vl vr]; cbn in *; subst; reflexivity.
+    Qed.
+
+    (* the same fact, the array kept; w = 0: the precondition is False *)
+    Lemma clem_arrv_count0_sound `{sailGS2 Σ} (w : nat) (s : Z) (t : string) :
+      ValidLemma (clem_lemma (clem_arrv_count0 w s t)).
+    Proof.
+      intros ι. destruct_syminstance ι. destruct w as [|w].
+      { cbn -[interp_arrv]. iIntros "(_ & %Hf & _)". done. }
+      destruct a as [a a']; destruct e as [e e'];
+        cbn -[interp_arrv].
+      iIntros "[Harr _]". arrv_sync "Harr". pdup.
+      iDestruct (interp_arrv_count0 with "Harr") as %[HL HR].
+      iFrame "Harr". iSplit; [|done]. iPureIntro.
+      destruct vs as [vl vr]; cbn in *; subst; reflexivity.
     Qed.
 
     Lemma clem_arrv_lockstep_sound `{sailGS2 Σ} (w : nat) (s : Z) (t1 t2 : string) :
       ValidLemma (clem_lemma (clem_arrv_lockstep w s t1 t2)).
     Proof.
       intros ι. destruct_syminstance ι.
-      destruct a1 as [a1|]; destruct n as [n|]; destruct e1 as [e1|];
-        destruct a2 as [a2|]; destruct e2 as [e2|];
-        cbn -[interp_arrv]; try (iIntros "[[] _]"); try (iIntros "[_ [[] _]]").
-      iIntros "[H1 [H2 [%Heq _]]]".
+      destruct a1 as [a1 a1']; destruct n as [n n']; destruct e1 as [e1 e1'];
+        destruct a2 as [a2 a2']; destruct e2 as [e2 e2'];
+        cbn -[interp_arrv].
+      iIntros "[H1 [H2 [%Heq _]]]". arrv_sync "H1". arrv_sync "H2". pdup.
       iAssert ⌜a2 = e2⌝%I as %He2.
       { iApply (interp_arrv_lockstep with "[$H1 $H2]"). exact Heq. }
-      iFrame "H1 H2". iSplit; [|done]. iPureIntro. exact He2.
+      iFrame "H1 H2". iSplit; [|done]. iPureIntro. split; exact He2.
     Qed.
 
     Lemma clem_arrv_drop_sound `{sailGS2 Σ} (w : nat) (s : Z) (t : string) :
@@ -992,41 +966,28 @@ Module RiscvPmpIrisInstanceWithContracts.
       ValidLemma (clem_lemma (clem_arrv_flip w s t)).
     Proof.
       intros ι. cbv [clemv_ctx] in ι. destruct_syminstance ι.
-      destruct a as [a|]; destruct n as [n|]; destruct e as [e|];
-        cbn -[interp_arrv]; try (iIntros "[]").
-      iIntros "Harr". by iApply interp_arrv_flip.
+      destruct a as [a a']; destruct n as [n n']; destruct e as [e e'];
+        cbn -[interp_arrv].
+      iIntros "Harr". arrv_sync "Harr". pdup. by iApply interp_arrv_flip.
     Qed.
 
     Lemma clem_arrv_join_sound `{sailGS2 Σ} (w : nat) (s : Z) (t1 t2 t : string) :
       ValidLemma (clem_lemma (clem_arrv_join w s t1 t2 t)).
     Proof.
       intros ι. destruct_syminstance ι.
-      destruct a as [a|]; destruct n as [n|]; destruct e as [e|];
-        destruct n2 as [n2|]; destruct e2 as [e2|];
-        cbn -[interp_arrv]; try (iIntros "[[] _]"); try (iIntros "[_ []]").
-      iIntros "[H1 H2]". iApply (interp_arrv_join with "[$H1 $H2]").
-    Qed.
-
-    (* w = 0: the precondition is False (cells own no bytes, so a count of
-       0 mod 2^32 says nothing about the length) *)
-    Lemma clem_arrv_pad_sound `{sailGS2 Σ} (w : nat) (s : Z) (t t' : string) :
-      ValidLemma (clem_lemma (clem_arrv_pad w s t t')).
-    Proof.
-      intros ι. destruct_syminstance ι. destruct w as [|w].
-      { cbn -[interp_arrv]. iIntros "(_ & _ & %Hf & _)". done. }
-      destruct a as [a|]; destruct n as [n|]; destruct e as [e|];
-        destruct b as [b|]; destruct c as [c|];
-        cbn -[interp_arrv]; try (iIntros "[[] _]"); try (iIntros "[_ [[] _]]").
-      iIntros "[Ha [Hb _]]". iApply (interp_arrv_pad with "[$Ha $Hb]").
+      destruct a as [a a']; destruct n as [n n']; destruct e as [e e'];
+        destruct n2 as [n2 n2']; destruct e2 as [e2 e2'];
+        cbn -[interp_arrv].
+      iIntros "[H1 H2]". arrv_sync "H1". arrv_sync "H2". pdup. iApply (interp_arrv_join with "[$H1 $H2]").
     Qed.
 
     Lemma clem_arrv_split_sound `{sailGS2 Σ} (w : nat) (s : Z) (t : string) (k : N) :
       ValidLemma (clem_lemma (clem_arrv_split w s t k)).
     Proof.
       intros ι. cbv [clemv_ctx] in ι. destruct_syminstance ι.
-      destruct a as [a|]; destruct n as [n|]; destruct e as [e|];
-        cbn -[interp_arrv]; try (iIntros "[[] _]").
-      iIntros "[Harr [%Hle _]]".
+      destruct a as [a a']; destruct n as [n n']; destruct e as [e e'];
+        cbn -[interp_arrv].
+      iIntros "[Harr [%Hle _]]". arrv_sync "Harr". pdup.
       iDestruct (interp_arrv_split w s k with "Harr") as (v1 v2) "(%Hvs & H1 & H2)"; [exact Hle|].
       iExists v1, v2. iFrame "H1 H2". auto.
     Qed.
@@ -1196,7 +1157,7 @@ Module RiscvPmpIrisInstanceWithContracts.
       interp_arrv 4 4 (SV a) (SV n) (SV e) vs ⊢@{iPropI Σ}
       interp_arrv 1 1 (SV a) (SV (bv.mul (bv.of_N 4) n)) (SV e) (uop.evalRel uop.regroup vs).
     Proof.
-      cbn [interp_arrv]. destruct (arrv_proj_regroup vs) as [-> ->].
+      rewrite !interp_arrv_SV; unfold interp_arrv_body. destruct (arrv_proj_regroup vs) as [-> ->].
       iIntros "(%He & %Hlen & %Hn & Hc)". subst e n.
       iSplit.
       { iPureIntro. change (@bv.of_N xlenbits 4) with (@bv.of_Z xlenbits 4). rewrite bv.of_Z_one.
@@ -1214,7 +1175,7 @@ Module RiscvPmpIrisInstanceWithContracts.
       interp_arrv 4 4 (SV a) (SV k) (SV e) v.
     Proof.
       intros Hk. iIntros "H". iDestruct (interp_arrv_length with "H") as %Hb.
-      cbn [interp_arrv]. destruct (arrv_proj_regroup v) as [EL ER].
+      rewrite !interp_arrv_SV; unfold interp_arrv_body. destruct (arrv_proj_regroup v) as [EL ER].
       rewrite EL ER in Hb |- *. iDestruct "H" as "(%He & %Hlen & %Hn & Hc)".
       rewrite !arrv_flat_length in Hb Hlen Hn.
       assert (HlT : length (ty.projLeft v) = length (ty.projRight v)).
@@ -1241,21 +1202,35 @@ Module RiscvPmpIrisInstanceWithContracts.
       ValidLemma (clem_lemma (clem_arrv_to_bytes t)).
     Proof.
       intros ι. cbv [clemv_ctx] in ι. destruct_syminstance ι.
-      destruct a as [a|]; destruct n as [n|]; destruct e as [e|];
-        cbn -[interp_arrv]; try (iIntros "[]").
-      iIntros "Harr". by iApply interp_arrv_to_bytes.
+      destruct a as [a a']; destruct n as [n n']; destruct e as [e e'];
+        cbn -[interp_arrv].
+      iIntros "Harr". arrv_sync "Harr". pdup. by iApply interp_arrv_to_bytes.
+    Qed.
+
+    (* the count is 4·k, not a variable, so publicness of the count gives
+       4·k = 4·k' and the k <u 2^30 bound on both sides gives k = k' *)
+    Lemma arrv_mul4_inj (k k' : bv xlenbits) :
+      (bv.bin k < 1073741824)%N -> (bv.bin k' < 1073741824)%N ->
+      bv.mul (bv.of_N 4) k = bv.mul (bv.of_N 4) k' -> k = k'.
+    Proof.
+      intros Hk Hk' E. apply bv.bin_inj. apply (f_equal (@bv.bin xlenbits)) in E.
+      unfold bv.mul in E. change (bv.bin (@bv.of_N xlenbits 4)) with 4%N in E.
+      rewrite !bv.bin_of_N_small in E; [lia | change (bv.exp2 xlenbits) with 4294967296%N; lia ..].
     Qed.
 
     Lemma clem_arrv_of_bytes_sound `{sailGS2 Σ} (t : string) :
       ValidLemma (clem_lemma (clem_arrv_of_bytes t)).
     Proof.
       intros ι. destruct_syminstance ι.
-      destruct a as [a|]; destruct k as [k|]; destruct e as [e|];
-        cbn -[interp_arrv]; try (iIntros "[[] _]").
+      destruct a as [a a']; destruct k as [k k']; destruct e as [e e'];
+        cbn -[interp_arrv].
       iIntros "[Harr [%Hk _]]".
-      iApply (interp_arrv_of_bytes with "Harr").
+      iDestruct (interp_arrv_agree with "Harr") as "[%Hag Harr]".
+      destruct Hag as (Ea & Ek & Ee). subst a' e'.
       unfold bv.ult in Hk. change (bv.bin (@bv.of_N xlenbits 1073741824)) with 1073741824%N in Hk.
-      exact Hk.
+      destruct Hk as [Hk Hk'].
+      apply arrv_mul4_inj in Ek; [|exact Hk|exact Hk']. subst k'.
+      iApply (interp_arrv_of_bytes with "Harr"). exact Hk.
     Qed.
 
     (* the array is handed back; an EMPTY one at its (public) start costs
@@ -1264,47 +1239,9 @@ Module RiscvPmpIrisInstanceWithContracts.
       ValidLemma (clem_lemma (clem_arrv_empty_at w s t t')).
     Proof.
       intros ι. cbv [clemv_ctx] in ι. destruct_syminstance ι.
-      destruct a as [a|]; destruct n as [n|]; destruct e as [e|];
-        cbn -[interp_arrv]; try (iIntros "[]").
-      iIntros "Harr". iFrame "Harr". iApply interp_arrv_empty.
-    Qed.
-
-    (* what br_ccopy stores for two equal bytes u under any mask m is u
-       (zext' is how uop.zext evaluates: append zeros) *)
-    Lemma mux_byte_same (u : bv 8) (m : bv 32) :
-      bv.take 8 (bv.lxor (bv.land (bv.lxor (bv.zext' u 24) (bv.zext' u 24)) m) (bv.zext' u 24)) = u.
-    Proof. rewrite bv.lxor_nilpotent bv.land_zero_l bv.lxor_zero_l. unfold bv.zext'. apply bv.take_app. Qed.
-
-    Lemma clem_arrv_resync_head_sound `{sailGS2 Σ} (t t' : string) :
-      ValidLemma (clem_lemma (clem_arrv_resync_head t t')).
-    Proof.
-      intros ι. destruct_syminstance ι.
-      cbn -[interp_arrv]. iIntros "(Hm & Hs & Hd & %Hv & _)".
-      iFrame "Hm Hs". iApply (interp_arrv_proj with "Hd").
-      all: subst v; destruct u as [u|ul ur], m as [m|ml mr], rd as [rd|rl rr]; cbn;
-        f_equal; symmetry; apply mux_byte_same.
-    Qed.
-
-    (* take_cons for b = true, take_first for b = false *)
-    Lemma clem_arrv_take_any_sound `{sailGS2 Σ} (w : nat) (s : Z) (t : string) :
-      ValidLemma (clem_lemma (clem_arrv_take_any w s t)).
-    Proof.
-      intros ι. cbv [clemv_ctx] in ι. destruct_syminstance ι.
-      (* a NonSyncVal b with equal halves matches like that bool; else nothing *)
-      destruct b as [bb|bl br];
-        [| cbn -[interp_arrv interp_ptstomem];
-           match goal with |- context [if ?d then _ else _] => destruct d as [<-|Hne] end;
-           [rename bl into bb | cbn; iIntros "[]"]].
-      all: destruct bb; destruct a as [a|]; destruct n as [n|]; destruct e as [e|];
-        cbn -[interp_arrv interp_ptstomem]; try (iIntros "[]"); try (iIntros "[[] _]").
-      all: first
-        [ (iIntros "Harr";
-           iDestruct (interp_arrv_take_cons with "Harr") as "(%Hr & Hc & Harr)";
-           iFrame "Hc Harr"; auto)
-        | (iIntros "[Harr [%Hne _]]";
-           iDestruct (interp_arrv_take_first with "Harr") as (x' r') "(%Hvs & %Hr & Hc & Harr)";
-           [exact Hne|];
-           iExists x', r'; iFrame "Hc Harr"; auto) ].
+      destruct a as [a a']; destruct n as [n n']; destruct e as [e e'];
+        cbn -[interp_arrv].
+      iIntros "Harr". arrv_sync "Harr". pdup. iFrame "Harr". iApply interp_arrv_empty.
     Qed.
 
     (* ---- PLAN-rsa GATE 2: a word's bytes in the open ---- *)
@@ -1328,7 +1265,7 @@ Module RiscvPmpIrisInstanceWithContracts.
     Proof.
       intros ι. destruct_syminstance ι.
       cbn -[interp_arrv]. iIntros "Harr". iApply (interp_arrv_proj with "Harr").
-      all: destruct x as [x|xl xr], r as [r|rl rr];
+      all: destruct x as [xl xr], r as [rl rr];
         cbn -[bv.le_bytes bv.take bv.drop]; rewrite ?le_bytes_32; reflexivity.
     Qed.
 
@@ -1336,12 +1273,12 @@ Module RiscvPmpIrisInstanceWithContracts.
       ValidLemma (clem_lemma (clem_arrv_word_of_bytes1 t)).
     Proof.
       intros ι. destruct_syminstance ι.
-      destruct a as [a|]; destruct e as [e|]; cbn -[interp_arrv]; try (iIntros "[]").
-      iIntros "Harr".
+      destruct a as [a a']; destruct e as [e e']; cbn -[interp_arrv].
+      iIntros "Harr". arrv_sync "Harr". pdup.
       iApply (interp_arrv_of_bytes a (bv.of_N 1) e); [cbn; lia|].
       change (bv.mul (@bv.of_N xlenbits 4) (bv.of_N 1)) with (@bv.of_N xlenbits 4).
       iApply (interp_arrv_proj with "Harr").
-      all: destruct x as [x|xl xr]; cbn -[bv.le_bytes bv.take bv.drop]; rewrite ?le_bytes_32; reflexivity.
+      all: destruct x as [xl xr]; cbn -[bv.le_bytes bv.take bv.drop]; rewrite ?le_bytes_32; reflexivity.
     Qed.
 
     (* bytes back to words, four at a time *)
@@ -1367,19 +1304,24 @@ Module RiscvPmpIrisInstanceWithContracts.
     Lemma interp_arrv_facts `{sailGS2 Σ} (w : nat) (s : Z) (a n e : bv xlenbits) vs :
       interp_arrv w s (SV a) (SV n) (SV e) vs ⊢@{iPropI Σ}
       ⌜length (ty.projLeft vs) = length (ty.projRight vs) /\ bv.of_nat (length (ty.projLeft vs)) = n⌝.
-    Proof. cbn [interp_arrv]. iIntros "(_ & %Hlen & %Hn & _)". auto. Qed.
+    Proof. rewrite !interp_arrv_SV; unfold interp_arrv_body. iIntros "(_ & %Hlen & %Hn & _)". auto. Qed.
 
     Lemma clem_arrv_of_bytes_any_sound `{sailGS2 Σ} (t : string) :
       ValidLemma (clem_lemma (clem_arrv_of_bytes_any t)).
     Proof.
       intros ι. destruct_syminstance ι.
-      destruct a as [a|]; destruct k as [k|]; destruct e as [e|];
-        cbn -[interp_arrv]; try (iIntros "[[] _]").
+      destruct a as [a a']; destruct k as [k k']; destruct e as [e e'];
+        cbn -[interp_arrv].
       iIntros "[Harr [%Hk _]]".
+      iDestruct (interp_arrv_agree with "Harr") as "[%Hag Harr]".
+      destruct Hag as (Ea & Ek & Ee). subst a' e'.
+      (* by conversion: the literal's spelling defeats `change` *)
+      destruct Hk as [HkL HkR].
+      assert (Hk : (bv.bin k < 1073741824)%N) by exact HkL.
+      assert (Hk' : (bv.bin k' < 1073741824)%N) by exact HkR. clear HkL HkR.
+      apply arrv_mul4_inj in Ek; [|exact Hk|exact Hk']. subst k'. clear Hk'.
       iDestruct (interp_arrv_length with "Harr") as %Hb.
       iDestruct (interp_arrv_facts with "Harr") as %[HlT Hn].
-      (* by conversion: the literal's spelling defeats `change` *)
-      assert (Hk' : (bv.bin k < 1073741824)%N) by exact Hk. clear Hk. rename Hk' into Hk.
       change (N.to_nat maxAddr) with 4096 in Hb.
       apply (f_equal (@bv.bin xlenbits)) in Hn.
       rewrite bv.bin_of_nat_small in Hn; [|change (bv.exp2 xlenbits) with 4294967296%N; lia].
@@ -1393,14 +1335,11 @@ Module RiscvPmpIrisInstanceWithContracts.
       { subst m. apply (f_equal N.to_nat) in Hn. rewrite Nat2N.id N2Nat.inj_mul in Hn. exact Hn. }
       (* not lia: the two lengths' type indices are spelled differently *)
       assert (HR : length (ty.projRight vs) = 4 * m) by exact (eq_trans (eq_sym HlT) HL).
-      set (v := match vs with
-                | ty.SyncVal l => ty.SyncVal (arrv_bytes_to_words l)
-                | ty.NonSyncVal l r => ty.NonSyncVal (arrv_bytes_to_words l) (arrv_bytes_to_words r)
-                end : RelVal (ty.list (ty.bvec (4 * byte)))).
+      set (v := ty.NonSyncVal (arrv_bytes_to_words (ty.projLeft vs)) (arrv_bytes_to_words (ty.projRight vs))
+                : RelVal (ty.list (ty.bvec (4 * byte)))).
       assert (Hv : vs = uop.evalRel (uop.regroup (σ := ty.bvec (4 * byte)) (τ := ty.bvec (1 * byte))) v).
-      { subst v. destruct vs as [l|l r]; cbn in HL, HR |- *; f_equal; symmetry;
-          [apply (arrv_flat_b2w m); exact HL | apply (arrv_flat_b2w m); exact HL
-          | apply (arrv_flat_b2w m); exact HR]. }
+      { subst v. destruct vs as [l r]; cbn in HL, HR |- *; f_equal; symmetry;
+          [apply (arrv_flat_b2w m); exact HL | apply (arrv_flat_b2w m); exact HR]. }
       iExists v. iSplitL "Harr".
       - iRevert "Harr". rewrite {1}Hv. iIntros "Harr".
         iApply (interp_arrv_of_bytes with "Harr"). exact Hk.
@@ -1410,16 +1349,16 @@ Module RiscvPmpIrisInstanceWithContracts.
     Lemma clemSem `{sailGS2 Σ} (k : CLem) :
       ValidLemma (clem_lemma k).
     Proof.
-      destruct k; [apply clem_arrv_take_first_sound|apply clem_arrv_take_cons_sound
+      destruct k; [apply clem_arrv_take_first_sound
                   |apply clem_arrv_add_first_sound|apply clem_arrv_add_last_sound
                   |apply clem_arrv_take_last_sound|apply clem_arrv_nonempty_sound
                   |apply clem_arrv_empty_sound|apply clem_arrv_empty_elim_sound
+                  |apply clem_arrv_count0_sound
                   |apply clem_arrv_lockstep_sound|apply clem_arrv_drop_sound
                   |apply clem_arrv_flip_sound|apply clem_arrv_join_sound
-                  |apply clem_arrv_pad_sound|apply clem_arrv_split_sound
+                  |apply clem_arrv_split_sound
                   |apply clem_arrv_to_bytes_sound|apply clem_arrv_of_bytes_sound
-                  |apply clem_arrv_empty_at_sound|apply clem_arrv_resync_head_sound
-                  |apply clem_arrv_take_any_sound|apply clem_arrv_regroup_cons_sound
+                  |apply clem_arrv_empty_at_sound|apply clem_arrv_regroup_cons_sound
                   |apply clem_arrv_word_of_bytes1_sound|apply clem_arrv_of_bytes_any_sound].
     Qed.
   End CLemSound.

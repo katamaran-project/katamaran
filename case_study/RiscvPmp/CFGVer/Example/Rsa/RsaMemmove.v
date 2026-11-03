@@ -170,7 +170,7 @@ Definition mvf_entry (ts td : string) : list Annot :=
   [ cl (clem_arrv_flip 1 1 ts); cl (clem_arrv_flip 1 1 td)
   ; cl (clem_arrv_empty_at 1 (-1) ts mv_sd); cl (clem_arrv_empty_at 1 (-1) td td) ].
 Definition mvf_glue (ts td : string) : list Annot :=
-  [ cl (clem_arrv_pad 1 (-1) td ts); cl (clem_arrv_join 1 (-1) mv_sd ts ts)
+  [ cl (clem_arrv_count0 1 (-1) ts); cl (clem_arrv_join 1 (-1) mv_sd ts ts)
   ; cl (clem_arrv_empty_elim 1 (-1) td)
   ; cl (clem_arrv_flip 1 (-1) ts); cl (clem_arrv_flip 1 (-1) td) ].
 

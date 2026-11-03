@@ -186,9 +186,10 @@ Import IrisModel.RiscvPmpIrisBase.
          and CFG_VC_triple still passes a trivial post, so there is nothing to
          use here — but the conjunct has to be introduced. *)
     - iIntros (an) "(%Hexit & Hpc & Hnpc & Hinstrs & _)".
-      destruct an as [v | v1 v2].
-      + cbn in Hexit. iExists v. iFrame "Hpc". iPureIntro. unfold atPc. rewrite Hexit. exact I.
-      + contradiction.
+      destruct Hexit as (v & -> & Hexit).
+      (* exit_hit on a pair tests both sides: keep the left test *)
+      cbn in Hexit. apply andb_prop in Hexit as [Hexit _].
+      iExists v. iFrame "Hpc". iPureIntro. unfold atPc. rewrite Hexit. exact I.
   Qed.
 
   Lemma cfg_instrs_safe_with_mem `{sailGS2 Σ} {instrs} exit_addr γ1 γ2
@@ -460,6 +461,12 @@ Import IrisModel.RiscvPmpIrisBase.
   Lemma bv_zero_eq_of_N {n} : @bv.zero n = bv.of_N 0.
   Proof. destruct n; vm_compute; reflexivity. Qed.
 
+  (* SyncVal is a definition now (relval-pair), so cbn [ty.liftUnOp] no
+     longer reduces a lift applied to it: rewrite instead. *)
+  Lemma liftUnOp_SyncVal {σ1 σ2} (f : Val σ1 -> Val σ2) (a : Val σ1) :
+    ty.liftUnOp f (SyncVal a) = SyncVal (f a).
+  Proof. reflexivity. Qed.
+
   (* get_word's own nested bv.app, restated as a RelVal identity so
      ptstomem_bv_app applies directly -- holds by REFLEXIVITY in both the
      SyncVal and NonSyncVal case, since liftBinOpRV's (SyncVal,SyncVal)
@@ -493,7 +500,7 @@ Import IrisModel.RiscvPmpIrisBase.
   (* app with an empty tail is the identity, at the RelVal level. *)
   Lemma relval_app_nil (b : RelVal (ty.bvec byte)) :
     ty.liftBinOp (σ1 := ty.bvec byte) (σ2 := ty.bvec 0) (σ3 := ty.bvec byte) bv.app b (SyncVal bv.nil) = b.
-  Proof. destruct b as [v|v1 v2]; cbn; rewrite ?bv.app_nil_r; reflexivity. Qed.
+  Proof. destruct b as [l r]; cbn; rewrite ?bv.app_nil_r; reflexivity. Qed.
 
   (* A single byte is (up to the trivial width-0 True remainder)
      the same ownership as a width-1 ptstomem. *)
@@ -577,16 +584,16 @@ Import IrisModel.RiscvPmpIrisBase.
     cbn [fst snd] in *. unfold cell_addr in *. cbn [fst] in *.
     change (@bv.of_N word n) with (@bv.of_N xlenbits n) in *.
     generalize dependent (@bv.of_N xlenbits n). intros a HInitMem1 HInitMem2.
-    destruct sp as [| |v]; cbn.
+    destruct sp as [| |v]; cbn -[ty.SyncVal].
     - (* Secret *)
       iIntros "H".
       iExists (NonSyncVal (get_word μ1 a) (get_word μ2 a)).
-      unfold uop.evalRel. cbn [ty.liftUnOp ty.liftUnOpRV uop.eval].
+      unfold uop.evalRel. rewrite ?liftUnOp_SyncVal; cbn [ty.liftUnOp ty.liftUnOpRV uop.eval ty.projLeftRV ty.projRightRV].
       iSplitL "H".
       { iRevert "H".
         rewrite get_word_nonsync_app.
         rewrite ptstomem_bv_app. rewrite ptstomem_bv_app. rewrite ptstomem_bv_app.
-        cbn [ty.liftUnOp ty.liftUnOpRV].
+        rewrite ?liftUnOp_SyncVal; cbn [ty.liftUnOp ty.liftUnOpRV].
         rewrite bv_one_eq_of_N. rewrite bv.add_assoc. rewrite bv.of_N_add.
         change (1+2)%N with 3%N.
         rewrite <- (bv.add_zero_r (x:=a)) at 1 2.
@@ -611,12 +618,12 @@ Import IrisModel.RiscvPmpIrisBase.
     - (* Public *)
       iIntros "H".
       iExists (SyncVal (get_word μ1 a)).
-      unfold uop.evalRel. cbn [ty.liftUnOp ty.liftUnOpRV uop.eval].
+      unfold uop.evalRel. rewrite ?liftUnOp_SyncVal; cbn [ty.liftUnOp ty.liftUnOpRV uop.eval ty.projLeftRV ty.projRightRV].
       iSplitL "H".
       { iRevert "H".
         rewrite get_word_sync_app.
         rewrite ptstomem_bv_app. rewrite ptstomem_bv_app. rewrite ptstomem_bv_app.
-        cbn [ty.liftUnOp ty.liftUnOpRV].
+        rewrite ?liftUnOp_SyncVal; cbn [ty.liftUnOp ty.liftUnOpRV].
         rewrite bv_one_eq_of_N. rewrite bv.add_assoc. rewrite bv.of_N_add.
         change (1+2)%N with 3%N.
         rewrite <- (bv.add_zero_r (x:=a)) at 1 2.
@@ -640,7 +647,7 @@ Import IrisModel.RiscvPmpIrisBase.
       have Hv1 := HInitMem1 v eq_refl. have Hv2 := HInitMem2 v eq_refl.
       rewrite get_word_nonsync_app.
       rewrite ptstomem_bv_app. rewrite ptstomem_bv_app. rewrite ptstomem_bv_app.
-      cbn [ty.liftUnOp ty.liftUnOpRV].
+      rewrite ?liftUnOp_SyncVal; cbn [ty.liftUnOp ty.liftUnOpRV].
       rewrite bv_one_eq_of_N. rewrite bv.add_assoc. rewrite bv.of_N_add.
       change (1+2)%N with 3%N.
       rewrite <- (bv.add_zero_r (x:=a)) at 1 2.
@@ -847,7 +854,7 @@ Import IrisModel.RiscvPmpIrisBase.
   Proof.
     rewrite get_word_nonsync_app.
     rewrite ptstomem_bv_app. rewrite ptstomem_bv_app. rewrite ptstomem_bv_app.
-    cbn [ty.liftUnOp ty.liftUnOpRV].
+    rewrite ?liftUnOp_SyncVal; cbn [ty.liftUnOp ty.liftUnOpRV].
     rewrite bv_one_eq_of_N. rewrite bv.add_assoc. rewrite bv.of_N_add.
     change (1+2)%N with 3%N.
     rewrite <- (bv.add_zero_r (x:=a)) at 1 2.
@@ -898,7 +905,7 @@ Import IrisModel.RiscvPmpIrisBase.
        block of four byte rewrites rather than two -- one side to convert. *)
     rewrite get_word_sync_app.
     rewrite ptstomem_bv_app. rewrite ptstomem_bv_app. rewrite ptstomem_bv_app.
-    cbn [ty.liftUnOp ty.liftUnOpRV].
+    rewrite ?liftUnOp_SyncVal; cbn [ty.liftUnOp ty.liftUnOpRV].
     rewrite bv_one_eq_of_N. rewrite bv.add_assoc. rewrite bv.of_N_add.
     change (1+2)%N with 3%N.
     rewrite <- (bv.add_zero_r (x:=a)) at 1 2.
@@ -1495,7 +1502,7 @@ Import IrisModel.RiscvPmpIrisBase.
     - reflexivity.
     - unfold asn_regidx_pts.
       destruct (reg_convert r) as [reg|]; cbn; [|reflexivity].
-      cbn [ty.valToRelVal]. do 2 f_equal. apply bv.of_N_add.
+      rewrite <- bv.of_N_add. reflexivity.
   Qed.
 
   Lemma gen_mem_pre_rel_concretize `{sailGS2 Σ}
@@ -1509,8 +1516,8 @@ Import IrisModel.RiscvPmpIrisBase.
     cbn [gen_mem_pre_rel gen_mem_pre map List.fold_right].
     cbn [asn.interpret]. f_equal; [|exact IH].
     destruct sp as [| |[v|k2]]; cbn.
-    3: { cbn [ty.valToRelVal]. do 2 f_equal. apply bv.of_N_add. }
-    3: { cbn [ty.valToRelVal]. f_equal; (f_equal; apply bv.of_N_add). }
+    3: { rewrite <- ?bv.of_N_add. reflexivity. }
+    3: { rewrite <- ?bv.of_N_add. reflexivity. }
     all: cbn [ty.valToRelVal]; rewrite bv.of_N_add; reflexivity.
   Qed.
 
@@ -2265,7 +2272,7 @@ Section DataImplPre.
   Lemma inst_t_add4 {Σc} (ι : Valuation Σc) (a : Term Σc ty_xlenbits) (off : N) :
     inst (T := fun Σ => Term Σ ty_xlenbits) a ι = SyncVal (@bv.of_N xlenbits off) ->
     inst (T := fun Σ => Term Σ ty_xlenbits) (t_add a 4) ι = SyncVal (@bv.of_N xlenbits (off + 4)).
-  Proof. intros Ha. cbn. rewrite Ha. cbn. f_equal. rewrite -bv.of_N_add. reflexivity. Qed.
+  Proof. intros Ha. cbn. rewrite Ha. cbn. f_equal; rewrite -bv.of_N_add; reflexivity. Qed.
 
   Lemma data_count_spec {Σc} (ι : Valuation Σc) (c : Term Σc ty_xlenbits) :
     bv.of_nat (n := xlenbits) (data_count ι c) = rv_val (inst (T := fun Σ => Term Σ ty_xlenbits) c ι).
@@ -2277,8 +2284,8 @@ Section DataImplPre.
     inst (T := fun Σ => Term Σ ty_xlenbits) (t_add4n a c) ι
     = SyncVal (@bv.of_N xlenbits (off + 4 * N.of_nat (data_count ι c))).
   Proof.
-    intros Ha Hc. cbn. rewrite Ha Hc. cbn. f_equal. rewrite data_ofN_lin data_count_spec.
-    change (bv.of_N (n := xlenbits) 4) with (bv.of_Z (n := xlenbits) 4). reflexivity.
+    intros Ha Hc. cbn. rewrite Ha Hc. cbn. f_equal; rewrite data_ofN_lin data_count_spec;
+    change (bv.of_N (n := xlenbits) 4) with (bv.of_Z (n := xlenbits) 4); reflexivity.
   Qed.
 
   (* data_count of ⌈c/4⌉: (c + 3) / 4, for a c far from overflow *)
@@ -2371,7 +2378,7 @@ Section DataImplPre.
                    (SyncVal (bv.add (bv.of_N off) (bv.mul (bv.of_Z 4) (bv.of_nat k))))
                    (data_rv (σ := clem_cell_ty 4) pub (data_words μ1 off k) (data_words μ2 off k)).
   Proof.
-    intros Hk. iIntros "H". cbn [interp_arrv].
+    intros Hk. iIntros "H". rewrite interp_arrv_SV; unfold interp_arrv_body.
     assert (HL : forall μ, length (data_words μ off k) = k)
       by (intros; unfold data_words; rewrite length_map length_seq; reflexivity).
     destruct pub; cbn [data_rv]; cbv [ty.projLeft ty.projRight ty.projLeftRV ty.projRightRV].
@@ -2423,7 +2430,7 @@ Section DataImplPre.
     iPoseProof (RiscvPmpIrisInstanceWithContracts.interp_arrv_to_bytes with "H") as "H".
     destruct (RiscvPmpIrisInstanceWithContracts.arrv_proj_regroup
                 (data_rv (σ := clem_cell_ty 4) pub (data_words μ1 off m) (data_words μ2 off m))) as [EL ER].
-    cbn [interp_arrv]. rewrite EL ER.
+    iEval (rewrite interp_arrv_SV) in "H". rewrite interp_arrv_SV; unfold interp_arrv_body. rewrite EL ER.
     iDestruct "H" as "(_ & %HLR & _ & H)".
     assert (Hlen : forall μ, length (flat_map bv.le_bytes (data_words μ off m)) = 4 * m).
     { intros μ. rewrite RiscvPmpIrisInstanceWithContracts.arrv_flat_length.
@@ -2471,7 +2478,7 @@ Section DataImplPre.
       iIntros "[Hc Hrest]". cbn [asn.interpret gen_cell_at interpret_chunk].
       rewrite Hv1 Hv2. rewrite ptstomem_sync_is_nonsync.
       iSplitL "Hc".
-      { cbn. rewrite !Hs Ha Ht. iFrame "Hc". iSplit; [iPureIntro|done]. cbn. first [exact I | rewrite Ht; exact I]. }
+      { cbn. rewrite !Hs Ha Ht. iFrame "Hc". iSplit; [iPureIntro|done]. cbn. first [exact I | reflexivity | rewrite Ht; first [exact I | reflexivity]]. }
       iSplitR.
       { cbn. rewrite Ha. iSplit; [iPureIntro|done]. cbn.
         rewrite data_unsigned_of_N_small; [|unfold maxAddr, minAddr, lenAddr in Hrng; lia].
@@ -2499,7 +2506,7 @@ Section DataImplPre.
       iIntros "[Hc Hrest]". cbn [asn.interpret gen_cell_at].
       iSplitL "Hc".
       { iExists (SyncVal (get_word μ1 (bv.of_N off))). cbn [asn.interpret interpret_chunk].
-        cbn. rewrite inst_subst inst_sub_wk1 Ha. iFrame "Hc". iSplit; [iPureIntro; exact I|done]. }
+        cbn. rewrite inst_subst inst_sub_wk1 Ha. iFrame "Hc". iSplit; [iPureIntro; first [exact I | reflexivity]|done]. }
       iSplitR.
       { cbn. rewrite Ha. iSplit; [iPureIntro|done]. cbn.
         rewrite data_unsigned_of_N_small; [|unfold maxAddr, minAddr, lenAddr in Hrng; lia].
@@ -2544,10 +2551,10 @@ Section DataImplPre.
              rewrite EA EE end.
       all: cbn [data_dir].
       + iSplitL; [iApply (data_cells_arrv true off (data_count ι c) μ1 μ2 Hrng with "Hcells")
-                 |iSplit; [iPureIntro; exact I|done]].
+                 |iSplit; [iPureIntro; first [exact I | reflexivity]|done]].
       + iApply (data_cells_arrv false off (data_count ι c) μ1 μ2 Hrng with "Hcells").
       + iSplitL; [iApply (data_cells_arrv_down true off (data_count ι c) μ1 μ2 Hrng with "Hcells")
-                 |iSplit; [iPureIntro; exact I|done]].
+                 |iSplit; [iPureIntro; first [exact I | reflexivity]|done]].
       + iApply (data_cells_arrv_down false off (data_count ι c) μ1 μ2 Hrng with "Hcells").
     - (* a byte array *)
       destruct Hok as [Hc [Hbr [Hrng Hok]]].
@@ -2586,7 +2593,7 @@ Section DataImplPre.
              pose proof (Htv : T = _) as ET; rewrite EA EC EE ET
            end.
       + iSplitL; [iApply (@data_cells_arrv_bytes _ _ true off _ _ μ1 μ2 Hkm Hrng with "Hcells")
-                 |iSplit; [iPureIntro; exact I|done]].
+                 |iSplit; [iPureIntro; first [exact I | reflexivity]|done]].
       + iApply (@data_cells_arrv_bytes _ _ false off _ _ μ1 μ2 Hkm Hrng with "Hcells").
     - (* an anchor *)
       destruct Hok as [Hx Hok]. iIntros "H". cbn [asn.interpret]. iSplitR.

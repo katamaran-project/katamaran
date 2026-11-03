@@ -216,9 +216,7 @@ Module IrisInstanceWithContracts2
     - by iApply iris_rule_stm_seq.
     - iApply iris_rule_stm_assertk.
       + auto.
-      + iIntros "%H'". iApply "trips". destruct (eval e1 δ).
-        * inversion H'. auto.
-        * inversion H'.
+      + iIntros "%H'". iApply "trips". first [exact H' | iPureIntro; exact H'].
     - by iApply iris_rule_stm_fail.
     - by iApply iris_rule_stm_read_register.
     - by iApply iris_rule_stm_write_register.

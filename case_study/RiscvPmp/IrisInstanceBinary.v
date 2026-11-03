@@ -209,24 +209,46 @@ Module RiscvPmpIrisInstance2 <:
        secLeakvar of the count in an invariant (PLAN-chunk-facts.md, revert).
        The shape is GenCompose.loop_reservoir's, so the ghost lemmas' proofs
        are big_sepL cons/app steps.  The TAG is ignored here.  Only the
-       PROJECTIONS of vs are read, so the non-canonical NonSyncVal l l means
-       the same as SyncVal l -- which is what makes the shape lemmas sound
+       PROJECTIONS of vs are read, which is what makes the shape lemmas sound
        for any split of vs into terms (lifted cons is not injective).  The
        count is the length MODULO 2^32 (bv.of_nat), so n + 1 wraps the way
        the list grows and add_first/add_last need no premise. *)
+    (* The array proper, over public (single-valued) start, count and end. *)
+    Definition interp_arrv_body (w : nat) (s : Z) (a n e : bv xlenbits)
+        (vs : RelVal (ty.list (ty.bvec (w * byte)))) : iProp Σ :=
+      (⌜ e = bv.add a (bv.mul (bv.of_Z s) n) ⌝ ∗
+       ⌜ length (ty.projLeft vs) = length (ty.projRight vs) ⌝ ∗
+       ⌜ bv.of_nat (length (ty.projLeft vs)) = n ⌝ ∗
+       [∗ list] i ↦ lr ∈ zip (ty.projLeft vs) (ty.projRight vs),
+         let x := bv.add a (bv.mul (bv.of_Z s) (bv.of_nat i)) in
+         ⌜ (bv.unsigned x + Z.of_nat w <= Z.of_N maxAddr)%Z ⌝ ∗
+         @interp_ptstomem w (SyncVal x) (NonSyncVal lr.1 lr.2))%I.
+
+    (* Owning an arrv makes its three arguments public: the two executions
+       agree on them.  (Under the old tagged RelVal this was a match on SyncVal
+       with a False catch-all; [secLeak] is the same requirement, stated on
+       values.) *)
     Definition interp_arrv (w : nat) (s : Z) (a n e : RelVal ty_xlenbits)
         (vs : RelVal (ty.list (ty.bvec (w * byte)))) : iProp Σ :=
-      match a, n, e with
-      | SyncVal a, SyncVal n, SyncVal e =>
-          (⌜ e = bv.add a (bv.mul (bv.of_Z s) n) ⌝ ∗
-           ⌜ length (ty.projLeft vs) = length (ty.projRight vs) ⌝ ∗
-           ⌜ bv.of_nat (length (ty.projLeft vs)) = n ⌝ ∗
-           [∗ list] i ↦ lr ∈ zip (ty.projLeft vs) (ty.projRight vs),
-             let x := bv.add a (bv.mul (bv.of_Z s) (bv.of_nat i)) in
-             ⌜ (bv.unsigned x + Z.of_nat w <= Z.of_N maxAddr)%Z ⌝ ∗
-             @interp_ptstomem w (SyncVal x) (NonSyncVal lr.1 lr.2))%I
-      | _, _, _ => False%I
-      end.
+      (⌜ secLeak a /\ secLeak n /\ secLeak e ⌝ ∗
+       interp_arrv_body w s (ty.projLeft a) (ty.projLeft n) (ty.projLeft e) vs)%I.
+
+    Lemma interp_arrv_SV (w : nat) (s : Z) (a n e : bv xlenbits)
+        (vs : RelVal (ty.list (ty.bvec (w * byte)))) :
+      interp_arrv w s (SyncVal a) (SyncVal n) (SyncVal e) vs ⊣⊢ interp_arrv_body w s a n e vs.
+    Proof.
+      unfold interp_arrv. iSplit.
+      - iIntros "[_ H]". iExact "H".
+      - iIntros "H". iSplit; [iPureIntro; repeat split | iExact "H"].
+    Qed.
+
+    (* Owning an arrv makes its arguments agree across the two executions. *)
+    Lemma interp_arrv_agree (w : nat) (s : Z) (a a' n n' e e' : bv xlenbits)
+        (vs : RelVal (ty.list (ty.bvec (w * byte)))) :
+      interp_arrv w s (NonSyncVal a a') (NonSyncVal n n') (NonSyncVal e e') vs
+        ⊢ ⌜ a = a' /\ n = n' /\ e = e' ⌝ ∗
+          interp_arrv w s (NonSyncVal a a') (NonSyncVal n n') (NonSyncVal e e') vs.
+    Proof. unfold interp_arrv. iIntros "[%H Hb]". iFrame "Hb". iPureIntro. split; exact H. Qed.
   End WithMemory.
   Section WithSailGS.
     Context `{sailRegGS2 Σ}.

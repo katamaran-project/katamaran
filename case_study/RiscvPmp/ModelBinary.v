@@ -319,7 +319,10 @@ Module RiscvPmpModel2.
       ValidContractForeign sep_contract_leak leak.
     Proof.
       intros Γ es δ ι Heq. cbn. destruct_syminstance ι. cbn.
-      iIntros "((%Hpre & _) & Hinv)". iApply semWP2_foreign.
+      iIntros "((%Hpre & _) & Hinv)".
+      (* a leaked value is public: both executions emit the same event *)
+      destruct leak0 as [l r]. hnf in Hpre. cbn in Hpre. subst r.
+      iApply semWP2_foreign.
       iIntros (? ? ? ?) "(Hreg & ((%memmapL & HmemL' & HmapL & HtrL & HltrL) & (%memmapR & HmemR' & HmapR & HtrR & HltrR)))".
       iMod (fupd_mask_subseteq empty) as "Hclose"; auto. iModIntro.
       iIntros (res1 ? ? res2 ? ? (Hf1 & Hf2)).
@@ -337,7 +340,6 @@ Module RiscvPmpModel2.
       iMod ("Hclose" with "[HltrfL HltrfR]") as "_".
       {(* Instantiate evars *)
         iExists _; iFrame. }
-      apply secLeakOtherDef in Hpre. rewrite Hpre.
       iFrame.
       (* iIntros (? ?) "Hres2". iMod (fupd_mask_subseteq empty) as "Hclose"; auto. *)
       (* iModIntro. iIntros (res2 ? ? Hf2). rewrite Heq in Hf2. cbn in Hf2. *)

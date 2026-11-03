@@ -155,7 +155,7 @@ Proof.
                    (subst (t_add (@term_var R pb _ pIn) (Z.of_N doff)) (gen_prog_ζ V)) ιa
                  = SyncVal (@bv.of_N xlenbits (init_addr + doff))).
     { rewrite inst_subst Hζ. unfold t_add. cbn [inst inst_term].
-      rewrite Hp. cbn. f_equal. rewrite bv.of_Z_N -bv.of_N_add. reflexivity. }
+      rewrite Hp. cbn. f_equal; rewrite bv.of_Z_N -bv.of_N_add; reflexivity. }
     iPoseProof (@gen_implpre_data _ _ _ _ (gen_prog_ζ V) ιa ι Hζ μ1 μ2 data _
                   (init_addr + doff)%N (gen_prog_ν V) Ha Hν Hok HInitMem1 HInitMem2 with "Hmem") as "Hdata".
     iPoseProof (Hfacts Σ' GS') as "Hf".
@@ -174,7 +174,7 @@ Proof.
       (* the base's inst carries the chunk's instance, not Hpa's: restate Hpa at it *)
       match goal with |- context [uop.evalRel uop.unsigned ?X] => pose proof (Hpa : X = _) as EX; rewrite EX end.
       cbn. rewrite data_unsigned_of_N_small; [|unfold lenAddr in Hlen; lia]. lia. }
-    iSplit; [iPureIntro; cbn; reflexivity|done].
+    iSplit; [iPureIntro; cbn; repeat split; reflexivity|done].
 Qed.
 
 (* ---- data_layout_ok from INTERVALS -------------------------------------- *)

@@ -346,7 +346,7 @@ Notation "e1 ',ₜ' e2" := (term_binop bop.pair e1 e2) (at level 100).
          restated at the instprop level solve_vc actually sees. *)
       Lemma instprop_formula_secLeak_val {Σ} (ι : Valuation Σ) {σ} (v : Val σ) :
         instprop (formula_secLeak (term_val σ v)) ι.
-      Proof. cbn. auto. Qed.
+      Proof. cbn. reflexivity. Qed.
 
       Lemma instprop_formula_secLeak_binop {Σ} (ι : Valuation Σ) {σ1 σ2 σ3}
         (op : BinOp σ1 σ2 σ3) (t1 : Term Σ σ1) (t2 : Term Σ σ2) :
@@ -354,7 +354,8 @@ Notation "e1 ',ₜ' e2" := (term_binop bop.pair e1 e2) (at level 100).
         instprop (formula_secLeak t2) ι ->
         instprop (formula_secLeak (term_binop op t1 t2)) ι.
       Proof.
-        cbn. intros H1 H2. destruct (inst t1 ι), (inst t2 ι); cbn in *; auto.
+        cbn. intros H1 H2. destruct (inst t1 ι), (inst t2 ι); cbn in *.
+        hnf in H1, H2 |- *. cbn in *. subst. reflexivity.
       Qed.
 
       (* The compound discharge helper solve_vc will actually reach for:
@@ -435,7 +436,7 @@ Notation "e1 ',ₜ' e2" := (term_binop bop.pair e1 e2) (at level 100).
           (term_val ty.int (Z.of_N maxAddr))) ι.
       Proof.
         cbn -[xlenbits]. rewrite Hsync. cbn -[xlenbits].
-        exact (@fetch_bound_step_Z a c X Hwin Hc).
+        split; exact (@fetch_bound_step_Z a c X Hwin Hc).
       Qed.
 
     End Phase0SymbolicBaseHelpers.
@@ -492,13 +493,17 @@ Notation "e1 ',ₜ' e2" := (term_binop bop.pair e1 e2) (at level 100).
     Lemma relval_secLeak_bvadd (c : Val ty_xlenbits) (v : RelVal ty_xlenbits) :
       RiscvPmpSignature.secLeak v ->
       RiscvPmpSignature.secLeak (bop.evalRel bop.bvadd (SyncVal c) v).
-    Proof. intros H; destruct v as [a|a b]; [exact I | destruct H]. Qed.
+    Proof. intros H; destruct v as [a b].
+           unfold RiscvPmpSignature.secLeak in H. cbn in H. subst.
+           unfold RiscvPmpSignature.secLeak; auto.
+    Qed.
 
     Lemma relval_fetch_lower (X : RelVal ty_xlenbits) :
-      RiscvPmpSignature.secLeak X ->
-      match bop.eval_relop_relprop bop.le (SyncVal 0%Z) (uop.evalRel uop.unsigned X) with
-      | SyncVal p => p | NonSyncVal _ _ => False end.
-    Proof. intros H; destruct X as [a|a b]; [cbn; unfold bv.unsigned; lia | destruct H]. Qed.
+      let x := bop.eval_relop_relprop bop.le (SyncVal 0%Z) (uop.evalRel uop.unsigned X) in
+      ty.projLeftRV x /\ ty.projRightRV x.
+    Proof. intros H; destruct X as [a b].
+           split; cbn; unfold bv.unsigned; lia.
+    Qed.
 
     (* The GOAL-side offset `A` is a parameter rather than the hardcoded word
        width 4.  Instruction fetch and word accesses instantiate it at 4, but
@@ -507,39 +512,37 @@ Notation "e1 ',ₜ' e2" := (term_binop bop.pair e1 e2) (at level 100).
        `unsigned paddr + bytes <= maxAddr`, width-generic (Spec.v:439).  See
        PLAN-byte-memory.md. *)
     Lemma relval_fetch_upper_bare (v : RelVal ty_xlenbits) (A B : Z) :
-      RiscvPmpSignature.secLeak v ->
-      match bop.eval_relop_relprop bop.le (SyncVal 0%Z)
+      let x := bop.eval_relop_relprop bop.le (SyncVal 0%Z)
         (bop.evalRel bop.minus (SyncVal (Z.of_N maxAddr))
            (bop.evalRel bop.plus (SyncVal B) (uop.evalRel uop.unsigned v)))
-      with SyncVal p => p | NonSyncVal _ _ => False end ->
+      in ty.projLeftRV x /\ ty.projRightRV x ->
       (A <= B)%Z ->
-      match bop.eval_relop_relprop bop.le (SyncVal 0%Z)
+      let x := bop.eval_relop_relprop bop.le (SyncVal 0%Z)
         (bop.evalRel bop.minus (SyncVal (Z.of_N maxAddr))
            (bop.evalRel bop.plus (SyncVal A) (uop.evalRel uop.unsigned v)))
-      with SyncVal p => p | NonSyncVal _ _ => False end.
+      in ty.projLeftRV x /\ ty.projRightRV x.
     Proof.
-      intros H Hb Hle; destruct v as [a|a b];
-        [cbn in *; unfold bv.unsigned in *; lia | destruct H].
+      intros x Hb Hle; destruct v as [a b].
+      cbn in *; unfold bv.unsigned in *; lia.
     Qed.
 
     (* Same generalisation, plus the `0 <= A` the no-wrap step needs: bounding
        `bin cbv + bin a` below exp2 goes through `maxAddr - A`, which only stays
        under 2^32 for a non-negative A. *)
     Lemma relval_fetch_upper_add (v : RelVal ty_xlenbits) (cbv : bv xlenbits) (A B : Z) :
-      RiscvPmpSignature.secLeak v ->
-      match bop.eval_relop_relprop bop.le (SyncVal 0%Z)
+      let x := bop.eval_relop_relprop bop.le (SyncVal 0%Z)
         (bop.evalRel bop.minus (SyncVal (Z.of_N maxAddr))
            (bop.evalRel bop.plus (SyncVal B) (uop.evalRel uop.unsigned v)))
-      with SyncVal p => p | NonSyncVal _ _ => False end ->
+      in ty.projLeftRV x /\ ty.projRightRV x ->
       (Z.of_N (bv.bin cbv) + A <= B)%Z ->
       (0 <= A)%Z ->
-      match bop.eval_relop_relprop bop.le (SyncVal 0%Z)
+      let x := bop.eval_relop_relprop bop.le (SyncVal 0%Z)
         (bop.evalRel bop.minus (SyncVal (Z.of_N maxAddr))
            (bop.evalRel bop.plus (SyncVal A)
               (uop.evalRel uop.unsigned (bop.evalRel bop.bvadd (SyncVal cbv) v))))
-      with SyncVal p => p | NonSyncVal _ _ => False end.
+      in ty.projLeftRV x /\ ty.projRightRV x.
     Proof.
-      intros H Hb Hle HA; destruct v as [a|a b]; [| destruct H].
+      intros Hb [Hba Hbb] Hle HA; destruct v as [a b].
       (* Every constant must reach `lia` as a CONSISTENT atom, and a bare
          `cbn in *` gives none of them: it reduces maxAddr in Hb but not in
          the freshly-stated Hexp, and reduces `bv.exp2 xlenbits` to
@@ -549,8 +552,9 @@ Notation "e1 ',ₜ' e2" := (term_binop bop.pair e1 e2) (at level 100).
          occurrence folded, so the atoms line up. *)
       pose proof maxAddr_rep as Hexp.
       cbn -[maxAddr bv.exp2 xlenbits] in *; unfold bv.unsigned in *.
-      assert (Hlt : (bv.bin cbv + bv.bin a < bv.exp2 xlenbits)%N) by lia.
-      rewrite (bv.bin_add_small Hlt). lia.
+      assert (Hlta : (bv.bin cbv + bv.bin a < bv.exp2 xlenbits)%N) by lia.
+      assert (Hltb : (bv.bin cbv + bv.bin b < bv.exp2 xlenbits)%N) by lia.
+      rewrite (bv.bin_add_small Hlta). rewrite (bv.bin_add_small Hltb). lia.
     Qed.
 
     (* The same bound for an access BELOW the base -- `lw rd, -4(rs)`, which
@@ -565,41 +569,46 @@ Notation "e1 ',ₜ' e2" := (term_binop bop.pair e1 e2) (at level 100).
        encoding of -D and is `vm_compute; reflexivity` at any concrete offset. *)
     Lemma relval_fetch_upper_neg (v : RelVal ty_xlenbits) (cbv : bv xlenbits)
       (A B D : Z) :
-      RiscvPmpSignature.secLeak v ->
-      match bop.eval_relop_relprop bop.le (SyncVal 0%Z)
+      let x := bop.eval_relop_relprop bop.le (SyncVal 0%Z)
         (bop.evalRel bop.minus (SyncVal (Z.of_N maxAddr))
            (bop.evalRel bop.plus (SyncVal B) (uop.evalRel uop.unsigned v)))
-      with SyncVal p => p | NonSyncVal _ _ => False end ->
-      match bop.eval_relop_relprop bop.le (SyncVal 0%Z)
+      in ty.projLeftRV x /\ ty.projRightRV x ->
+      let x := bop.eval_relop_relprop bop.le (SyncVal 0%Z)
         (bop.evalRel bop.minus (uop.evalRel uop.unsigned v) (SyncVal D))
-      with SyncVal p => p | NonSyncVal _ _ => False end ->
+      in ty.projLeftRV x /\ ty.projRightRV x ->
       (* D is a plain Z, NOT `Z.of_N D`: the goal's offset arrives as a Z
          LITERAL, and unifying `Z.of_N ?D` with `4` would require inverting
          Z.of_N -- the same trap as seg_fits_Z. *)
       @eq Z (Z.add (Z.of_N (bv.bin cbv)) D) (Z.of_N (bv.exp2 xlenbits)) ->
       (A <= B + D)%Z ->
-      match bop.eval_relop_relprop bop.le (SyncVal 0%Z)
+      let x :=  bop.eval_relop_relprop bop.le (SyncVal 0%Z)
         (bop.evalRel bop.minus (SyncVal (Z.of_N maxAddr))
            (bop.evalRel bop.plus (SyncVal A)
               (uop.evalRel uop.unsigned (bop.evalRel bop.bvadd (SyncVal cbv) v))))
-      with SyncVal p => p | NonSyncVal _ _ => False end.
+      in ty.projLeftRV x /\ ty.projRightRV x.
     Proof.
-      intros Hs Hub Hlb Hc HA; destruct v as [a | x y]; [| destruct Hs].
+      intros Hubx Hub Hlbx Hlb Hc HA; destruct v as [x y].
       pose proof maxAddr_rep as Hexp.
-      pose proof (bv.bv_is_wf a) as Ha.
+      pose proof (bv.bv_is_wf x) as Hx.
+      pose proof (bv.bv_is_wf y) as Hy.
       pose proof (bv.bv_is_wf cbv) as Hc2.
       cbn -[maxAddr bv.exp2 xlenbits] in *; unfold bv.unsigned in *.
-      rewrite bv.bin_add.
+      do 2 rewrite bv.bin_add.
       (* exp2 <= bin cbv + bin a < 2 * exp2, so the mod is one subtraction.
          `set` both atoms first and restrict the replace with `at 1`: without
          it the rewrite also fires inside its own right-hand side. *)
       set (E := bv.exp2 xlenbits) in *.
-      set (S := N.add (bv.bin cbv) (bv.bin a)) in *.
-      assert (HS : (E <= S)%N /\ (S < E + E)%N) by (unfold S; lia).
-      assert (Hm : @eq N (N.modulo S E) (N.sub S E)).
-      { replace S with (N.add (N.sub S E) (N.mul 1 E)) at 1 by lia.
+      set (Sx := N.add (bv.bin cbv) (bv.bin x)) in *.
+      set (Sy := N.add (bv.bin cbv) (bv.bin y)) in *.
+      assert (HSx : (E <= Sx)%N /\ (Sx < E + E)%N) by (unfold Sx; lia).
+      assert (HSy : (E <= Sy)%N /\ (Sy < E + E)%N) by (unfold Sy; lia).
+      assert (Hmx : @eq N (N.modulo Sx E) (N.sub Sx E)).
+      { replace Sx with (N.add (N.sub Sx E) (N.mul 1 E)) at 1 by lia.
         rewrite N.Div0.mod_add. apply N.mod_small. lia. }
-      rewrite Hm. unfold S. lia.
+      assert (Hmy : @eq N (N.modulo Sy E) (N.sub Sy E)).
+      { replace Sy with (N.add (N.sub Sy E) (N.mul 1 E)) at 1 by lia.
+        rewrite N.Div0.mod_add. apply N.mod_small. lia. }
+      rewrite Hmx. rewrite Hmy. lia.
     Qed.
 
     (* Loop-EXIT residual, not a fetch bound.  A loop whose exit test is a
@@ -611,9 +620,11 @@ Notation "e1 ',ₜ' e2" := (term_binop bop.pair e1 e2) (at level 100).
        only now.  Both RelVal cases are immediate: SyncVal gives `x <> x`,
        NonSyncVal collapses the match to False outright. *)
     Lemma relval_neq_irrefl (X : RelVal ty_xlenbits) :
-      match bop.eval_relop_relprop bop.neq X X with
-      | SyncVal p => p | NonSyncVal _ _ => False end -> False.
-    Proof. destruct X as [a|a b]; cbn; [intros H; now apply H | exact (fun H => H)]. Qed.
+      let x := bop.eval_relop_relprop bop.neq X X
+            in ty.projLeftRV x \/ ty.projRightRV x -> False.
+    Proof. destruct X as [a b]; cbn; intros H.
+           destruct H; now apply H.
+    Qed.
 
     (* A public pointer differs from itself plus a NONZERO constant, and two
        different constant offsets of it differ.  Left by array ghosts
@@ -621,27 +632,101 @@ Notation "e1 ',ₜ' e2" := (term_binop bop.pair e1 e2) (at level 100).
        array whose start and end are the same base at different offsets,
        e.g. `dp ≠ 4 + dp`, which the solver does not decide. *)
     Lemma relval_neq_offset (X : RelVal ty_xlenbits) (c : bv xlenbits) :
-      RiscvPmpSignature.secLeak X -> bv.bin c <> 0%N ->
-      match bop.eval_relop_relprop bop.neq X
-              (bop.evalRel bop.bvadd (ty.valToRelVal (σ := ty_xlenbits) c) X) with
-      | SyncVal p => p | NonSyncVal _ _ => False end.
+      bv.bin c <> 0%N ->
+      let x := bop.eval_relop_relprop bop.neq X
+              (bop.evalRel bop.bvadd (ty.valToRelVal (σ := ty_xlenbits) c) X)
+            in ty.projLeftRV x /\ ty.projRightRV x.
     Proof.
-      intros HX Hc. destruct X as [x|]; [|destruct HX]. cbn. intros Hx.
-      apply Hc. assert (bv.add c x = bv.add bv.zero x) as E
+      intros Hc. destruct X as [a b]. cbn. split.
+      - intros Hx.
+      apply Hc. assert (bv.add c a = bv.add bv.zero a) as E
         by (rewrite bv.add_zero_l; symmetry; exact Hx).
       apply bv.add_cancel_r in E. now subst c.
+      - intros Hx.
+        apply Hc. assert (bv.add c b = bv.add bv.zero b) as E
+            by (rewrite bv.add_zero_l; symmetry; exact Hx).
+        apply bv.add_cancel_r in E. now subst c.
     Qed.
 
     Lemma relval_neq_offsets (X : RelVal ty_xlenbits) (c1 c2 : bv xlenbits) :
-      RiscvPmpSignature.secLeak X -> bv.bin c1 <> bv.bin c2 ->
-      match bop.eval_relop_relprop bop.neq
+      bv.bin c1 <> bv.bin c2 ->
+      let x := bop.eval_relop_relprop bop.neq
               (bop.evalRel bop.bvadd (ty.valToRelVal (σ := ty_xlenbits) c1) X)
-              (bop.evalRel bop.bvadd (ty.valToRelVal (σ := ty_xlenbits) c2) X) with
-      | SyncVal p => p | NonSyncVal _ _ => False end.
+              (bop.evalRel bop.bvadd (ty.valToRelVal (σ := ty_xlenbits) c2) X)
+      in ty.projLeftRV x /\ ty.projRightRV x.
     Proof.
-      intros HX Hc. destruct X as [x|]; [|destruct HX]. cbn. intros Hx.
+      intros Hc. destruct X as [a b]. cbn. split.
+      - intros Hx.
       apply Hc. apply bv.add_cancel_r in Hx. now subst c1.
+      - intros Hx.
+        apply Hc. apply bv.add_cancel_r in Hx. now subst c1.
     Qed.
+
+    (* A relop or bool formula over pairs means `P_l /\ P_r`, so `repeat split`
+       made TWO obligations of each.  When every argument is public the two are
+       the same obligation (immediates are pairs of equal sides; a public
+       variable's sides are equal by its secLeak): prove the left one only.
+       LoopI 8 -> 5 leaves, the pre-pair count (TODOS.txt, 2026-10-30). *)
+    Lemma relprop_sync {σ} (op : bop.RelOp σ) (a b : RelVal σ) :
+      RiscvPmpSignature.secLeak a -> RiscvPmpSignature.secLeak b ->
+      bop.eval_relop_prop op (ty.projLeft a) (ty.projLeft b) ->
+      ty.projLeftRV (bop.eval_relop_relprop op a b) /\
+      ty.projRightRV (bop.eval_relop_relprop op a b).
+    Proof.
+      intros Ha Hb H.
+      rewrite bop.comProjLeftRVEval_relop_relprop.
+      rewrite bop.comProjRightRVEval_relop_relprop.
+      hnf in Ha, Hb. rewrite <- Ha. rewrite <- Hb. split; exact H.
+    Qed.
+
+    Lemma relbool_sync (b : RelVal ty.bool) :
+      RiscvPmpSignature.secLeak b -> ty.projLeftRV b = true ->
+      ty.projLeftRV b = true /\ ty.projRightRV b = true.
+    Proof.
+      intros Hb H. hnf in Hb. split; [exact H|].
+      change (ty.projRight b = true). rewrite <- Hb. exact H.
+    Qed.
+
+    (* `secLeak t` for t built from literals and variables with a secLeak
+       hypothesis: substitute those variables' sides (a side goal, so the
+       destructs touch nothing else), then both sides compute alike *)
+    Ltac vc_pub :=
+      repeat match goal with v : RelVal _, H : RiscvPmpSignature.secLeak ?v |- _ =>
+        is_var v; let l := fresh "l" in let r := fresh "r" in
+        destruct v as [l r]; hnf in H; cbn in H; subst r end;
+      (* SYNTACTIC: on a non-public argument a plain `reflexivity` tries to
+         convert two different bv terms and blew pet past 7.6 GB *)
+      hnf; cbn; lazymatch goal with |- ?x = ?x => reflexivity end.
+
+    (* The goal arrives ERASED (`Erasure.inst_eformula' ι (eformula_relop ..)`,
+       which `split` would unfold and cut); so do the hypotheses, hence vc_pub
+       first reduces the erased secLeak ones -- in its own side goal only.
+       `@`: Set Implicit Arguments makes op/a/b implicit, and a bare
+       `relprop_sync op a b` fails silently into `split`. *)
+    Ltac vc_pub_erased :=
+      repeat match goal with H : Erasure.inst_eformula' _ (Erasure.eformula_secLeak _) |- _ =>
+        cbn -[Erasure.inst_symprop] in H end;
+      (* every other erased hypothesis carries the whole valuation, so each
+         `destruct v` in vc_pub would rewrite all of them: drop them first *)
+      repeat match goal with H : Erasure.inst_eformula' _ _ |- _ => clear H end;
+      vc_pub.
+    Ltac vc_relop_once :=
+      lazymatch goal with
+      | |- Erasure.inst_eformula' _ (Erasure.eformula_relop _ _ _) =>
+          cbn -[Erasure.inst_symprop];
+          lazymatch goal with
+          | |- ty.projLeftRV (bop.eval_relop_relprop ?op ?a ?b) /\
+               ty.projRightRV (bop.eval_relop_relprop ?op ?a ?b) =>
+              apply (@relprop_sync _ op a b);
+              [solve [vc_pub_erased] | solve [vc_pub_erased] |]
+          end
+      | |- Erasure.inst_eformula' _ (Erasure.eformula_bool _) =>
+          cbn -[Erasure.inst_symprop];
+          lazymatch goal with
+          | |- ty.projLeftRV ?b = true /\ ty.projRightRV ?b = true =>
+              apply (@relbool_sync b); [solve [vc_pub_erased] |]
+          end
+      end.
 
     Ltac solve_vc_closers :=
       try (solve [eapply secLeak_bvadd_val_compat; eauto]);
@@ -662,7 +747,8 @@ Notation "e1 ',ₜ' e2" := (term_binop bop.pair e1 e2) (at level 100).
          unfoldable, because the rest of the delta cost only exists inside what
          inst_symprop produces.  All 16 examples are unaffected.
          See diagnostics/vm-vs-tactic-split.md. *)
-      vm_compute; constructor; cbn -[Erasure.inst_symprop]; intros; repeat split;
+      vm_compute; constructor; cbn -[Erasure.inst_symprop]; intros;
+      repeat first [ vc_relop_once | split ];
       (* No `try solve_bv` here any more: see the note where solve_bv used
          to be defined (it silently ran bv.bv_zify on every goal). *)
       (* Phase 0 extension (PLAN-symbolic-base.md §1): try the compound

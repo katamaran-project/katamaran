@@ -757,6 +757,17 @@ Import iris.algebra.gmap.
 Section AdequacyTools.
 
   Context {Σ} {GS : sailGS2 Σ}.
+
+  (* RVToOption is an agreement test on the pair: Some v means both sides
+     are v (relval-pair). *)
+  Lemma RVToOption_some (rv : RelVal ty_xlenbits) (v : bv xlenbits) :
+    ty.RVToOption rv = Some v -> rv = ty.SyncVal v.
+  Proof.
+    destruct rv as [l r]. unfold ty.RVToOption; cbn.
+    match goal with |- context[if ?d then _ else _] => destruct d as [<-|] end;
+      intros H; [|discriminate H].
+    injection H as ->. reflexivity.
+  Qed.
   Lemma regPstsTo_sync_is_nonsync `{sailGS2 Σ} σ r (v : Val σ) : r ↦ᵣ NonSyncVal v v ⊣⊢ r ↦ᵣ SyncVal v.
   Proof.
     unfold reg_pointsTo2. auto.
@@ -1644,7 +1655,7 @@ Section AdequacyTools.
         ptsto_instrs_w words
           (ai_instr <$> instrs) ⊢
       (∀ an,
-         ⌜match an with SyncVal v => (loop || exit_hit cexit v) = true | NonSyncVal _ _ => False end⌝ ∗
+         ⌜∃ v, an = SyncVal v ∧ (loop || exit_hit cexit v) = true⌝ ∗
          pc ↦ᵣ an ∗ (∃ v, nextpc ↦ᵣ v) ∗
            ptsto_instrs_w words
              (ai_instr <$> instrs) ∗
@@ -1655,9 +1666,10 @@ Section AdequacyTools.
       induction fuel as [|n' IH]; intros first apc anp h Hexec.
       - cbn [cexec_cfg_addr CHeapSpec.error] in Hexec.
         contradiction.
-      - destruct apc as [v|v1 v2].
-        + cbn [cexec_cfg_addr ty.RVToOption
-               CHeapSpec.angelic_binary] in Hexec.
+      - cbn [cexec_cfg_addr] in Hexec.
+        revert Hexec. destruct (ty.RVToOption apc) as [v|] eqn:Hapc; intros Hexec.
+        + apply RVToOption_some in Hapc. subst apc.
+          cbn [CHeapSpec.angelic_binary] in Hexec.
           destruct Hexec as [Hexit | Hexec].
           * destruct (negb first && (loop || exit_hit cexit v)) eqn:Hstop.
             -- cbn [CHeapSpec.pure] in Hexit.
@@ -1667,7 +1679,7 @@ Section AdequacyTools.
                iIntros "(#Hbs & Hh & Hpc & Hnpc & Hinstrs) Hk".
                iApply exitCondImpliesMyWP2_loop.
                iApply ("Hk" $! (SyncVal v)).
-               iSplit. { iPureIntro. exact Hexit_eq. }
+               iSplit. { iPureIntro. exists v. split; [reflexivity|exact Hexit_eq]. }
                iFrame. iPureIntro. exact Hexit.
             -- cbn [CHeapSpec.error] in Hexit. contradiction.
           * (* Execute branch: the instruction is looked up at address v
@@ -1748,7 +1760,7 @@ Section AdequacyTools.
                iExists v; iSplitL "Hpc". { iExact "Hpc". }
                iIntros "Hpc_wd".
                iApply (semWP2_mono with "[Hh Hnpc Hpc_wd Hinstr]").
-               { iApply (sound_exec_instruction Hexec1). iFrame. }
+               { iApply (sound_exec_instruction Hexec1). iFrame. iPureIntro. reflexivity. }
                iIntros ([v1|m1] δ1 [v2|m2] δ2); cbn.
                2-3: iIntros "(%δ' & _ & HF)"; auto.
                2: iIntros "_"; done.
@@ -1767,8 +1779,7 @@ Section AdequacyTools.
                iSplitR. { iExact "Hbs". }
                iFrame "Hh' Hpc' Hinstrs' Hnpc'".
             ++ cbn [CHeapSpec.error] in Hexec. contradiction.
-        + cbn [cexec_cfg_addr ty.RVToOption
-               CHeapSpec.error] in Hexec.
+        + cbn [CHeapSpec.error] in Hexec.
           contradiction.
     Qed.
 
@@ -1812,7 +1823,7 @@ Section AdequacyTools.
         pc ↦ᵣ a ∗ (∃ v, nextpc ↦ᵣ v) ∗
         ptsto_instrs_w words (ai_instr <$> instrs) -∗
         (∀ an,
-           ⌜match an with SyncVal v => (loop || exit_hit cexit v) = true | NonSyncVal _ _ => False end⌝ ∗
+           ⌜∃ v, an = SyncVal v ∧ (loop || exit_hit cexit v) = true⌝ ∗
            pc ↦ᵣ an ∗ (∃ v, nextpc ↦ᵣ v) ∗
            ptsto_instrs_w words (ai_instr <$> instrs) ∗
            (* RE-THREADED 2026-09-03; commit 2b6c7753 removed exactly this
@@ -1904,7 +1915,7 @@ Section AdequacyTools.
         pc ↦ᵣ a ∗ (∃ v, nextpc ↦ᵣ v) ∗
         ptsto_instrs (ai_instr <$> instrs) -∗
         (∀ an,
-           ⌜match an with SyncVal v => (loop || exit_hit cexit v) = true | NonSyncVal _ _ => False end⌝ ∗
+           ⌜∃ v, an = SyncVal v ∧ (loop || exit_hit cexit v) = true⌝ ∗
            pc ↦ᵣ an ∗ (∃ v, nextpc ↦ᵣ v) ∗
            ptsto_instrs (ai_instr <$> instrs) ∗
            asn.interpret post (ι.["a"∷ty_xlenbits ↦ a].["an"∷ty_xlenbits ↦ an]) -∗
@@ -1960,10 +1971,7 @@ Section AdequacyTools.
           pc ↦ᵣ a ∗ (∃ v, nextpc ↦ᵣ v) ∗
           ptsto_instrs_w words (ai_instr <$> instrs) -∗
           (∀ an,
-             ⌜match an with
-               | SyncVal v => exit_hit cexit v = true
-               | NonSyncVal _ _ => False
-               end⌝ ∗
+             ⌜∃ v, an = SyncVal v ∧ exit_hit cexit v = true⌝ ∗
              pc ↦ᵣ an ∗ (∃ v, nextpc ↦ᵣ v) ∗
              ptsto_instrs_w words (ai_instr <$> instrs) ∗
              (* the exit assertion — see sound_cexec_triple_addr_myWP2 *)
@@ -2005,7 +2013,7 @@ Section AdequacyTools.
           pc ↦ᵣ a ∗ (∃ v, nextpc ↦ᵣ v) ∗
           ptsto_instrs_w words (ai_instr <$> instrs) -∗
           (∀ an,
-             ⌜match an with SyncVal _ => True | NonSyncVal _ _ => False end⌝ ∗
+             ⌜∃ y, an = SyncVal y⌝ ∗
              pc ↦ᵣ an ∗ (∃ v, nextpc ↦ᵣ v) ∗
              ptsto_instrs_w words (ai_instr <$> instrs) ∗
              asn.interpret post (ι.["a"∷ty_xlenbits ↦ a].["an"∷ty_xlenbits ↦ an]) -∗
@@ -2027,7 +2035,7 @@ Section AdequacyTools.
         as "Hrun".
       iApply ("Hrun" $! a with "Hpre").
       iIntros (an) "[%Hf H]". iApply "Hk". iFrame "H". iPureIntro.
-      destruct an; [exact I | exact Hf].
+      destruct Hf as (y & Hy & _). exists y. exact Hy.
     Qed.
 
     (* ---- THE PLACEMENT PREMISE ------------------------------------------
@@ -2100,7 +2108,7 @@ Section AdequacyTools.
         (b : BlkAnnot)
         (ι : Valuation (blk_ctx b)) : iProp Σ :=
       let c := blk_contract b in
-      (∃ an, ⌜match an with SyncVal _ => True | NonSyncVal _ _ => False end⌝ ∗
+      (∃ an, ⌜∃ y, an = SyncVal y⌝ ∗
          pc ↦ᵣ an ∗ (∃ x, nextpc ↦ᵣ x) ∗
          ptsto_instrs_w words
            (ai_instr <$> instrs_of_list v ab) ∗
@@ -2163,11 +2171,13 @@ Section AdequacyTools.
       { iApply (Hbs v). }
       (* 4. The run takes at least one step, so what follows its stop sits
          under a later -- the same later that strips the induction hypothesis. *)
+      (* `⌜secLeak (SyncVal v)⌝` is `v = v` now, not `True`: iFrame no longer
+         closes it on the way in (relval-pair). *)
       iApply (myWP2_step_bind with "[Hk] [Hpre Hpc Hnpc Hinstrs]");
         [| iApply ("Hrun" $! (ty.SyncVal v) with "[$Hpre $Hpc $Hnpc $Hinstrs]");
-           iIntros (an) "H"; iExists an; iExact "H" ].
+           [iPureIntro; reflexivity | iIntros (an) "H"; iExists an; iExact "H"] ].
       iNext. iIntros "(%an & %Hsync & Hpc & Hnpc & Hinstrs & Hpost)".
-      destruct an as [y|y1 y2]; [|contradiction].
+      destruct Hsync as (y & ->).
       (* 5. Which stop: the loop post's pc equations decide. *)
       rewrite Contracts.loop_post_interpret.
       iDestruct (run_to_span words v b ab Hstrip with "Hinstrs") as "Hinstrs".
@@ -2208,10 +2218,7 @@ Section AdequacyTools.
           pc ↦ᵣ a ∗ (∃ v, nextpc ↦ᵣ v) ∗
           ptsto_instrs (ai_instr <$> instrs) -∗
           (∀ an,
-             ⌜match an with
-               | SyncVal v => exit_hit cexit v = true
-               | NonSyncVal _ _ => False
-               end⌝ ∗
+             ⌜∃ v, an = SyncVal v ∧ exit_hit cexit v = true⌝ ∗
              pc ↦ᵣ an ∗ (∃ v, nextpc ↦ᵣ v) ∗
              ptsto_instrs (ai_instr <$> instrs) ∗
              (* the exit assertion — see sound_cexec_triple_addr_myWP2 *)

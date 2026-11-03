@@ -66,7 +66,7 @@ Definition cl_annot (post : Assertion (cpCtx ▻ "a"∷ty_xlenbits ▻ "an"∷ty
      ; ai_ghost_after := [ AnnotCLemma (clem_arrv_add_first 1 1 "src") ]; ai_block := None |}
   ; {| ai_ghost_before := []; ai_instr := NOP; ai_ghost_after := []
      ; ai_block := Some (cpBlk post) |}
-  ; {| ai_ghost_before := [ AnnotCLemma (clem_arrv_take_cons 1 1 "dst") ]; ai_instr := NOP
+  ; {| ai_ghost_before := [ AnnotCLemma (clem_arrv_take_first 1 1 "dst") ]; ai_instr := NOP
      ; ai_ghost_after := []; ai_block := None |} ].
 
 (* h at p, then n limbs; a destination of n+1 cells *)

@@ -608,13 +608,13 @@ Module Type RefinementMonadsOn
         rewrite CPureSpec.wp_angelic_pattern_match.
         assert (Hvar : pattern_match_relval (pat_var x) v
                        = Some (existT tt [env].[x∷σ ↦ v])).
-        { destruct v as [w0|v1 v2]; reflexivity. }
+        { destruct v as [v1 v2]; reflexivity. }
         rewrite Hvar option.wp_some.
         iApply ("rΦ" with "[Hv] HSP"). rsolve.
       - (* pat_unit *)
         iIntros (msg v sv) "#Hv %Φ %sΦ #rΦ HSP".
         rewrite CPureSpec.wp_angelic_pattern_match.
-        destruct v as [w0|v1 v2]; cbn; rewrite option.wp_some;
+        destruct v as [v1 v2]; cbn; rewrite option.wp_some;
           iApply ("rΦ" with "[Hv] HSP"); iExists eq_refl; cbn; rsolve.
       - (* pat_union: fast-path when constructor statically known (recurse via H). *)
         iIntros (msg v sv) "#Hv".
@@ -752,7 +752,7 @@ Module Type RefinementMonadsOn
         rewrite CPureSpec.wp_demonic_pattern_match.
         assert (Hvar : pattern_match_relval (pat_var x) v
                        = Some (existT tt [env].[x∷σ ↦ v])).
-        { destruct v as [w0|v1 v2]; reflexivity. }
+        { destruct v as [v1 v2]; reflexivity. }
         rewrite Hvar option.wp_some.
         iApply ("rΦ" with "[Hv] HSP"). rsolve.
       - (* pat_bool: fallback *) iApply refine_demonic_pattern_match'.
@@ -765,7 +765,7 @@ Module Type RefinementMonadsOn
       - (* pat_unit: fast-path, always Some (empty payload) *)
         iIntros (v sv) "#Hv %Φ %sΦ #rΦ HSP".
         rewrite CPureSpec.wp_demonic_pattern_match.
-        destruct v as [w0|v1 v2]; cbn; rewrite option.wp_some;
+        destruct v as [v1 v2]; cbn; rewrite option.wp_some;
           iApply ("rΦ" with "[Hv] HSP"); rsolve.
       - (* pat_enum: fallback *) iApply refine_demonic_pattern_match'.
       - (* pat_bvec_split: fallback *) iApply refine_demonic_pattern_match'.

@@ -363,50 +363,9 @@ Module bop.
     Qed.
 
     Definition eval_relop_relval_spec {σ} (op : RelOp σ) (v1 v2 : RelVal σ) :
-      match liftBinOpRV reflect (eval_relop_relprop op v1 v2) (eval_relop_relval op v1 v2) with
-      | SyncVal p => p
-      | NonSyncVal p1 p2 => p1 * p2
-      end.
-    Proof with constructor; auto.
-      unfold eval_relop_relprop; unfold eval_relop_relval.
-      destruct v1; destruct v2; cbn.
-      { destruct op; cbn; auto.
-      - destruct eq_dec...
-      - destruct eq_dec...
-      - apply Z.leb_spec0.
-      - apply Z.ltb_spec0.
-      - apply bv.sle_spec.
-      - apply bv.slt_spec.
-      - apply bv.ule_spec.
-      - apply bv.ult_spec. }
-      { destruct op; cbn; auto.
-        - split; destruct eq_dec...
-        - split; destruct eq_dec...
-        - split; apply Z.leb_spec0.
-        - split; apply Z.ltb_spec0.
-        - split; apply bv.sle_spec.
-        - split; apply bv.slt_spec.
-        - split; apply bv.ule_spec.
-        - split; apply bv.ult_spec. }
-      { destruct op; cbn; auto.
-        - split; destruct eq_dec...
-        - split; destruct eq_dec...
-        - split; apply Z.leb_spec0.
-        - split; apply Z.ltb_spec0.
-        - split; apply bv.sle_spec.
-        - split; apply bv.slt_spec.
-        - split; apply bv.ule_spec.
-        - split; apply bv.ult_spec. }
-      { destruct op; cbn; auto.
-        - split; destruct eq_dec...
-        - split; destruct eq_dec...
-        - split; apply Z.leb_spec0.
-        - split; apply Z.ltb_spec0.
-        - split; apply bv.sle_spec.
-        - split; apply bv.slt_spec.
-        - split; apply bv.ule_spec.
-        - split; apply bv.ult_spec. }
-    Qed.
+      let r := liftBinOpRV reflect (eval_relop_relprop op v1 v2) (eval_relop_relval op v1 v2) in
+      (projLeftRV r * projRightRV r)%type.
+    Proof. split; apply eval_relop_val_spec. Qed.
 
     Lemma eval_relop_equiv {σ} (op : RelOp σ) (v1 v2 : Val σ) :
       eval_relop_prop op v1 v2 <-> eval_relop_val op v1 v2 = true.
@@ -447,7 +406,7 @@ Module bop.
 
     Definition evalRel {σ1 σ2 σ3 : Ty} (op : BinOp σ1 σ2 σ3) : RelVal σ1 -> RelVal σ2 -> RelVal σ3 :=
     liftBinOp (eval op).
-    Global Arguments evalRel {σ1} {σ2} {σ3} op !rv1 rv2.
+    Global Arguments evalRel {σ1} {σ2} {σ3} op !rv1 rv2 /.
 
     Lemma comProjLeftRVEvalRel {σ1 σ2 σ3 : Ty} (op : BinOp σ1 σ2 σ3) (rv1 : RelVal σ1) (rv2 : RelVal σ2) :
       projLeftRV (evalRel op rv1 rv2) = eval op (projLeftRV rv1) (projLeftRV rv2).

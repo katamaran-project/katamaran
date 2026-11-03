@@ -325,19 +325,24 @@ Section CFGVerificationDerived.
        exit.  `cexit` is a RelVal so that a block can pass its exit term's
        instantiation through unchanged; a NonSyncVal exit is never hit. *)
     Definition exit_hit (cexit : RelVal ty_xlenbits) (v : bv xlenbits) : bool :=
-      match cexit with
-      | ty.SyncVal e => bv.eqb v e
-      | ty.NonSyncVal _ _ => false
-      end.
+      bv.eqb v (ty.projLeft cexit) && bv.eqb v (ty.projRight cexit).
 
     Lemma exit_hit_spec (cexit : RelVal ty_xlenbits) (v : bv xlenbits) :
       exit_hit cexit v = true <-> cexit = ty.SyncVal v.
     Proof.
-      destruct cexit as [e | ? ?]; cbn -[bv.eqb]; [|split; discriminate].
-      split; intros H.
-      - apply (reflect_iff _ _ (bv.eqb_spec v e)) in H. now subst.
-      - injection H as ->. now apply (reflect_iff _ _ (bv.eqb_spec v v)).
+      destruct cexit as [l r]; unfold exit_hit; cbn -[bv.eqb].
+      rewrite andb_true_iff. split.
+      - intros [H1 H2].
+        apply (reflect_iff _ _ (bv.eqb_spec v l)) in H1.
+        apply (reflect_iff _ _ (bv.eqb_spec v r)) in H2. now subst.
+      - intros H. injection H as -> ->.
+        split; now apply (reflect_iff _ _ (bv.eqb_spec v v)).
     Qed.
+
+    (* RVToOption is an agreement test on the pair; on a public value it is
+       [Some].  (It no longer reduces by [cbn]: it decides an equality.) *)
+    Lemma RVToOption_sync {A} {eqA : EqDec A} (v : A) : ty.RVToOption (ty.SyncVal v) = Some v.
+    Proof. unfold ty.RVToOption; cbn. destruct (eq_dec v v); [reflexivity|congruence]. Qed.
 
     Fixpoint cexec_cfg_addr (instrs : gmap (bv xlenbits) AnnotInstr)
       (words : bv xlenbits -> bv word) (cexit : RelVal ty_xlenbits) (fuel : nat)
@@ -417,13 +422,13 @@ Section CFGVerificationDerived.
     Proof.
       revert first apc anp. induction fuel; intros first apc anp.
       - typeclasses eauto.
-      - destruct apc as [v | vl vr].
-        + cbn [cexec_cfg_addr ty.RVToOption CHeapSpec.angelic_binary].
+      - cbn [cexec_cfg_addr]. destruct (ty.RVToOption apc) as [v|].
+        + cbn [CHeapSpec.angelic_binary].
           destruct (negb first && (loop || exit_hit cexit v));
             cbn [CHeapSpec.pure CHeapSpec.error bind];
             try destruct (instrs !! v) as [ai|]; try destruct (ai_block ai);
             unfold cexec_block_chk, cexec_block; typeclasses eauto.
-        + cbn [cexec_cfg_addr ty.RVToOption]. typeclasses eauto.
+        + typeclasses eauto.
     Qed.
 
   End Shallow.
@@ -772,7 +777,7 @@ Section CFGVerificationDerived.
                      (term_bvadd apc (term_val ty_xlenbits (bv.of_N k))) ι
                    = ty.SyncVal (bv.add v (bv.of_N k)))
         by (cbn; rewrite Hv; reflexivity).
-      rewrite Ha in Hv'. injection Hv' as <-.
+      rewrite Ha in Hv'. injection Hv' as <- _.
       split.
       - rewrite lookup_fmap Hm. reflexivity.
       - assert (E : bv.of_N (n := xlenbits) (k + 4) = bv.add (bv.of_N k) (bv.of_N 4))
@@ -1807,8 +1812,7 @@ Section CFGVerificationDerived.
 
       (* ---- 4: no-exit / block-miss / lookup-miss.  The symbolic side is a
          bare error now (no angelic wrapper), so psafe is outright False. *)
-      4: { destruct a as [va|va1 va2]; cbn [ty.RVToOption];
-           unfold LogicalSoundness.RProp; cbn;
+      4: { unfold LogicalSoundness.RProp; cbn;
            iIntros "%HF"; destruct HF. }
 
       (* ---- 3: no-exit / lookup-hit / NO block.  THE CORE -- this is the   *)
@@ -1821,7 +1825,7 @@ Section CFGVerificationDerived.
               Hm` re-introduces `ai` on the CONCRETE side, so its
               `match ai_block ai` is still blocked.  Without it the very next
               rewrite fails with "LHS of cgc_binds_heap does not match". *)
-           cbn [ty.RVToOption]. rewrite Hm. rewrite Hblk.
+           rewrite RVToOption_sync. rewrite Hm. rewrite Hblk.
            (* Only the CONCRETE angelic_binary is left to unfold -- the
               symbolic side no longer has one -- and we take its RIGHT disjunct.
               Note this needs NOTHING about `cexit v`: `is_exit = false` does
@@ -1972,7 +1976,7 @@ Section CFGVerificationDerived.
            iDestruct (lookup_instr_sound_repₚ instrs words _ _ a Hlk with "[$Hi $Ha]")
              as (v) "[%Hfact #Hx]".
            destruct Hfact as (-> & Hm).
-           cbn [ty.RVToOption]. rewrite Hm. rewrite Hblk.
+           rewrite RVToOption_sync. rewrite Hm. rewrite Hblk.
            unfold CHeapSpec.angelic_binary.
            iApply rprop_right.
            unfold CHeapSpec.bind at 1, SHeapSpec.bind at 1.
@@ -2027,7 +2031,7 @@ Section CFGVerificationDerived.
       { iPoseProof (is_exit_sound_repₚ cexit _ _ _ Hex with "[$He $Ha]")
           as "%Hfact".
         destruct Hfact as (v & -> & Hcond).
-        cbn [ty.RVToOption].
+        rewrite RVToOption_sync.
         rewrite (proj2 (exit_hit_spec cexit v) Hcond). rewrite orb_true_r.
         unfold CHeapSpec.angelic_binary.
         iApply rprop_left.
@@ -2043,7 +2047,7 @@ Section CFGVerificationDerived.
       iDestruct (lookup_instr_sound_repₚ instrs words _ _ a Hlk' with "[$Hi $Ha]")
         as (v) "[%Hfact _]".
       destruct Hfact as [-> _].
-      cbn [ty.RVToOption negb andb orb].
+      rewrite RVToOption_sync. cbn [negb andb orb].
       unfold CHeapSpec.angelic_binary.
       iApply rprop_left.
       unfold CHeapSpec.pure, SHeapSpec.pure, T; cbv beta.
@@ -2598,8 +2602,7 @@ Section CFGVerificationDerived.
       destruct Hp as (v & Hv & Hm).
       constructor; [|exact IH].
       exists v.
-      rewrite Hv.
-      cbn.
+      rewrite Hv RVToOption_sync.
       split; reflexivity.
     Qed.
 

@@ -169,7 +169,7 @@ Proof.
   rewrite cs_count_l cs_count_ceil; [|exact Hl].
   unfold klen_words in *.
   repeat split; try reflexivity; try (unfold maxAddr, minAddr in *; lia).
-  cbn. f_equal. f_equal. lia.
+  cbn. f_equal; f_equal; lia.
 Qed.
 
 (* ---- 4. THE STATEMENT'S OWN DATA (PLAN-spec-layer D12/D14) ------------- *)

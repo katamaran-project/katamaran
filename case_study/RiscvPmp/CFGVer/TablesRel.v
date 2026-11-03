@@ -105,7 +105,7 @@ Import RiscvPmp.Sig.
       + exists (bv.add cbase (bv.of_N off)). split.
         * cbn [fst].
           rewrite (peval_bvadd_sound (term_val ty_xlenbits (bv.of_N off)) p ι).
-          cbn. rewrite Hp. cbn. f_equal. apply bv.add_comm.
+          cbn. rewrite Hp. cbn. f_equal; apply bv.add_comm.
         * cbn [snd]. apply lookup_insert.
       + rewrite Nat2N.inj_succ in Hbound.
         assert (Hb1 : (bv.bin (cbase + bv.of_N off)%bv <= bv.bin cbase + off)%N).
@@ -153,5 +153,5 @@ Import RiscvPmp.Sig.
     exists (bv.add cbase (bv.of_N off)). split; [|reflexivity].
     unfold exit_of_off.
     rewrite (peval_bvadd_sound (term_val ty_xlenbits (bv.of_N off)) p ι).
-    cbn. rewrite Hp. cbn. f_equal. apply bv.add_comm.
+    cbn. rewrite Hp. cbn. f_equal; apply bv.add_comm.
   Qed.

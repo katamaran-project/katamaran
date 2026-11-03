@@ -160,14 +160,14 @@ Definition cl (k : CLem) : Annot := AnnotCLemma k.
    empty_at puts each at its array's start (clem_arrv_empty's address is an
    existential only the loop's entry would pin, and on the n = 0 path the
    exit join then looks for the source at that unknown address).
-   Exit, before the ret (both paths): the destination's done array absorbs
-   the source's emptied remainder's value (pad: done ++ rest = vs), the
-   source's done and remainder join back into one array (done ++ rest), and
-   the destination's emptied remainder goes (empty_elim). *)
+   Exit, before the ret (both paths): the source's emptied remainder holds
+   [] (count0: rest = [], so vs = done ++ []), the source's done and
+   remainder join back into one array (done ++ rest), and the destination's
+   emptied remainder goes (empty_elim). *)
 Definition mf_seeds (ts td : string) : list Annot :=
   [ cl (clem_arrv_empty_at 1 1 ts mc_sd); cl (clem_arrv_empty_at 1 1 td td) ].
 Definition mf_glue (ts td : string) : list Annot :=
-  [ cl (clem_arrv_pad 1 1 td ts); cl (clem_arrv_join 1 1 mc_sd ts ts)
+  [ cl (clem_arrv_count0 1 1 ts); cl (clem_arrv_join 1 1 mc_sd ts ts)
   ; cl (clem_arrv_empty_elim 1 1 td) ].
 
 Definition mf_annot (ts td : string) : list AnnotInstr :=

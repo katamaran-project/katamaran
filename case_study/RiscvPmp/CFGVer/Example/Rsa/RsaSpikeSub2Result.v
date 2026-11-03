@@ -255,9 +255,9 @@ Proof.
   - (* the facts: 0 < h < 2^16 *)
     intros Σ' H'. unfold s1b_facts. cbn -[bv.ult bv.of_N].
     iSplit; (iSplit; [iPureIntro | done]).
-    + apply MuladdParamClose.Z_ult. unfold bv.unsigned. replace (bv.bin bv.zero) with 0%N by reflexivity.
+    + match goal with |- ?P /\ ?P => cut P; [intros HP; exact (conj HP HP)|] end. apply MuladdParamClose.Z_ult. unfold bv.unsigned. replace (bv.bin bv.zero) with 0%N by reflexivity.
       apply N2Z.inj_lt. exact (proj1 Hh).
-    + apply MuladdParamClose.Z_ult. unfold bv.unsigned. replace (bv.bin (bv.of_N 65536)) with 65536%N by reflexivity.
+    + match goal with |- ?P /\ ?P => cut P; [intros HP; exact (conj HP HP)|] end. apply MuladdParamClose.Z_ult. unfold bv.unsigned. replace (bv.bin (bv.of_N 65536)) with 65536%N by reflexivity.
       apply N2Z.inj_lt. exact (proj2 Hh).
   - (* data_ok *)
     unfold s1b_data. cbn [data_ok]. rewrite Hxa Hxb Hc Hf.

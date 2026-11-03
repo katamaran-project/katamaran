@@ -253,12 +253,9 @@ Module Type Soundness
         - (* stm_assert *)
           destruct HYP as (HsL & HYP).
           apply rule_stm_assert.
-          { destruct (eval e1 δ1); try contradiction. by eexists. }
+          { apply secLeakOtherDef in HsL. eexists; exact HsL. }
           intro Heval.
-          apply IHs, HYP.
-          destruct (eval e1 δ1).
-          + now subst.
-          + contradiction.
+          apply IHs, HYP. exact Heval.
 
         - (* stm_fail *)
           eapply rule_consequence_left.

@@ -8,7 +8,10 @@ representation (Emiel, 2026-10-30).** Phases 0–2 DONE (GATE 2 merged as
 
 Emiel decided to move this plan onto `issue/relval-pair` before Phase 3:
 pairs make `MUX(secret, h, h)` public by value, so O4's ad hoc
-`clem_arrv_resync_head` (and probably `clem_arrv_take_any`) can go. The
+`clem_arrv_resync_head` (and probably `clem_arrv_take_any`) can go. (DONE
+2026-11-01 on `issue/relval-rsa`: both deleted, together with `take_cons`,
+`clem_mux_byte` and `pad`; `empty_elim` gives `vs = []` for w ≥ 1 and the new
+`count0` keeps the array. See relval-pair-baseline/AUDIT.md.) The
 migration is a MERGE of `KatamaranRel` into a new branch off
 `issue/relval-pair`. Its hand-off -- decisions, timings, merge preview, the
 R3 risk for arrv publicness, next steps -- is **§12 of

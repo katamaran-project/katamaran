@@ -137,7 +137,7 @@ Module Type ProgramLogicOn
         (e1 : Exp Γ ty.bool) (e2 : Exp Γ ty.string) (k : Stm Γ τ)
         (P : L) (Q : RelVal τ -> CStore Γ -> L) :
       (∃ v, eval e1 δ = SyncVal v) ->
-      (match eval e1 δ with SyncVal v => v = true | _ => False end -> ⦃ P ⦄ k ; δ ⦃ Q ⦄) ->
+      (eval e1 δ = SyncVal true -> ⦃ P ⦄ k ; δ ⦃ Q ⦄) ->
       ⦃ P ⦄ stm_assertk e1 e2 k ; δ ⦃ Q ⦄
     | rule_stm_fail
         (s : string) (Q : RelVal τ -> CStore Γ -> L) :

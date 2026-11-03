@@ -1,0 +1,9 @@
+[32m▶ [1/3] Build (target closure, incremental)…[0m
+[32m  (building with -j1; override with GATE_JOBS=N)[0m
+make: 'case_study/RiscvPmp/CFGVer/Results.vo' is up to date.
+make: 'case_study/RiscvPmp/CFGVer/GenCompose.vo' is up to date.
+[32m▶ [2/3] Scanning for proof holes…[0m
+[32m▶ [3/3] Axiom hygiene (Print Assumptions)…[0m
+[32m  (24 theorems in batches of 8; override with GATE_PROBE_BATCH=N)[0m
+[32m✓ GATE PASSED — build clean, no holes, 24 end theorems axiom-clean (only: Machine.pure_decode Base.mmioenv).[0m
+exit 0

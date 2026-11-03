@@ -114,40 +114,27 @@ Module Type FormulasOn
       }
   Qed.
 
+  (* Public = the two executions agree. A VALUE-level fact: [NonSyncVal v v]
+     is [SyncVal v], so agreement reached by computation (x - x) counts. *)
   Definition secLeak {σ} (rv : RelVal σ) : Prop :=
-    match rv with
-    | SyncVal v => True
-    | NonSyncVal _ _ => False
-    end.
+    ty.projLeft rv = ty.projRight rv.
 
   Definition secLeak_bool {σ} (rv : RelVal σ) : Datatypes.bool :=
-    match rv with
-    | SyncVal v => true
-    | NonSyncVal _ _ => false
-    end.
+    if eq_dec (ty.projLeft rv) (ty.projRight rv) then true else false.
 
   Lemma secLeakOtherDef {σ} {rv : RelVal σ} :
     secLeak rv <-> rv = SyncVal (ty.projLeft rv).
-  Proof.
-    split; intro H.
-    + destruct rv; try contradiction.
-      eauto.
-    + rewrite H. cbn. auto.
-  Qed.      
+  Proof. apply ty.RV_sync_iff. Qed.      
 
   #[export] Instance instprop_formula : InstProp Formula :=
     fix inst_formula {Σ} (fml : Formula Σ) (ι : Valuation Σ) :=
       match fml with
       | formula_user p ts      => env.uncurry (𝑷_inst p) (inst ts ι)
-      | formula_bool t         => match inst (A := RelVal ty.bool) t ι with
-                                  | SyncVal p => p = true
-                                  | NonSyncVal _ _ => False
-                                  end
+      | formula_bool t         => let rv := inst (A := RelVal ty.bool) t ι in
+                                  ty.projLeft rv = true /\ ty.projRight rv = true
       | formula_prop ζ P       => uncurry_named P (inst ζ ι)
-      | formula_relop op t1 t2 => match bop.eval_relop_relprop op (inst t1 ι) (inst t2 ι) with
-                                  | SyncVal p => p
-                                  | _ => False
-                                  end
+      | formula_relop op t1 t2 => let rp := bop.eval_relop_relprop op (inst t1 ι) (inst t2 ι) in
+                                  ty.projLeftRV rp /\ ty.projRightRV rp
       | formula_true           => True
       | formula_false          => False
       | formula_and F1 F2      => inst_formula F1 ι /\ inst_formula F2 ι
@@ -264,7 +251,7 @@ Module Type FormulasOn
     Lemma unsatisfiable_formula_bool [Σ] (t : Term Σ ty.bool) :
       base.equiv t (term_val ty.bool false) -> Unsatisfiable (formula_bool t).
     Proof. intros e ι. specialize (e ι). cbn in *. rewrite e.
-           cbn. intros A. congruence.
+           cbn. intros [A _]. congruence.
     Qed.
 
     Lemma unsatisfiable_formula_false [Σ] :

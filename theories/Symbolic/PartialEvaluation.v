@@ -151,86 +151,14 @@ Module Type PartialEvaluationOn
 
   (* ===================================================================== *)
   (* CANONICAL RING FORMS for bitvector terms: UPSTREAM's ring normalisation *)
-  (* (Ring_polynom norm_aux + Pphi_dev, as used by main's peval2), made      *)
-  (* sound over RelVal (PLAN-bv-arith-solver; developed and self-tested in   *)
-  (* CFGVer/Example/ZZBvRing.v).  Upstream proves it modulo ≡, where the ring *)
-  (* axioms FAIL (x - x is NonSyncVal 0 0 for a secret x; this fork disabled *)
-  (* TermRing_bv for that reason in 196eae12).  Here the SAME Ring_polynom   *)
-  (* lemmas are instantiated modulo `teq side` (equal on one projection),    *)
-  (* where they hold; SyncVal-ness is settled by a computable leaf           *)
-  (* certificate (every op lifts, so a term is SyncVal iff its leaves are);  *)
-  (* an atom the normal form drops is padded back as `0 * a`.                *)
+  (* (Ring_polynom norm_aux + Pphi_dev, as used by main's peval2), proved   *)
+  (* sound modulo ≡ exactly as upstream does: RelVal is a pair and every op *)
+  (* lifts pointwise, so terms form a ring modulo ≡ (Term_bv_ring_theory).  *)
+  (* On top of upstream: atoms in a canonical order, << by a constant as   *)
+  (* multiplication, and a literal clean-up (Parts 2b-4).                  *)
   (* ===================================================================== *)
   Local Notation RValuation Σ := (Env (fun xt : Binding LVar Ty => RelVal (type xt)) Σ).
   Local Open Scope Z_scope.
-
-Definition rv_proj (side : bool) {σ} (v : RelVal σ) : Val σ :=
-  if side then ty.projLeft v else ty.projRight v.
-
-Section Teq.
-  Context {Σ : LCtx}.
-
-  (* equal on projection `side`, for every valuation *)
-  Definition teq (side : bool) {σ} (t u : Term Σ σ) : Prop :=
-    forall ι : RValuation Σ, rv_proj side (inst t ι) = rv_proj side (inst u ι).
-
-  (* every op is liftBinOp / liftUnOp (eval op): projections commute *)
-  Lemma rv_proj_bin side {σ1 σ2 σ3} (op : BinOp σ1 σ2 σ3) (a : Term Σ σ1) (b : Term Σ σ2) ι :
-    rv_proj side (inst (term_binop op a b) ι) = bop.eval op (rv_proj side (inst a ι)) (rv_proj side (inst b ι)).
-  Proof. destruct side; cbn; [apply bop.comProjLeftRVEvalRel|apply bop.comProjRightRVEvalRel]. Qed.
-
-  Lemma rv_proj_un side {σ1 σ2} (op : UnOp σ1 σ2) (a : Term Σ σ1) ι :
-    rv_proj side (inst (term_unop op a) ι) = uop.eval op (rv_proj side (inst a ι)).
-  Proof. destruct side; cbn; [apply uop.comProjLeftRVEvalRel|apply uop.comProjRightRVEvalRel]. Qed.
-
-  Lemma rv_proj_val side {σ} (v : Val σ) (ι : RValuation Σ) : rv_proj side (inst (term_val σ v) ι) = v.
-  Proof. destruct side; reflexivity. Qed.
-
-  #[export] Instance teq_equiv side σ : Equivalence (@teq side σ).
-  Proof.
-    constructor; [intros x ι; reflexivity | intros x y H ι; symmetry; apply H
-                 | intros x y z H1 H2 ι; rewrite H1; apply H2].
-  Qed.
-
-  #[export] Instance teq_bin side {σ1 σ2 σ3} (op : BinOp σ1 σ2 σ3) :
-    Proper (teq side ==> teq side ==> teq side) (@term_binop Σ _ _ _ op).
-  Proof. intros a a' Ha b b' Hb ι. rewrite !rv_proj_bin. rewrite Ha. rewrite Hb. reflexivity. Qed.
-
-  #[export] Instance teq_un side {σ1 σ2} (op : UnOp σ1 σ2) :
-    Proper (teq side ==> teq side) (@term_unop Σ _ _ op).
-  Proof. intros a a' Ha ι. rewrite !rv_proj_un. rewrite Ha. reflexivity. Qed.
-
-  (* the ring axioms DO hold modulo teq (each projection is a plain bv ring) *)
-  Lemma bv_term_ring side n :
-    ring_theory (term_val (Σ := Σ) (ty.bvec n) bv.zero) (term_val (ty.bvec n) bv.one)
-      (term_binop bop.bvadd) (term_binop bop.bvmul) (term_binop bop.bvsub) (term_unop uop.negate) (teq side).
-  Proof.
-    pose proof (bv.ring_theory n) as R.
-    constructor; intros; intros ι; rewrite ?rv_proj_bin; rewrite ?rv_proj_un; rewrite ?rv_proj_val;
-      cbn [bop.eval uop.eval]; rewrite ?rv_proj_bin; rewrite ?rv_proj_un; rewrite ?rv_proj_val;
-      cbn [bop.eval uop.eval].
-    all: first [ apply (Radd_0_l R) | apply (Radd_comm R) | apply (Radd_assoc R) | apply (Rmul_1_l R)
-               | apply (Rmul_comm R) | apply (Rmul_assoc R) | apply (Rdistr_l R) | apply (Rsub_def R)
-               | apply (Ropp_def R) ].
-  Qed.
-
-  Lemma bv_term_eq_ext side n :
-    ring_eq_ext (term_binop (Σ := Σ) (bop.bvadd (n := n))) (term_binop bop.bvmul) (term_unop uop.negate) (teq side).
-  Proof. constructor; typeclasses eauto. Qed.
-
-  Lemma bv_term_morph side n :
-    ring_morph (term_val (Σ := Σ) (ty.bvec n) bv.zero) (term_val (ty.bvec n) bv.one)
-      (term_binop bop.bvadd) (term_binop bop.bvmul) (term_binop bop.bvsub) (term_unop uop.negate) (teq side)
-      0%Z 1%Z Z.add Z.mul Z.sub Z.opp Zbool.Zeq_bool (fun c => term_val (ty.bvec n) (bv.of_Z c)).
-  Proof.
-    constructor; intros; intros ι; rewrite ?rv_proj_bin; rewrite ?rv_proj_un; rewrite ?rv_proj_val;
-      cbn [bop.eval uop.eval].
-    all: try (apply Zbool.Zeq_bool_eq in H; subst; reflexivity).
-    all: first [ reflexivity | apply bv.of_Z_one | symmetry; apply bv.of_Z_one
-               | apply bv.of_Z_add | symmetry; apply bv.of_Z_add | apply bv.of_Z_sub | symmetry; apply bv.of_Z_sub
-               | apply bv.of_Z_mul | symmetry; apply bv.of_Z_mul | apply bv.of_Z_negate | symmetry; apply bv.of_Z_negate ].
-  Qed.
-End Teq.
 
 Section Norm.
   Context {Σ : LCtx} {n : nat}.
@@ -250,120 +178,42 @@ Section Norm.
 
   Definition normZ (p : PExpr Z) : Pol Z := norm_aux 0%Z 1%Z Z.add Z.mul Z.sub Z.opp Zbool.Zeq_bool p.
 
-  (* upstream's evalPol_norm_aux, modulo teq side: the SAME two Ring_polynom
-     lemmas, a weaker setoid *)
-  Lemma norm_teq side (l : list T) (p : PExpr Z) : teq side (evalPol l (normZ p)) (evalPE l p).
+  (* Z -> terms is a ring morphism modulo ≡ (upstream's TermRing_bv obligation) *)
+  Lemma bv_term_morph :
+    ring_morph (term_val (Σ := Σ) (ty.bvec n) bv.zero) (term_val (ty.bvec n) bv.one)
+      (term_binop bop.bvadd) (term_binop bop.bvmul) (term_binop bop.bvsub) (term_unop uop.negate) base.equiv
+      0%Z 1%Z Z.add Z.mul Z.sub Z.opp Zbool.Zeq_bool (fun c => term_val (ty.bvec n) (bv.of_Z c)).
   Proof.
-    pose proof (bv_term_ring (Σ := Σ) side n) as Rth.
-    pose proof (bv_term_eq_ext (Σ := Σ) side n) as Reqe.
-    pose proof (bv_term_morph (Σ := Σ) side n) as Rmorph.
+    constructor; try reflexivity; rewrite ?term_binop_val, ?term_unop_val; intros.
+    - now rewrite bv.of_Z_one.
+    - rewrite term_binop_val; cbn; now rewrite bv.of_Z_add.
+    - rewrite term_binop_val; cbn; now rewrite bv.of_Z_sub.
+    - rewrite term_binop_val; cbn; now rewrite bv.of_Z_mul.
+    - rewrite term_unop_val; cbn; now rewrite bv.of_Z_negate.
+    - apply Zbool.Zeq_bool_eq in H; now subst.
+  Qed.
+
+  (* upstream's evalPol_norm_aux *)
+  Lemma norm_equiv (l : list T) (p : PExpr Z) : evalPol l (normZ p) ≡ evalPE l p.
+  Proof.
+    pose proof (Term_bv_ring_theory Σ n) as Rth.
+    pose proof (Term_bv_ring_eq_ext Σ n) as Reqe.
+    pose proof bv_term_morph as Rmorph.
     unfold evalPol, evalPE, normZ.
     etransitivity.
-    { exact (@Pphi_dev_ok _ _ _ _ _ _ _ (teq side) (teq_equiv side _) Reqe
-               (@Rth_ARth _ _ _ _ _ _ _ _ (teq_equiv side _) Reqe Rth) _ _ _ _ _ _ _ _ _
+    { exact (@Pphi_dev_ok _ _ _ _ _ _ _ base.equiv term_equivalence Reqe
+               (@Rth_ARth _ _ _ _ _ _ _ _ term_equivalence Reqe Rth) _ _ _ _ _ _ _ _ _
                Rmorph _ get_signZ_th _ l). }
     symmetry.
-    exact (@norm_aux_spec _ _ _ _ _ _ _ (teq side) (teq_equiv side _) Reqe
-             (@Rth_ARth _ _ _ _ _ _ _ _ (teq_equiv side _) Reqe Rth) _ _ _ _ _ _ _ _ _
-             Rmorph _ _ _ (@pow_N_th _ _ _ _ (teq_equiv side _)) l p).
+    exact (@norm_aux_spec _ _ _ _ _ _ _ base.equiv term_equivalence Reqe
+             (@Rth_ARth _ _ _ _ _ _ _ _ term_equivalence Reqe Rth) _ _ _ _ _ _ _ _ _
+             Rmorph _ _ _ (@pow_N_th _ _ _ _ term_equivalence) l p).
   Qed.
 End Norm.
 
 (* ========================================================================= *)
-(* Part 2: SyncVal-ness by a leaf certificate.  Every op lifts, so a term is  *)
-(* SyncVal iff all its LEAVES (the non-operator subterms) are.  After         *)
-(* normalising, compare the leaf sets of input and output.                    *)
-(* ========================================================================= *)
-Definition is_sync {σ} (v : RelVal σ) : bool :=
-  match v with ty.SyncVal _ => true | ty.NonSyncVal _ _ => false end.
-
-Lemma relval_ext {σ} (u v : RelVal σ) :
-  is_sync u = is_sync v -> ty.projLeft u = ty.projLeft v -> ty.projRight u = ty.projRight v -> u = v.
-Proof. destruct u, v; cbn; intros; try discriminate; subst; reflexivity. Qed.
-
-Section Leaves.
-  Context {Σ : LCtx}.
-  Local Notation Leaf := {σ : Ty & Term Σ σ}.
-
-  Fixpoint leaves {σ} (t : Term Σ σ) : list Leaf :=
-    match t with
-    | term_binop _ a b => List.app (leaves a) (leaves b)
-    | term_unop _ a => leaves a
-    | term_val _ _ => nil
-    | t => cons (existT _ t) nil
-    end.
-
-  Definition leaf_sync (ι : RValuation Σ) (x : Leaf) : bool := is_sync (inst (projT2 x) ι).
-
-  Lemma sync_leaves (ι : RValuation Σ) {σ} (t : Term Σ σ) :
-    is_sync (inst t ι) = List.forallb (leaf_sync ι) (leaves t).
-  Proof.
-    induction t; cbn [leaves]; try (unfold leaf_sync; cbn; rewrite ?Bool.andb_true_r; reflexivity).
-    - rewrite List.forallb_app. rewrite <- IHt1. rewrite <- IHt2. cbn.
-      unfold bop.evalRel. destruct (inst t1 ι), (inst t2 ι); reflexivity.
-    - rewrite <- IHt. cbn. unfold uop.evalRel. destruct (inst t ι); reflexivity.
-  Qed.
-
-  Definition leaf_eqb (x y : Leaf) : bool :=
-    match x, y with
-    | existT σ t, existT τ u =>
-        match eq_dec σ τ with
-        | left e => Term_eqb (eq_rect σ (Term Σ) t τ e) u
-        | right _ => false
-        end
-    end.
-
-  Lemma leaf_eqb_spec x y : leaf_eqb x y = true -> x = y.
-  Proof.
-    destruct x as [σ t], y as [τ u]; cbn.
-    destruct (eq_dec σ τ) as [e|]; [|discriminate]. subst τ. cbn.
-    destruct (Term_eqb_spec t u); [|discriminate]. intros _. subst. reflexivity.
-  Qed.
-
-  Definition leaves_incl (xs ys : list Leaf) : bool :=
-    List.forallb (fun x => List.existsb (leaf_eqb x) ys) xs.
-
-  Lemma leaves_incl_sync ι xs ys :
-    leaves_incl xs ys = true -> List.forallb (leaf_sync ι) ys = true -> List.forallb (leaf_sync ι) xs = true.
-  Proof.
-    unfold leaves_incl. intros Hi Hy. apply List.forallb_forall. intros x Hx.
-    apply List.forallb_forall with (x := x) in Hi; [|exact Hx].
-    apply List.existsb_exists in Hi. destruct Hi as [y [Hy' Hxy]].
-    apply leaf_eqb_spec in Hxy. subst y.
-    apply List.forallb_forall with (x := x) in Hy; [exact Hy|exact Hy'].
-  Qed.
-
-  (* the certificate: same leaf SET both ways => same SyncVal-ness *)
-  Definition same_leaves {σ} (t u : Term Σ σ) : bool :=
-    andb (leaves_incl (leaves t) (leaves u)) (leaves_incl (leaves u) (leaves t)).
-
-  Lemma same_leaves_sync ι {σ} (t u : Term Σ σ) :
-    same_leaves t u = true -> is_sync (inst t ι) = is_sync (inst u ι).
-  Proof.
-    unfold same_leaves. intros H. apply andb_prop in H. destruct H as [H1 H2].
-    rewrite !sync_leaves.
-    destruct (List.forallb (leaf_sync ι) (leaves u)) eqn:Eu.
-    - apply (leaves_incl_sync ι _ _ H1) in Eu. exact Eu.
-    - destruct (List.forallb (leaf_sync ι) (leaves t)) eqn:Et; [|reflexivity].
-      apply (leaves_incl_sync ι _ _ H2) in Et. congruence.
-  Qed.
-
-  (* both projections agree + same leaves: EXACT RelVal equality *)
-  Lemma teq_leaves_inst {σ} (t u : Term Σ σ) :
-    teq true t u -> teq false t u -> same_leaves t u = true -> forall ι, inst t ι = inst u ι.
-  Proof.
-    intros HL HR HS ι. apply relval_ext.
-    - apply same_leaves_sync. exact HS.
-    - exact (HL ι).
-    - exact (HR ι).
-  Qed.
-End Leaves.
-
-(* ========================================================================= *)
 (* Part 2b: clean up Pphi_dev's leftovers: `t + 0`, `0 + t`, `t * 1`, `1 * t` *)
-(* for LITERAL constants.  Exact over RelVal (a literal is SyncVal, so it adds *)
-(* no taint) and leaf-preserving (constants are not leaves).  Never touches  *)
-(* `0 * a` with an atom a: that is the taint-keeping padding.                 *)
+(* for LITERAL constants, exact over RelVal.                                 *)
 (* ========================================================================= *)
 Inductive CView {Σ : LCtx} {n : nat} : Type :=
 | CAdd (a b : Term Σ (ty.bvec n))
@@ -482,59 +332,23 @@ Section Clean.
     - rewrite !inst_unop. rewrite IH. reflexivity.
   Qed.
 
-  Lemma clean_teq side fuel t : teq side (clean fuel t) t.
-  Proof. intros ι. rewrite clean_sound. reflexivity. Qed.
 End Clean.
 
 (* ========================================================================= *)
 (* Part 3: the normaliser.  Given a quotation (p, env) of t -- i.e. evalPE   *)
-(* env p reconstructs t -- normalise with upstream's norm_aux/Pphi_dev, pad  *)
-(* each env atom that the normal form lost as `0 * a`, and accept the result *)
-(* only if the leaf certificate holds; otherwise keep t (always sound).      *)
+(* env p reconstructs t -- normalise with upstream's norm_aux/Pphi_dev and   *)
+(* clean up.  A cancelled atom is simply dropped (x - x is 0 over pairs).    *)
 (* ========================================================================= *)
 Section Canon.
   Context {Σ : LCtx} {n : nat}.
   Local Notation T := (Term Σ (ty.bvec n)).
-  Add Ring bvr : (bv.ring_theory n).
+  Definition canon_with (env : list T) (p : PExpr Z) : T :=
+    clean 64 (evalPol env (normZ p)).
 
-  (* stated over bv n and APPLIED: ring refuses the Val (ty.bvec n) spelling *)
-  Lemma add_mul0 (x y : bv n) : bv.add x (bv.mul bv.zero y) = x.
-  Proof. ring. Qed.
-
-  Definition pad_atom (u a : T) : T :=
-    if leaves_incl (leaves a) (leaves u) then u
-    else term_binop bop.bvadd u (term_binop bop.bvmul (term_val (ty.bvec n) bv.zero) a).
-
-  Definition pad (env : list T) (u : T) : T := List.fold_left pad_atom env u.
-
-  Lemma pad_atom_teq side u a : teq side (pad_atom u a) u.
-  Proof.
-    unfold pad_atom. destruct (leaves_incl _ _); [reflexivity|].
-    intros ι. rewrite !rv_proj_bin. rewrite rv_proj_val. cbn [bop.eval].
-    apply add_mul0.
-  Qed.
-
-  Lemma pad_teq side env u : teq side (pad env u) u.
-  Proof.
-    revert u. induction env as [|a env IH]; intros u; cbn; [reflexivity|].
-    etransitivity; [apply IH|]. apply pad_atom_teq.
-  Qed.
-
-  Definition canon_with (env : list T) (p : PExpr Z) (t : T) : T :=
-    let u := clean 64 (pad env (evalPol env (normZ p))) in
-    if same_leaves t u then u else t.
-
-  (* EXACT soundness over RelVal, given that (p, env) quotes t on both sides *)
   Theorem canon_with_sound env p t :
-    (forall side, teq side (evalPE env p) t) ->
-    forall ι, inst (canon_with env p t) ι = inst t ι.
+    evalPE env p ≡ t -> forall ι, inst (canon_with env p) ι = inst t ι.
   Proof.
-    intros Hq ι. unfold canon_with.
-    destruct (same_leaves t _) eqn:Hs; [|reflexivity].
-    symmetry. apply teq_leaves_inst; [| |exact Hs];
-      (etransitivity; [symmetry; apply Hq|]);
-      (etransitivity; [symmetry; apply norm_teq|]);
-      (etransitivity; [symmetry; apply pad_teq|]); symmetry; apply (clean_teq _ 64).
+    intros Hq ι. unfold canon_with. rewrite clean_sound. rewrite (norm_equiv env p ι). apply Hq.
   Qed.
 End Canon.
 
@@ -614,16 +428,16 @@ Section Quote.
 
   Definition QValid (env : list T) (t : T) (r : PExpr Z * list T) : Prop :=
     (exists ext, @eq (list T) (snd r) (List.app env ext)) /\
-    forall la side, teq side (evalPE (List.app (snd r) la) (fst r)) t.
+    forall la, evalPE (List.app (snd r) la) (fst r) ≡ t.
 
   Lemma q_atom_valid env t : QValid env t (q_atom env t).
   Proof.
     unfold q_atom, QValid. destruct (find_index_spec (Term_eqb t) env) as [i Hi|].
-    - split; [exists nil; cbn; symmetry; apply List.app_nil_r|]. intros la side ι.
+    - split; [exists nil; cbn; symmetry; apply List.app_nil_r|]. intros la ι.
       remember (env !! i) as o eqn:E. destruct Hi as [u Hu].
       destruct (Term_eqb_spec t u) as [->|]; [|destruct Hu].
       cbn. rewrite (nth_lookup (eq_sym E)). reflexivity.
-    - split; [eexists; reflexivity|]. intros la side ι. cbn.
+    - split; [eexists; reflexivity|]. intros la ι. cbn.
       rewrite <- List.app_assoc. rewrite (nth_length_prefix eq_refl). reflexivity.
   Qed.
 
@@ -636,20 +450,20 @@ Section Quote.
       destruct (IH e1 b) as [[e2x He2] Hq2]; destruct (quote f e1 b) as [p2 e2]; cbn in He2, Hq2 |- *;
       subst e2 e1; unfold QValid; cbn [fst snd];
       (split; [exists (List.app e1x e2x); symmetry; apply List.app_assoc|]);
-      intros la side; cbn; apply teq_bin; [rewrite <- List.app_assoc; apply Hq1|apply Hq2].
+      intros la; cbn; apply proper_term_binop; [rewrite <- List.app_assoc; apply Hq1|apply Hq2].
     - subst t. destruct (IH env a) as [[e1x He1] Hq1]. destruct (quote f env a) as [p1 e1]. cbn in He1, Hq1 |- *.
       unfold QValid; cbn [fst snd]. split; [exists e1x; exact He1|].
-      intros la side. cbn. apply teq_un. apply Hq1.
+      intros la. cbn. apply proper_term_unop. apply Hq1.
     - destruct Hv as (m & kv & -> & ->). destruct (IH env a) as [[e1x He1] Hq1]. destruct (quote f env a) as [p1 e1].
       cbn in He1, Hq1 |- *. unfold QValid; cbn [fst snd]. split; [exists e1x; exact He1|].
-      intros la side ι.
+      intros la ι.
       change (evalPE (List.app e1 la) (PEmul p1 (PEc (2 ^ Z.of_nat (N.to_nat (bv.bin kv)))%Z)))
         with (term_binop bop.bvmul (evalPE (List.app e1 la) p1)
                 (term_val (ty.bvec n) (bv.of_Z (2 ^ Z.of_nat (N.to_nat (bv.bin kv)))%Z))).
-      rewrite !rv_proj_bin. rewrite !rv_proj_val. cbn [bop.eval].
-      rewrite (Hq1 la side ι). symmetry. apply shiftl_as_mul.
+      rewrite !inst_binop. rewrite (Hq1 la ι).
+      destruct (inst a ι); cbn; try unfold ty.valToRelVal; cbn; f_equal; symmetry; apply shiftl_as_mul.
     - subst t. unfold QValid; cbn [fst snd]. split; [exists nil; symmetry; apply List.app_nil_r|].
-      intros la side ι. cbn. rewrite bv.of_Z_unsigned. reflexivity.
+      intros la ι. cbn. rewrite bv.of_Z_unsigned. reflexivity.
   Qed.
 End Quote.
 
@@ -707,15 +521,15 @@ Section CanonTerm.
   Definition canon_term (t : T) : T :=
     let envs := isort (snd (quote qfuel nil t)) in
     let '(p, env) := quote qfuel envs t in
-    canon_with env p t.
+    canon_with env p.
 
   Theorem canon_term_sound (t : T) ι : inst (canon_term t) ι = inst t ι.
   Proof.
     unfold canon_term.
     destruct (quote_valid qfuel (isort (snd (quote qfuel nil t))) t) as [_ Hq].
     destruct (quote qfuel _ t) as [p env]. cbn in Hq.
-    apply canon_with_sound. intros side.
-    specialize (Hq nil side). rewrite List.app_nil_r in Hq. exact Hq.
+    apply canon_with_sound.
+    specialize (Hq nil). rewrite List.app_nil_r in Hq. exact Hq.
   Qed.
 End CanonTerm.
 
@@ -741,56 +555,43 @@ End CanonTerm.
         ; tmr_minus : BinOp σ σ σ
         ; tmr_negate : UnOp σ σ
         ; tmr_of_Z : Z -> Val σ
+        ; tmr_ring_morph : ring_morph (term_val (Σ := Σ) σ tmr_zero) (term_val σ tmr_one)
+                             (term_binop tmr_plus) (term_binop tmr_times) (term_binop tmr_minus)
+                             (term_unop tmr_negate) base.equiv 0%Z 1%Z
+                             Z.add Z.mul Z.sub Z.opp Zbool.Zeq_bool (λ c : Z, term_val σ (tmr_of_Z c))
+        ; tmr_ring_theory : ring_theory (term_val (Σ := Σ) σ tmr_zero) (term_val σ tmr_one) (term_binop tmr_plus) (term_binop tmr_times) (term_binop tmr_minus) (term_unop tmr_negate) base.equiv
+        ; tmr_ring_eq_ext : ring_eq_ext (term_binop (Σ := Σ) tmr_plus) (term_binop tmr_times) (term_unop tmr_negate) base.equiv
         }.
-    (* OPS ONLY.  Upstream also carried ring_theory / ring_morph modulo ≡,
-       which are FALSE over RelVal (x - x is NonSyncVal 0 0 for a secret x);
-       the quotation lemmas below use only the ops and ≡-properness (exact
-       reconstruction), and the normaliser is proved sound modulo `teq side`
-       plus a leaf certificate (CANONICAL RING FORMS, top of the file). *)
-    #[export] Instance TermRing_bv {n} : TermRing (ty.bvec n) :=
-      @MkTermRing (ty.bvec n) (bv.zero (n := n)) (bv.one (n := n))
-        (bop.bvadd (n := n)) (bop.bvmul (n := n)) (bop.bvsub (n := n))
-        (uop.negate (n := n)) (bv.of_Z (n := n)).
 
-    (* #[program,export] Instance TermRing_int : TermRing ty.int := { *)
-    (*     tmr_zero := 0%Z *)
-    (*   ; tmr_one := 1%Z *)
-    (*   ; tmr_plus := bop.plus *)
-    (*   ; tmr_times := bop.times *)
-    (*   ; tmr_minus := bop.minus *)
-    (*   ; tmr_negate := uop.neg *)
-    (*   ; tmr_of_Z := id *)
-    (*   ; tmr_ring_theory := Term_int_ring_theory *)
-    (*   ; tmr_ring_eq_ext := Term_int_ring_eq_ext *)
-    (*   }. *)
-    (* Next Obligation. *)
-    (*   constructor; try reflexivity; intros; *)
-    (*     rewrite ?term_binop_val, ?term_unop_val; try reflexivity. *)
-    (*   apply Zbool.Zeq_bool_eq in H. *)
-    (*   subst. *)
-    (*   reflexivity. *)
-    (* Qed. *)
+    #[program,export] Instance TermRing_int : TermRing ty.int := {
+        tmr_zero := 0%Z
+      ; tmr_one := 1%Z
+      ; tmr_plus := bop.plus
+      ; tmr_times := bop.times
+      ; tmr_minus := bop.minus
+      ; tmr_negate := uop.neg
+      ; tmr_of_Z := id
+      ; tmr_ring_theory := Term_int_ring_theory
+      ; tmr_ring_eq_ext := Term_int_ring_eq_ext
+      }.
+    Next Obligation.
+      constructor; try reflexivity; intros;
+        rewrite ?term_binop_val, ?term_unop_val; try reflexivity.
+      apply Zbool.Zeq_bool_eq in H; now subst.
+    Qed.
 
-    (* #[program, export] Instance TermRing_bv {n} : TermRing (ty.bvec n) := { *)
-    (*     tmr_zero := bv.zero *)
-    (*   ; tmr_one := bv.one *)
-    (*   ; tmr_plus := bop.bvadd *)
-    (*   ; tmr_times := bop.bvmul *)
-    (*   ; tmr_minus := bop.bvsub *)
-    (*   ; tmr_negate := uop.negate *)
-    (*   ; tmr_of_Z := bv.of_Z *)
-    (*   ; tmr_ring_theory := Term_bv_ring_theory Σ n *)
-    (*   ; tmr_ring_eq_ext := Term_bv_ring_eq_ext Σ n *)
-    (*   }. *)
-    (* Next Obligation. *)
-    (*   constructor; try reflexivity; rewrite ?term_binop_val, ?term_unop_val; intros. *)
-    (*   - now rewrite bv.of_Z_one. *)
-    (*   - rewrite term_binop_val; cbn; now rewrite bv.of_Z_add. *)
-    (*   - rewrite term_binop_val; cbn; now rewrite bv.of_Z_sub. *)
-    (*   - rewrite term_binop_val; cbn; now rewrite bv.of_Z_mul. *)
-    (*   - rewrite term_unop_val; cbn; now rewrite bv.of_Z_negate. *)
-    (*   - apply Zbool.Zeq_bool_eq in H; now subst. *)
-    (* Qed. *)
+    #[export] Instance TermRing_bv {n} : TermRing (ty.bvec n) := {
+        tmr_zero := bv.zero
+      ; tmr_one := bv.one
+      ; tmr_plus := bop.bvadd
+      ; tmr_times := bop.bvmul
+      ; tmr_minus := bop.bvsub
+      ; tmr_negate := uop.negate
+      ; tmr_of_Z := bv.of_Z
+      ; tmr_ring_morph := bv_term_morph
+      ; tmr_ring_theory := Term_bv_ring_theory Σ n
+      ; tmr_ring_eq_ext := Term_bv_ring_eq_ext Σ n
+      }.
 
     Definition evalPExprTm `{TermRing σ} : list (Term Σ σ) -> PExpr Z -> Term Σ σ :=
       PEeval (term_val σ tmr_zero)
@@ -1002,7 +803,6 @@ End CanonTerm.
       destruct v; cbn; intros ι; cbn.
       - destructInsts; cbn; now repeat rewrite andb_true_r.
       - destructInsts; cbn. now repeat rewrite andb_false_r.
-        auto.
     Qed.
 
     Lemma peval_or_val_sound (t : Term Σ ty.bool)
@@ -1522,10 +1322,20 @@ End CanonTerm.
        nodes against a 3-node input.  (`bop.eq` at bool is the xnor twin, if a
        use ever appears.) *)
 
+    (* off the mask path: `0 & t` and `t & 0` are 0 for ANY t.  RelVal is a
+       pair, so this holds per projection (under the tagged model it would
+       have turned a NonSyncVal into a SyncVal).  Two literals fold as before. *)
+    Definition peval_bvand_id {n} (t1 t2 : Term Σ (ty.bvec n)) : Term Σ (ty.bvec n) :=
+      match term_get_val t1 , term_get_val t2 with
+      | Some _ , Some _ => peval_binop' bop.bvand t1 t2
+      | _ , _ => if is_lit bv.zero t1 || is_lit bv.zero t2 then term_val (ty.bvec n) bv.zero
+                 else peval_binop' bop.bvand t1 t2
+      end.
+
     Definition peval_bvand_mask {n} (t1 t2 : Term Σ (ty.bvec n)) : Term Σ (ty.bvec n) :=
       match bvmask_try_expand t1 , bvmask_try_expand t2 with
       | Some b1 , Some b2 => term_unop uop.expand (peval_and b1 b2)
-      | _ , _             => peval_binop' bop.bvand t1 t2
+      | _ , _             => peval_bvand_id t1 t2
       end.
 
     (* ---- coalesce recognition ----------------------------------------------
@@ -1717,11 +1527,22 @@ End CanonTerm.
       | _ , _             => peval_bvor_coalesce t1 t2
       end.
 
+    (* off the mask path: `t ^ t` is 0, `0 ^ t` and `t ^ 0` are t, per
+       projection (as for bvand) *)
+    Definition peval_bvxor_id {n} (t1 t2 : Term Σ (ty.bvec n)) : Term Σ (ty.bvec n) :=
+      match term_get_val t1 , term_get_val t2 with
+      | Some _ , Some _ => peval_bvxor_mulx t1 t2
+      | _ , _ => if Term_eqb t1 t2 then term_val (ty.bvec n) bv.zero else
+                 if is_lit bv.zero t1 then t2 else
+                 if is_lit bv.zero t2 then t1 else
+                 peval_bvxor_mulx t1 t2
+      end.
+
     Definition peval_bvxor_mask {n} (t1 t2 : Term Σ (ty.bvec n)) : Term Σ (ty.bvec n) :=
       match bvmask_try_expand t1 , bvmask_try_expand t2 with
       | Some b1 , Some b2 =>
           term_unop uop.expand (term_binop (bop.relop bop.neq) b1 b2)
-      | _ , _             => peval_bvxor_mulx t1 t2
+      | _ , _             => peval_bvxor_id t1 t2
       end.
 
     (* SELF-TESTS (see the block above peval_bvadd for why these exist).  These
@@ -1761,10 +1582,11 @@ End CanonTerm.
       = term_val (ty.bvec n) (bv.lxor v1 v2).
     Proof. reflexivity. Qed.
 
-    (* Only ONE side being a mask must not fire. *)
-    Lemma selftest_bvand_mask_needs_both {n} (b : Term Σ ty.bool) (v : Val (ty.bvec n)) :
-      peval_bvand_mask (term_unop (uop.expand (n := n)) b) (term_val (ty.bvec n) v)
-      = term_binop bop.bvand (term_unop uop.expand b) (term_val (ty.bvec n) v).
+    (* Only ONE side being a mask must not fire.  A concrete NONZERO literal:
+       against 0 the result is 0 (peval_bvand_id). *)
+    Lemma selftest_bvand_mask_needs_both (b : Term Σ ty.bool) :
+      peval_bvand_mask (term_unop (uop.expand (n := 32)) b) (term_val (ty.bvec 32) (bv.ones 32))
+      = term_binop bop.bvand (term_unop uop.expand b) (term_val (ty.bvec 32) (bv.ones 32)).
     Proof. reflexivity. Qed.
 
     (* ---- SELF-TESTS for the coalesce recognizer ---------------------------
@@ -1953,8 +1775,18 @@ End CanonTerm.
        x - x, idempotence, the mask shapes) live in CFGVer/Example/ZZBvCore.v:
        inside this functor the terms are abstract, so they cannot compute. *)
 
+    (* t ++ [] ~> t, at an append leaf: exact on the pair (l ++ [] = l per
+       projection).  An emptied array remainder (clem_arrv_count0, rest = [])
+       leaves `done ++ []` against `done`. *)
+    Definition peval_append_nil {σ} (t1 t2 : Term Σ (ty.list σ)) : Term Σ (ty.list σ) :=
+      match term_get_val t2 with
+      | Some nil => t1
+      | _        => term_binop bop.append t1 t2
+      end.
+
     (* List append, right-associated with conses pulled out:
-         [] ++ t ~> t,  (x :: t) ++ u ~> x :: (t ++ u),  (a ++ b) ++ u ~> a ++ (b ++ u).
+         [] ++ t ~> t,  (x :: t) ++ u ~> x :: (t ++ u),  (a ++ b) ++ u ~> a ++ (b ++ u),
+         t ++ [] ~> t.
        A value-carrying array's loop invariant `vs = done ++ rest` is
        re-established after one step only if (done ++ [x]) ++ rest' and
        done ++ (x :: rest') meet syntactically (CFGVer `arrv`, PLAN-rsa.md,
@@ -1968,7 +1800,7 @@ End CanonTerm.
                           end
     | term_binop bop.cons x t, t2      => term_binop bop.cons x (peval_append t t2)
     | term_binop bop.append a b, t2    => peval_append a (peval_append b t2)
-    | t1, t2                           => term_binop bop.append t1 t2.
+    | t1, t2                           => peval_append_nil t1 t2.
 
     (* TODO: Comment out some stuff because I am too lazy to prove their soundness *)
     Definition peval_binop {σ1 σ2 σ} (op : BinOp σ1 σ2 σ) :
@@ -2048,9 +1880,9 @@ End CanonTerm.
     Proof. funelim (peval_plus t1 t2); lsolve; intros ι; cbn;
            match goal with
            | |- context[bop.evalRel ?op ?a ?b] =>
-               (destruct a; cbn; (apply f_equal; lia) || (apply f_equal2; lia; lia))
+               (destruct a; cbn; (f_equal; lia))
                                  ||
-                                 (destruct b; cbn; (apply f_equal; lia) || (apply f_equal2; lia; lia))
+                                 (destruct b; cbn; (f_equal; lia))
            end.
     Qed.
 
@@ -2059,9 +1891,9 @@ End CanonTerm.
     Proof. funelim (peval_minus t1 t2); lsolve; intros ι; cbn;
              match goal with
              | |- context[bop.evalRel ?op ?a ?b] =>
-                 (destruct a; cbn; (apply f_equal; lia) || (apply f_equal2; lia; lia))
+                 (destruct a; cbn; (f_equal; lia))
                  ||
-                 (destruct b; cbn; (apply f_equal; lia) || (apply f_equal2; lia; lia))
+                 (destruct b; cbn; (f_equal; lia))
              end.
     Qed.
 
@@ -2088,11 +1920,7 @@ End CanonTerm.
       peval_bvadd_val_default t v ≡ term_binop bop.bvadd t (term_val (ty.bvec n) v).
     Proof.
       unfold peval_bvadd_val_default. intros ι; cbn.
-      match goal with
-      | |- context[bop.evalRel bop.bvadd _ ?r] =>
-          destruct r; cbn; (apply f_equal; now apply bv.add_comm)
-                           || (apply f_equal2; now apply bv.add_comm)
-      end.
+      destruct (inst t ι); cbn; f_equal; apply bv.add_comm.
     Qed.
 
     Lemma peval_bvadd_mask_sound {n} (t : Term Σ (ty.bvec n)) (v : Val (ty.bvec n)) :
@@ -2204,28 +2032,14 @@ End CanonTerm.
               destruct r; cbn; f_equal; rewrite <- !bv.add_assoc;
               (reflexivity || (f_equal; apply bv.add_comm))
           end).
-      all: match goal with
-           | |- context[bop.evalRel ?op ?a ?b] =>
-               (destruct a; cbn; (apply f_equal; first
-                                                   [ symmetry; apply bv.add_zero_l
-                                                   | symmetry; apply bv.add_zero_r
-                                                   | now apply bv.add_comm
-                                 ]) || (apply f_equal2; first
-                                                          [ symmetry; apply bv.add_zero_l
-                                                          | symmetry; apply bv.add_zero_r
-                                                          | now apply bv.add_comm
-               ]))
-               ||
-               (destruct b; cbn; (apply f_equal; first
-                                                   [ symmetry; apply bv.add_zero_l
-                                                   | symmetry; apply bv.add_zero_r
-                                                   | now apply bv.add_comm
-                                 ]) || (apply f_equal2; first
-                                                          [ symmetry; apply bv.add_zero_l
-                                                          | symmetry; apply bv.add_zero_r
-                                                          | now apply bv.add_comm
-               ]))
-           end.
+      all: unfold bop.evalRel, uop.evalRel, ty.liftBinOp, ty.liftUnOp, ty.liftBinOpRV,
+             ty.liftUnOpRV, ty.valToRelVal, SyncVal;
+           apply ty.RV_ext; cbn;
+           first [ symmetry; apply bv.add_zero_l
+                 | symmetry; apply bv.add_zero_r
+                 | now apply bv.add_comm
+                 | rewrite <- !bv.add_assoc; reflexivity
+                 | rewrite <- !bv.add_assoc; f_equal; apply bv.add_comm ].
         (* first *)
         (*   [ symmetry; apply bv.add_zero_l *)
         (*   | symmetry; apply bv.add_zero_r *)
@@ -2547,12 +2361,25 @@ End CanonTerm.
       now injection Heq as <-.
     Qed.
 
+    Lemma peval_bvand_id_sound {n} (t1 t2 : Term Σ (ty.bvec n)) :
+      peval_bvand_id t1 t2 ≡ term_binop bop.bvand t1 t2.
+    Proof.
+      unfold peval_bvand_id.
+      destruct (term_get_val t1), (term_get_val t2); try apply peval_binop'_sound.
+      all: destruct (is_lit bv.zero t1) eqn:Z1; cbn [orb];
+        [ apply is_lit_spec in Z1; subst t1; intros ι; cbn; destructInsts; cbn;
+          try unfold ty.valToRelVal; cbn; f_equal; symmetry; apply bv.land_zero_l |].
+      all: destruct (is_lit bv.zero t2) eqn:Z2; [|apply peval_binop'_sound].
+      all: apply is_lit_spec in Z2; subst t2; clear Z1; intros ι; cbn; destructInsts; cbn;
+          try unfold ty.valToRelVal; cbn; f_equal; symmetry; apply bv.land_zero_r.
+    Qed.
+
     Lemma peval_bvand_mask_sound {n} (t1 t2 : Term Σ (ty.bvec n)) :
       peval_bvand_mask t1 t2 ≡ term_binop bop.bvand t1 t2.
     Proof.
       unfold peval_bvand_mask.
-      destruct (bvmask_try_expand t1) as [b1|] eqn:H1; [|apply peval_binop'_sound].
-      destruct (bvmask_try_expand t2) as [b2|] eqn:H2; [|apply peval_binop'_sound].
+      destruct (bvmask_try_expand t1) as [b1|] eqn:H1; [|apply peval_bvand_id_sound].
+      destruct (bvmask_try_expand t2) as [b2|] eqn:H2; [|apply peval_bvand_id_sound].
       apply bvmask_try_expand_inv in H1 as ->; apply bvmask_try_expand_inv in H2 as ->.
       intros ι; cbn. rewrite (peval_and_sound b1 b2 ι); cbn.
       destruct (inst b1 ι), (inst b2 ι); cbn;
@@ -2850,12 +2677,28 @@ End CanonTerm.
       bop.eval_relop_val (bop.neq (σ := ty.bool)) b1 b2 = xorb b1 b2.
     Proof. now destruct b1, b2. Qed.
 
+    Lemma peval_bvxor_id_sound {n} (t1 t2 : Term Σ (ty.bvec n)) :
+      peval_bvxor_id t1 t2 ≡ term_binop bop.bvxor t1 t2.
+    Proof.
+      unfold peval_bvxor_id.
+      destruct (term_get_val t1), (term_get_val t2); try apply peval_bvxor_mulx_sound.
+      all: destruct (Term_eqb_spec t1 t2) as [<-|_];
+        [ intros ι; cbn; destructInsts; cbn;
+          try unfold ty.valToRelVal; cbn; f_equal; symmetry; apply bv.lxor_nilpotent |].
+      all: destruct (is_lit bv.zero t1) eqn:Z1;
+        [ apply is_lit_spec in Z1; subst t1; intros ι; cbn; destructInsts; cbn;
+          try unfold ty.valToRelVal; cbn; f_equal; symmetry; apply bv.lxor_zero_l |].
+      all: destruct (is_lit bv.zero t2) eqn:Z2; [|apply peval_bvxor_mulx_sound].
+      all: apply is_lit_spec in Z2; subst t2; clear Z1; intros ι; cbn; destructInsts; cbn;
+          try unfold ty.valToRelVal; cbn; f_equal; symmetry; apply bv.lxor_zero_r.
+    Qed.
+
     Lemma peval_bvxor_mask_sound {n} (t1 t2 : Term Σ (ty.bvec n)) :
       peval_bvxor_mask t1 t2 ≡ term_binop bop.bvxor t1 t2.
     Proof.
       unfold peval_bvxor_mask.
-      destruct (bvmask_try_expand t1) as [b1|] eqn:H1; [|apply peval_bvxor_mulx_sound].
-      destruct (bvmask_try_expand t2) as [b2|] eqn:H2; [|apply peval_bvxor_mulx_sound].
+      destruct (bvmask_try_expand t1) as [b1|] eqn:H1; [|apply peval_bvxor_id_sound].
+      destruct (bvmask_try_expand t2) as [b2|] eqn:H2; [|apply peval_bvxor_id_sound].
       apply bvmask_try_expand_inv in H1 as ->; apply bvmask_try_expand_inv in H2 as ->.
       intros ι; cbn - [bop.eval_relop_val].
       destruct (inst b1 ι), (inst b2 ι); cbn - [bop.eval_relop_val];
@@ -2874,10 +2717,20 @@ End CanonTerm.
       peval_bvsub t1 t2 ≡ term_binop bop.bvsub t1 t2.
     Proof. apply canon_term_equiv. Qed.
 
+    Lemma peval_append_nil_sound {σ} (t1 t2 : Term Σ (ty.list σ)) :
+      peval_append_nil t1 t2 ≡ term_binop bop.append t1 t2.
+    Proof.
+      unfold peval_append_nil.
+      destruct (term_get_val_spec t2) as [v ->|]; [|reflexivity].
+      destruct v; [|reflexivity].
+      intros ι; cbn. destruct (inst t1 ι); cbn; rewrite !app_nil_r; reflexivity.
+    Qed.
+
     Lemma peval_append_sound {σ} (t1 t2 : Term Σ (ty.list σ)) :
       peval_append t1 t2 ≡ term_binop bop.append t1 t2.
     Proof.
-      funelim (peval_append t1 t2); intros ι; try reflexivity.
+      funelim (peval_append t1 t2); intros ι; try reflexivity;
+        try exact (peval_append_nil_sound _ _ ι).
       - (* before any cbn: it would unfold peval_binop' *)
         destruct v; [|exact (peval_binop'_sound _ _ _ ι)].
         cbn. destruct (inst t2 ι); reflexivity.
@@ -3110,7 +2963,7 @@ End CanonTerm.
       unfold peval_sext.
       destruct (width_cast m n) as [f|] eqn:E; [|apply peval_unop'_sound].
       destruct (width_cast_spec E) as [e He]. rewrite He. subst n. cbn.
-      intros ι; cbn. destruct (inst t ι) as [v|v1 v2]; cbn;
+      intros ι; cbn. destruct (inst t ι) as [v1 v2]; cbn;
         f_equal; try f_equal; symmetry; apply bv.sext_same.
     Qed.
 

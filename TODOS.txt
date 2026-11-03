@@ -269,3 +269,128 @@ Would it make sense to have an invariant like the leakage invariant for the pc?
 	+ AND MEASURE: pevaling every formula on entry is not obviously free. The
 	  arms that already peval do it two to four times per formula, so (2) should
 	  be a net WIN, but that is a prediction, not a measurement.
+
+- CFGVer/Contracts.v (2026-10-07): Abstract element-wise reasoning in relval_* lemmas
+	The lemmas discharged from symbolic-base VCs (`relval_secLeak_bvadd` through
+	`relval_neq_offsets`, lines 388–558) repeatedly destructure RelVal pairs and apply
+	identical reasoning to both components a and b. Most obviously, `relval_neq_offset`
+	and `relval_neq_offsets` split on the conjunction and run verbatim identical proof
+	code on each side. This repetition is the natural consequence of the SyncVal/NonSyncVal
+	→ plain pair refactor: the pair structure makes the "apply reasoning element-wise"
+	pattern explicit and repetitive.
+	+ Extract a family of pair-lifting lemmas (one per operation shape: neq, secLeak,
+	  fetch_bound_*) that unify the two-case proof code. E.g., a lemma stating
+	  "if a property P holds for both pair components, then the relational predicate
+	  holds for the pair."
+	+ This will reduce boilerplate significantly once we've fully moved away from
+	  branching on SyncVal/NonSyncVal — the abstraction becomes clearer with every
+	  such site unified under pure pair reasoning.
+- Syntax/TypeDecl.v (2026-10-07, DEFERRED by Emiel until after the relval-pair port): a "SyncVal kit".
+	The port (branch issue/relval-pair) patched the same five breakages locally, site by site. A shared kit in TypeDecl
+	would let most old proofs compile unchanged. Costs a full rebuild (TypeDecl is at the bottom), so do it in ONE commit,
+	then simplify the local workarounds. Counts are from porting TablesRel/Adequacy/EndToEnd/GenCompose + Result files:
+	+ secLeak (SyncVal v) is `v = v`, no longer True (~10 sites): iFrame/done/exact I stopped closing it. Add
+	  `secLeak_SyncVal` and a Hint Extern so `done` (hence iFrame's leftovers) closes it again.
+	+ A relop/bool over public values is `P /\ P` (~14 sites + 6 of 7 rv_leaf failures): proj1 / split / destruct
+	  everywhere. Add an `eval_relop_relprop` lemma for SyncVal arguments giving a single P, or a shared tactic that
+	  dedups `A /\ A` in hyps and goal.
+	+ f_equal on `SyncVal x = SyncVal y` gives TWO goals (~5 sites). Add `SyncVal_congr : x = y -> SyncVal x = SyncVal y`.
+	+ cbn no longer reduces a lift of SyncVal (SyncVal is a Definition with `/`), and primitive projections need
+	  ty.projLeftRV/projRightRV in explicit cbn lists (~4 sites, incl. the hardest EndToEnd one). Add
+	  liftUnOp_SyncVal / liftBinOp_SyncVal (EndToEnd has a local liftUnOp_SyncVal) + an autorewrite db.
+	+ Agreement helpers are scattered: RVToOption_sync (VerifierRel), RVToOption_some (Adequacy); a bv-safe RelVal
+	  equality split lives in MuladdParamClose's rv_leaf (ty.rv_split's bare cbn unfolds bv ops). Move to TypeDecl.
+- relval-pair (2026-10-30, Emiel): prove a relop/bool VC leaf ONCE when both sides are the same goal.
+	STATUS 2026-10-30: done in solve_vc, not in the closer (the split happens in solve_vc's `repeat split`, on the
+	ERASED goal). Contracts.v: relprop_sync/relbool_sync + vc_relop_once. LoopI 8 -> 5 leaves (KatamaranRel's count);
+	same-session census: closer stage 10.03 -> 6.80 s, file 33.83 -> 29.77 s; MuladdParamLoopI.vo 34.96 -> 32.28 s
+	user (KatamaranRel 28.67). ONLY LoopI's closure rebuilt: every other example and MuladdParamVC still to check.
+	The rest was the SAME doubling for EQUATION leaves, in the closer: f_equal / RV_ext proved a pair equation per
+	side. rv_leaf now tries rv_eq_of_proj first (both sides public -> left components only). LoopI at PARITY in a
+	matched probe: leaves 2.96 vs 2.91 s, file 28.68 vs 28.76 s (KatamaranRel vs relval-pair).
+	Under the pair representation a relop or bool formula means `P l /\ P r` (inst_formula in Formulas.v,
+	inst_eformula in Propositions.v), so every such VC leaf arrives as TWO goals. Most of the time the
+	arguments are immediates (term_val v = SyncVal v, both projections v) or public (a secLeak in the path
+	condition, which rv_leaf in Example/Muladd/MuladdParamClose.v substitutes away with `subst r`), so the two
+	halves are the SAME goal -- and rv_leaf's `repeat split` sends each half to its own bv_lin/lia anyway.
+	This is the measured residual ~1.3x of the port (LoopI 5 -> 8 leaves, MuladdParamVC 651 -> 849 s;
+	PLAN-relval-pair §11 "Performance").
+	+ Cheapest, at the closer: before splitting, close a goal `?A /\ ?A` by proving A once
+	  (`cut A; [intros H; exact (conj H H) |]`). Check first that after `subst r` and cbn the halves are
+	  syntactically equal and not merely convertible (SyncVal is a Definition: cbn needs it unfolded); if only
+	  convertible, match up to conversion. Grep for other closers that split pointwise goals the same way.
+	+ Structural, in the solver/erasure: when both arguments are public (term_val, or every variable has a
+	  secLeak in the path condition) emit ONE obligation -- e.g. a lemma that eval_relop_relprop on SyncVal
+	  arguments is the unary eval_relop_prop, used when instantiating. Only if the closer fix leaves a gap.
+	+ Measure against the KatamaranRel numbers above (5 leaves, 651 s); kill at 1.5x per the compile cutoff.
+	+ Same `P /\ P` as the "SyncVal kit" item above, but on the GOAL side (that item is about hypotheses).
+- relval-pair x RSA (2026-10-30, Emiel): when KatamaranRel (PLAN-rsa, PLAN-arrv) moves onto pairs, REVISIT the
+	workarounds the RSA work took because the general form needed pairs. All rest on `NonSyncVal v v <> SyncVal v` /
+	lifted cons not injective (PLAN-arrv §1.1, PLAN-rsa O4). Each should become a plain per-projection fact or go.
+	(Not the arrv STRING tag of PLAN-arrv D14 -- that is an array index, unrelated to the RelVal tag.)
+	RSA-era (2026-10-21..27), in order of payoff:
+	+ DONE 2026-11-01 (issue/relval-rsa, deleted): clem_arrv_resync_head + clem_mux_byte (Verifier.v, "AD HOC", O4): under pairs MUX(secret, u, u) IS u, so a
+	  peval/solver rule (u ^ u -> 0, x & 0 -> 0, ... or the MUX identity directly) replaces the ghost lemma; delete it,
+	  its SpecIris soundness case, and ccf_glue's resync flag (RsaCcopy.v).
+	+ DONE 2026-11-01 (deleted; take_first + simplify_propeq's cons decomposition): clem_arrv_take_any (Verifier.v): exists only because the EQUATION take loses a named head's identity (cons not
+	  injective). With injective cons, take_first + the equation should suffice in br_ccopy's header phase.
+	+ DONE 2026-11-01 (take_cons deleted, take_first is the only take): the two take forms, take_first (equation) vs take_cons (pattern): may collapse to one.
+	+ DONE 2026-11-01 (empty_elim gives vs = [] for w >= 1; pad replaced by count0, which keeps the array; peval t ++ [] ~> t): clem_arrv_empty / empty_elim / pad: "never conclude vs = [] from a count of 0 (NonSyncVal [] [])". Under pairs a
+	  length-0 pair IS ([],[]) = SyncVal [], so empty_elim can give vs = [] and pad may become unnecessary.
+	+ OPEN, ACCEPTED FOR NOW (Emiel, 2026-11-03): the take_cons -> take_first swap costs RsaCcopyGate.v 1.8x in its
+	  closer (solve_cc_all 9.1 -> 16.4 s user, same-session A/B against f4f50562; vm_compute + solve_vc unchanged at
+	  ~1.1 s; file 37 -> 57 s). Cause: take_first's precondition clem_nonzero n (take_cons had none, its value was
+	  syntactically x :: r). The solver cannot prove `k + 4*ml <> 0` (k = 1..4, way_back's header takes) or `1 + k <> 0`
+	  (twice, loop glue) without a bound, so these six conjuncts reach the residual: rv_leaf_cc leaves 8 -> 20,
+	  ~0.44 s each, mostly its `cbn -[inst_symprop] in *` over the whole context, not the arithmetic. Options:
+	  (1) a goal-only fast path in rv_leaf_cc for evar-free `<> 0` leaves (RsaCcopy.v, closer only, symptom);
+	  (2) state take_first's precondition as `vs <> []` instead of `n <> 0` (equivalent given the arrv, w >= 1), so a
+	  known cons value discharges it in the solver (Verifier.v + SpecIris.v + AUDIT row; check whether the loop-glue
+	  takes also have a known cons value); (3) leave it. Claude's recommendation: (2).
+	+ try_isolate_inner (Solver.v, 8ee330d7): its secLeakT s guard is "load-bearing" only because of the tag
+	  (y - s is NonSyncVal a a <> SyncVal a). Under pairs the inversion is exact; drop the guard (relval_isolate).
+	Pre-RSA, same cause (used by RSA, lower priority):
+	+ same_leaves guard on peval's ring normalisation and the kept `0 * a` atoms (PartialEvaluation.v, 09-30);
+	  "solver drops public zero atoms" only for PUBLIC atoms (Solver.v, a1eb199a): x - x -> 0 becomes sound outright.
+	+ the commented-out generic peval_bvand/bvor (9478b8d2) and the missing xor rules (O4 survey).
+	+ the try_bvadd_cancel_* family's secLeak/SyncVal guards (Solver.v, check-scalar era).
+	The RSA peval rules (bvtake_zext, rev, append, same-width sext, regroup) are plain bv identities and simply port.
+	MIGRATION RISK, not a workaround (corrected 2026-10-30): arrv publicness-by-framing (PLAN-arrv §1.2, Emiel's
+	"framing does the publicness") relies on the TAGGED split secLeak (op t1 t2) <-> secLeak t1 /\ secLeak t2, and so
+	does ResimpSecLeak (0f27b507, which re-runs that split after a substitution). relval-pair weakened that split to
+	an implication and keeps assumed secLeak (op ..) whole (AUDIT.md, simplify_secLeak row). Under pairs the split
+	stays an EQUIVALENCE only for injective ops -- cons (take's `vs = x :: r`), rev, regroup -- so those need an
+	explicit solver rule (repair R3, componentwise publicness) BEFORE the RSA/check_scalar/muladd proofs go green.
+	`++` is NOT injective per side (lengths may differ between projections): a public `v1 ++ v2` (clem_arrv_split,
+	join) no longer hands publicness to v1/v2 without length facts. Check every arrv post that relies on it.
+	Each removal is a SOUNDNESS-relevant change to theories/ or SpecIris: log it in relval-pair-baseline/AUDIT.md.
+- arrv ghost-lemma bloat (2026-10-30, Emiel): plan AFTER the relval-pair migration (and after the tag-workaround item
+	above, which removes take_cons/take_any/resync_head on its own). Today an `arrv` chunk (Sig.v) is opaque to the
+	executor, so every element access is folded/unfolded by hand: 22 CLem constructors (Verifier.v), 196 lines of
+	clem_lemma statements, 22 SpecIris soundness lemmas (~217 proof lines + helpers), and per-program annotations
+	(RsaMemmove.v 29 clem_arrv mentions, RsaCcopy.v 23, RsaCcopyGate.v 17, RsaMemcpy.v 14, MuladdParamTail.v 14).
+	+ A. AUTOMATIC take/add: when a load/store address lands inside an arrv chunk, the executor opens the cell and
+	  closes it again itself (VeriFast-style auto-open), instead of take_first/take_last/add_first/add_last
+	  annotations at every access. Removes most per-instruction annotations; LoopN's generated ones go too.
+	+ B. ONE array with a cursor instead of the done/rest split in loop invariants: a load reads element i of vs, a
+	  store updates element i. No split, so no seeds/glue at loop boundaries: empty, empty_at, join, pad, split,
+	  empty_elim, nonempty, lockstep, flip become unnecessary. Needs solver/peval support for list index/update
+	  terms and their bounds. Interacts with diagnostics/arrv-loop-cost-drivers.md: the angelic ambiguity it measured
+	  was between done and rest chunks of the same shape.
+	Possibilities, only if needed:
+	+ Before planning A: a short feasibility probe of where it hooks in -- how mem_read/mem_write's contracts
+	  consume ptstomem, and whether a fallback can open an enclosing arrv chunk when no cell chunk matches.
+	+ D. Drop the arrv STRING tag (PLAN-arrv D14-D17): if A selects the array by address, the ambiguity the tag was
+	  introduced for cannot arise; every CLem currently carries 1-3 tag arguments.
+	+ E. Shrink the word <-> byte view lemmas (to_bytes, of_bytes, regroup_cons, word_of_bytes1, of_bytes_any) if B
+	  indexes by byte; the view change at a call site itself stays (PLAN-rsa S2 decision).
+- skills describe the TAGGED RelVal model (2026-11-03, Emiel: leave them for now, he is streamlining the skills): after
+	the relval-pair merge, formula_bool/formula_relop are POINTWISE (P l /\ P r) and secLeak rv := projLeft rv =
+	projRight rv; there is no "NonSyncVal => False" any more. Stale text in secret-data-walls (whole premise),
+	relval-model, relval-rewrite-over-secrets, core-executor-internals, cfgver-solve-vc, cfgver-executor,
+	rocq-implementation + references/peval-mask-algebra.md (grep 'NonSyncVal.*False' under .claude/skills).
+- merge gate DISABLED (2026-11-03, Emiel: "cost us more than it has gained us"): .git/hooks/pre-merge-commit renamed to
+	pre-merge-commit.disabled-2026-11-03; scripts/gate.sh kept for manual use. Docs still describe it as mandatory:
+	branch-workflow + phase-check skills ("runs once, at the merge", the accepted-risk section), CLAUDE.md (Results.v
+	"the merge gate's build target", phase-check paragraph), git-workflow-guard.sh's deny text. Fold into the skill
+	streamlining. Also decide the phase-check step 2: -vos/-vok leaves no .vo (measured slower than a full rebuild).

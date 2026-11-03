@@ -301,8 +301,8 @@ Lemma inst_mm2 (ia : N) (b : bv xlenbits) : (64 < bv.unsigned b < 65536)%Z ->
 Proof.
   intros Hb. pose proof (mlen_bounds b Hb) as HM.
   cbn -[bv.sext bv.shiftr bv.add bv.of_N bv.of_Z].
-  rewrite sext_idx (mlen_shiftr b Hb). f_equal.
-  apply (negZ_add 2 (N.of_nat (mlenN b)) (-2)); [reflexivity|lia|lia].
+  rewrite sext_idx (mlen_shiftr b Hb).
+  f_equal; (apply (negZ_add 2 (N.of_nat (mlenN b)) (-2)); [reflexivity|lia|lia]).
 Qed.
 
 Lemma data_count_mm2 (ia : N) (b : bv xlenbits) : (64 < bv.unsigned b < 65536)%Z ->
@@ -329,7 +329,7 @@ Proof.
   unfold sym_data. cbn [data_ok]. rewrite !data_count_mm2; try exact Hb.
   rewrite !inst_mm2; try exact Hb.
   repeat split; try (unfold maxAddr, minAddr in *; lia); try reflexivity.
-  cbn. f_equal. f_equal. unfold x_off. lia.
+  cbn. f_equal; f_equal; unfold x_off; lia.
 Qed.
 
 (* ---- 5. THE STATEMENT'S OWN DATA (PLAN-spec-layer D12/D14) ------------- *)
@@ -434,7 +434,7 @@ Proof.
     cbn -[bv.of_N bv.of_Z bv.add bv.shiftr bv.sext bv.land bv.unsigned bv.ult mlenN x_off].
     rewrite !sext_idx (mlen_shiftr b Hb).
     rewrite (negZ_add 1 (N.of_nat (mlenN b)) (-1) eq_refl ltac:(lia) ltac:(lia)) ofN_add32.
-    repeat iSplit; try done; iPureIntro; first [assumption | exact I].
+    repeat iSplit; try done; iPureIntro; first [assumption | exact I | reflexivity | (split; assumption) | (repeat split; reflexivity)].
   - apply sym_data_ok; [exact Hb|unfold maxAddr, minAddr; lia].
   - (* the layout: contiguous right after the code *)
     apply contig_data_layout.
