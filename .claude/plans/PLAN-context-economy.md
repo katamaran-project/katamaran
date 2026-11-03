@@ -1,8 +1,8 @@
 # PLAN-context-economy — keep long autonomous runs from ballooning context
 
-Status: 2026-11-03. Phase 0 DONE (`5b5abc52`). Phase 1 DONE (telemetry hook, see
-"Phase 1 result"). Next: Phase 2 (agents), needs `skill-creator`? no — agents are
-not skills; Phase 3 (the skill) does.
+Status 2026-11-03: Phase 0 DONE (`5b5abc52`, idle-resume guard). Phase 1 DONE
+(`dc6b57c3`, telemetry hook). D11 handoff automation DONE (`/handoff` skill +
+`handoff-announce.sh`, committed with this status). **Next: Phase 2 (agents).**
 
 ## Why (measured, October 2026 transcripts: 31 sessions, 6,536 requests)
 
@@ -44,6 +44,27 @@ not skills; Phase 3 (the skill) does.
   all via `skill-creator` (hook-enforced). Pointer from `phase-check`.
 - D7 Skill slimming: separate, WITH Emiel, fresh session, `cfgver-executor` first:
   one line per section, Emiel marks keep / `references/` / archive.
+
+- D8 Coordinator events: telemetry crossings 150k / 300k / 450k (the hook's
+  default steps; 600k/750k may stay as backstops) + the worker's own one-line
+  messages on STUCK and DONE. No per-milestone events.
+- D9 The coordinator MAY stop a worker and restart it fresh from the handoff ANY
+  time, without asking. Consequence for `phase-worker`: its handoff must be
+  current at EVERY milestone (green build, commit), so a restart loses at most the
+  work since the last milestone.
+- D10 Workers run Opus, in the SAME working tree; one editing worker at a time;
+  the coordinator does not edit.
+- D11 Session changes are automated: `/handoff` (updates the plan's handoff,
+  writes the one-line pointer `.claude/HANDOFF`, commits) → `/clear` → a
+  SessionStart hook announces the pending handoff → user says "go".
+  (Hooks cannot trigger `/clear` themselves.)
+
+  **D11 result.** `.claude/skills/handoff/SKILL.md` (user-invoked only,
+  `disable-model-invocation: true`, like `reading-quiz`; made via skill-creator,
+  no trigger evals since it is never model-invoked) and
+  `.claude/hooks/handoff-announce.sh` (SessionStart, source startup|clear only;
+  11 offline tests). Pointer `.claude/HANDOFF` is gitignored. The usage script
+  now lives at `.claude/tools/transcript-usage.py`.
 
 ## Established facts (checked 2026-11-03)
 
@@ -106,17 +127,13 @@ not skills; Phase 3 (the skill) does.
    skill-map line → `skill-routing-maintenance` (scoped: ~6 queries).
 4. **Trial** on one real plan phase. Measure coordinator context at the end and
    total weighted cost against a comparable October session
-   (scratchpad script `usage.py` from 2026-11-03 — re-create from this plan if gone:
-   dedupe assistant records by message.id, sum usage, weight as above).
+   (`.claude/tools/transcript-usage.py`; note transcripts older than ~30 days are
+   gone, so compare against an October session soon).
 5. **Skill slimming** (D7), its own session with Emiel.
 
 ## Open questions for Emiel
 
-- Event thresholds for the coordinator (each event costs ~10% of the coordinator's
-  context): proposal 150k / 300k / 450k worker context, plus stuck / done / error.
-- May the coordinator stop a worker without asking, or only propose it?
-- Worker model for proof work (Opus vs Sonnet), and whether workers run in a git
-  worktree.
+None open (answered 2026-11-03 as D8–D10).
 
 ## Risks
 
@@ -130,8 +147,24 @@ not skills; Phase 3 (the skill) does.
 
 ## Handoff (for the next session)
 
-Start: "Execute PLAN-context-economy Phase 2" in a fresh session. Read this file
-only; the evidence behind the numbers is in the 2026-11-03 session, not needed to
-proceed. Agents (Phase 2) are not skills, so no skill-creator consult; the skill
-(Phase 3) needs one. Open questions above still unanswered — ask before Phase 2's
-`phase-worker` (they shape its message format and stop rights).
+Start line: **Execute PLAN-context-economy Phase 2**
+
+Read: the status line, Decisions D8–D10 (they fix `phase-worker`'s message
+format, stop rights, model and working tree), "Established facts", and Phase 2.
+Nothing else is needed; the evidence behind the numbers is in the 2026-11-03
+session.
+
+Preconditions: the first session after 2026-11-03 must be a NEW `claude`
+process (hooks were added that day; config is captured at session start). The
+first live check of three hooks happens then: the announcer should have shown
+this handoff; `telemetry/events.log` should appear in the scratchpad once the
+session passes 150k.
+
+Notes for Phase 2: agents are not skills, so no skill-creator consult (Phase 3
+needs one). Still to verify there: frontmatter `maxTurns`/`autoCompactWindow`
+(trivial agent), and whether `skill-path-guard.sh` accepts a skill loaded INSIDE
+a subagent (its marker is keyed by session id; a subagent shares the parent's
+session_id, per the Phase 1 probe). `phase-worker` must keep the Handoff section
+current at every milestone (D9) and is the natural caller of the `/handoff`
+steps — it cannot invoke the user-only skill, so give it the steps by pointer to
+`.claude/skills/handoff/SKILL.md`. No open questions.
