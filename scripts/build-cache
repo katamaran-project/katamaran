@@ -583,13 +583,19 @@ def ci_sources(dst, commits, offline, skipped):
     cache = load_json(cache_file, {})
 
     def outpath(c):
+        # Failures aren't cached: they may be transient (network, setup).
         key = "%s %s" % (c, attr)
-        if key not in cache:
+        if not cache.get(key):
             r = subprocess.run(
                 ["nix", "eval", "--raw",
-                 "git+file://%s?rev=%s#%s.outPath" % (repo, c, attr)],
+                 "git+file://%s?rev=%s&shallow=1#%s.outPath" % (repo, c, attr)],
                 capture_output=True, text=True)
-            cache[key] = r.stdout if r.returncode == 0 else ""
+            if r.returncode:
+                lines = r.stderr.strip().splitlines()
+                warn("nix eval of %s: %s" % (
+                    c[:12], lines[-1].strip() if lines else "failed"))
+                return ""
+            cache[key] = r.stdout
         return cache[key]
 
     def lookup(path):
