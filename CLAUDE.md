@@ -313,7 +313,11 @@ nothing. Three tiers of intervention now exist, and only the last two work:
   business). Override: `CLAUDE_GIT_GUARD_OFF=1`.
 
   Both are backed by `skill-load-marker.sh` (PreToolUse Skill), which records
-  every skill invocation as `$TMPDIR/claude-skillload-<slug>-<session-id>` —
+  every skill invocation as `$TMPDIR/claude-skillload-<slug>-<session-id>`,
+  plus `_<agent-id>` inside a subagent: markers are PER AGENT (2026-11-03), since
+  a subagent's hook input carries its parent's session id, and a coordinator's
+  load must not satisfy a worker's guard (17-case suite
+  `.claude/hooks/test-skill-agent-key.sh`) —
   deliberately separate from `meta-skill-marker.sh`, which is load-bearing for
   `skill-edit-guard.sh` and would block all skill authoring if broken.
 - **inject** — `.claude/hooks/rocq-error-injector.sh` (PostToolUse): names the

@@ -71,6 +71,14 @@ done < <(printf '%s\n' "$cmd" | sed -E 's/(&&|\|\||;|\|)/\n/g')
 sid=$(printf '%s' "$input" | jq -r '.session_id // "nosession"' 2>/dev/null) || sid=nosession
 sid=${sid//[^A-Za-z0-9_-]/}
 [ -n "$sid" ] || sid=nosession
+# Per-AGENT key (PLAN-context-economy Phase 2, Emiel 2026-11-03): a subagent's
+# hook input carries the PARENT's session_id, so without this a skill the
+# coordinator loaded would satisfy a worker that never loaded it. Main session
+# (no agent_id) keeps the plain sid. Same 3 lines in skill-load-marker.sh,
+# skill-path-guard.sh, phase-check-guard.sh, git-workflow-guard.sh -- keep equal.
+aid=$(printf '%s' "$input" | jq -r '.agent_id // ""' 2>/dev/null) || aid=
+aid=${aid//[^A-Za-z0-9_-]/}
+sid=${sid}${aid:+_$aid}
 [ -e "${TMPDIR:-/tmp}/claude-skillload-phase-check-${sid}" ] && exit 0
 
 jq -n --arg r "BLOCKED by phase-check-guard: a FULL-closure build without loading phase-check.

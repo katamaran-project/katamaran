@@ -2,7 +2,9 @@
 
 Status 2026-11-03: Phase 0 DONE (`5b5abc52`, idle-resume guard). Phase 1 DONE
 (`dc6b57c3`, telemetry hook). D11 handoff automation DONE (`/handoff` skill +
-`handoff-announce.sh`, committed with this status). **Next: Phase 2 (agents).**
+`handoff-announce.sh`). Phase 2 WRITTEN, NOT YET LIVE-CHECKED (three agents +
+per-agent skill markers, committed with this status): agent files load only at
+session start. **Next: Phase 2 live checks, then Phase 2b.**
 
 ## Why (measured, October 2026 transcripts: 31 sessions, 6,536 requests)
 
@@ -68,8 +70,13 @@ Status 2026-11-03: Phase 0 DONE (`5b5abc52`, idle-resume guard). Phase 1 DONE
   only that (red build, phase cap, token budget were offered and NOT chosen).
   Machine-readable form: `/handoff` writes a 4th pointer field
   `NEEDS-EMIEL: <question>`; the runner stops on it, the announcer shows it.
-  PROPOSED, not decided: a no-progress guard (same pointer after a run → stop),
-  without which a phase that never finishes is restarted indefinitely.
+  No-progress guard (Emiel, 2026-11-03): ALLOW N RETRIES — the runner stops
+  when the pointer line is unchanged after N consecutive runs. N not fixed by
+  Emiel; default 2 unless he says otherwise.
+- D14 Skill-load markers are PER AGENT (Emiel, 2026-11-03, on the Phase 2
+  probe): a subagent's hook input carries the parent's `session_id`, so a skill
+  the coordinator loaded would otherwise satisfy a worker that never loaded it.
+  Each agent must load its own skills.
 
   **D11 result.** `.claude/skills/handoff/SKILL.md` (user-invoked only,
   `disable-model-invocation: true`, like `reading-quiz`; made via skill-creator,
@@ -134,6 +141,30 @@ Status 2026-11-03: Phase 0 DONE (`5b5abc52`, idle-resume guard). Phase 1 DONE
    general-purpose's 53k). Verify `maxTurns`/`autoCompactWindow` with a trivial agent.
    Check whether `skill-path-guard.sh` recognises a skill loaded INSIDE a subagent
    (its marker is keyed by session id).
+   **Phase 2 result so far (2026-11-03).**
+   - Agents written: `.claude/agents/phase-worker.md` (Opus, all tools; ends
+     with ONE line `DONE|STUCK | <PLAN> Phase <N> | <commit> | <clause>` — ending
+     the run IS the D8 message, a STUCK worker is resumed by SendMessage with
+     context intact; updates the plan per `handoff/SKILL.md` steps 2–4 at every
+     milestone, step 5 only at DONE; never merges/pushes or decides design),
+     `rocq-prover.md` (Opus, Read/Grep/Glob/Edit/Bash/Skill + rocq-mcp; D5
+     contract, default budget 25 `rocq_check`s, PROVED/STUCK report, loads
+     `rocq-implementation` first), `reader.md` (Sonnet — Claude's pick, not
+     Emiel's; Read/Grep/Glob/Bash; `ANSWER / EVIDENCE path:line / NOT CHECKED`).
+   - PROBED: **agent files are read at session start only** — a file written
+     mid-session is "Agent type not found". Frontmatter therefore untested.
+   - PROBED: **a subagent CAN start subagents** (general-purpose → nested
+     general-purpose completed), so `phase-worker` starts `reader`/`rocq-prover`
+     itself; the coordinator does not relay.
+   - PROBED: a Skill loaded inside a subagent wrote its marker under the
+     PARENT's session id → D14. Fix: the same 3-line snippet in
+     `skill-load-marker.sh`, `skill-path-guard.sh`, `phase-check-guard.sh`,
+     `git-workflow-guard.sh` appends `_<agent_id>` to the key when present; main
+     session unchanged. `test-skill-agent-key.sh` 17/17 (real marker hook vs the
+     three guards, both directions, id sanitising); existing suites 32+23+11
+     still green. Live from the moment of the edit (scripts re-read per run).
+   - Left for the live checks: `.claude/agents/zz-probe.md` (untracked,
+     haiku, `maxTurns: 2`, `autoCompactWindow: 50000`, tools Bash/Agent/Skill).
 2b. **Phase runner** (D12b, D13). A script (e.g. `.claude/tools/phase-runner.sh`):
    read `.claude/HANDOFF` → stop if it carries `NEEDS-EMIEL:` (or is absent) →
    run ONE headless session with the start line, transcript/stream logged to a
@@ -171,25 +202,27 @@ None open (answered 2026-11-03 as D8–D10).
 
 Start line: **Execute PLAN-context-economy Phase 2**
 
-Read: the status line, Decisions D8–D10 (they fix `phase-worker`'s message
-format, stop rights, model and working tree), "Established facts", and Phase 2.
-Nothing else is needed; the evidence behind the numbers is in the 2026-11-03
-session.
+Read: the status line, D8–D10 + D13–D14, "Established facts", and Phase 2
+(its "result so far"). Then Phase 2b. Nothing else is needed.
 
-Preconditions: the first session after 2026-11-03 must be a NEW `claude`
-process (hooks were added that day; config is captured at session start). The
-first live check of three hooks happens then: the announcer should have shown
-this handoff; `telemetry/events.log` should appear in the scratchpad once the
-session passes 150k.
+Preconditions: a NEW `claude` process (the agents were added 2026-11-03; agent
+files, like hooks, are captured at session start). `.claude/agents/zz-probe.md`
+must still exist (untracked).
 
-Notes for Phase 2: agents are not skills, so no skill-creator consult (Phase 3
-needs one). Still to verify there: frontmatter `maxTurns`/`autoCompactWindow`
-(trivial agent), and whether `skill-path-guard.sh` accepts a skill loaded INSIDE
-a subagent (its marker is keyed by session id; a subagent shares the parent's
-session_id, per the Phase 1 probe). `phase-worker` must keep the Handoff section
-current at every milestone (D9) and is the natural caller of the `/handoff`
-steps — it cannot invoke the user-only skill, so give it the steps by pointer to
-`.claude/skills/handoff/SKILL.md`. Also check early whether a worker subagent
-can itself start subagents (e.g. `rocq-prover`); if not, the coordinator starts
-the proof agents. One open question, for Phase 2b but cheap to ask at the start:
-the no-progress guard (D13).
+Phase 2 live checks, cheap, in this order — record each result in Phase 2:
+1. The Agent tool lists `phase-worker`, `rocq-prover`, `reader`, `zz-probe`.
+2. `zz-probe` asked for 4 single Bash calls: does `maxTurns: 2` cut it off?
+   `autoCompactWindow` is only checkable indirectly — note whether the agent
+   errors on it; if unverifiable cheaply, say so and drop it from the agents.
+3. One `reader` run on a real question (e.g. "where is `skill-load-marker.sh`
+   registered and on which matcher"): check the report shape, and its start-up
+   context from `<scratchpad>/telemetry/events.log` or
+   `.claude/tools/transcript-usage.py` on its subagent transcript (target:
+   near Explore's 19k).
+4. A live per-agent marker: a subagent loads a skill → the marker is
+   `claude-skillload-<slug>-<sid>_<agent_id>` in /tmp.
+5. Delete `zz-probe.md`. `phase-worker` and `rocq-prover` get their real test
+   in Phase 4 (trial), not here.
+
+Then Phase 2b (runner), with the no-progress guard = N retries (D13, default
+N=2). Benchmark ONE headless run before chaining.
