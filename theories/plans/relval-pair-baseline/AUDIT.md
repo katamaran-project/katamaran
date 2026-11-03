@@ -56,3 +56,13 @@ assumption and as an obligation.
 | Site | Old (tagged) | New (pair) |
 |---|---|---|
 | `Solver.v` `simplify_propeq_binop` (the `term_binop` arm of `simplify_propeq`) | every binop opaque: `h :: hs = x :: xs` stayed ONE equation, so unification never substituted `x` (RsaCcopy's `take_any` heads) | `pair`/`cons`/`bvapp`/`bvcons` decompose argument-wise, reusing `simplify_eq_binop_{pair,cons,bvapp,bvcons}`; exact since `c a b = c a' b'` iff both projections agree iff `a = a'` and `b = b'` (`propeq_{pair,cons,bvapp,bvcons}_split`, via `ty.RV_ext`). Every other operator: unchanged. |
+
+## Tag-workaround removal (D-M4 part 1), branch `issue/relval-rsa`, 2026-11-01
+
+| Site | Old (tagged) | New (pair) |
+|---|---|---|
+| `PartialEvaluation.v` `peval_append` fall-through (`peval_append_nil`) | (none) | `t ++ [] ⇝ t`; per projection `l ++ [] = l`, so `≡` (`peval_append_nil_sound`). |
+| `Solver.v` `simplify_propeq_unop_rev` (the `uop.rev` arm of `simplify_propeq`) | `rev` opaque | `rev a = rev b` ⇝ `a = b`, `rev a = v` ⇝ `a = rev v`: rev is injective per projection, so `⊣⊢` (`propeq_rev_split`, `propeq_rev_val`). Needed by memmove, whose flipped arrays give `rev vs = []`. |
+| `Verifier.v` / `SpecIris.v` `clem_arrv_empty_elim` | `arrv a 0 e vs ⊢ a = e`, never `vs = []` (`NonSyncVal [] []` is not `SyncVal []`) | for w ≥ 1 also `vs = []`: `interp_arrv_count0` gives `[]` on both projections, and that pair IS `[]`. w = 0 unchanged (cells own no bytes). |
+| `Verifier.v` / `SpecIris.v` `clem_arrv_count0` (new) | (n/a) | the same `vs = []`, w ≥ 1, keeping the array; precondition False at w = 0. Replaces `pad`. |
+| deleted CLems | `take_cons` (pattern take), `take_any` (angelic take_cons/take_first), `resync_head` + `clem_mux_byte` (MUX of two equal bytes back to the byte), `pad` (absorb an empty remainder's value) | each existed only because of the tag: cons was not injective in equations, MUX(secret,u,u) was not u, and a length-0 value was not []. Their soundness lemmas (and the helpers `interp_arrv_take_cons`, `interp_arrv_pad`, `mux_byte_same`) are gone with them; nothing is assumed in their place. |

@@ -18,7 +18,7 @@
 (* regroup v, x_k the slices le_bytes takes) -- br_ccopy's precondition    *)
 (* shape, with the SAME four terms in both arrays.  After the call, before   *)
 (* the j: the four header bytes come off into an array of their own         *)
-(* (empty_at + take_cons ×4 + add_last ×4) and become one word again        *)
+(* (empty_at + take_first ×4 + add_last ×4) and become one word again        *)
 (* (word_of_bytes1); the limb bytes become words (of_bytes for y, whose      *)
 (* value is still regroup v; of_bytes_any for x, whose value br_ccopy left  *)
 (* unnamed); the two join, and the header comes off as a cell.               *)
@@ -87,12 +87,12 @@ Definition way_in (t : string) : list Annot :=
    still syntactically regroup v, of_bytes_any when it is not *)
 Definition way_back (t th : string) (ofb : CLem) : list Annot :=
   [ cl (clem_arrv_empty_at 1 1 t th)
-  ; cl (clem_arrv_take_cons 1 1 t); cl (clem_arrv_take_cons 1 1 t)
-  ; cl (clem_arrv_take_cons 1 1 t); cl (clem_arrv_take_cons 1 1 t)
+  ; cl (clem_arrv_take_first 1 1 t); cl (clem_arrv_take_first 1 1 t)
+  ; cl (clem_arrv_take_first 1 1 t); cl (clem_arrv_take_first 1 1 t)
   ; cl (clem_arrv_add_last 1 1 th); cl (clem_arrv_add_last 1 1 th)
   ; cl (clem_arrv_add_last 1 1 th); cl (clem_arrv_add_last 1 1 th)
   ; cl (clem_arrv_word_of_bytes1 th); cl ofb
-  ; cl (clem_arrv_join 4 4 th t t); cl (clem_arrv_take_cons 4 4 t) ].
+  ; cl (clem_arrv_join 4 4 th t t); cl (clem_arrv_take_first 4 4 t) ].
 
 (* br_ccopy is a block on ITS first instruction, index 2 *)
 Definition cg_annot : list AnnotInstr :=

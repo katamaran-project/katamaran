@@ -463,6 +463,10 @@ CountdownComposedResult.v, SwapComposedResult.v, IrisInstanceBinary.v,
   `clem_arrv_resync_head` (PLAN-rsa O4) and probably `clem_arrv_take_any` can
   go once R1/R4 give the solver the identities. Full list of RSA-era
   workarounds to revisit: `TODOS.txt`, item "relval-pair x RSA".
+  DONE 2026-11-01 (D-M4 part 1): `resync_head`, `clem_mux_byte`, `take_any`,
+  `take_cons` and `pad` deleted; `empty_elim` gives `vs = []` (w ≥ 1); new
+  `count0`; `peval` `t ++ [] ⇝ t`; `simplify_propeq` decomposes the
+  injective constructors (AUDIT.md). D-M4's A/B redesign is still open.
 
 ### 12.4 Trusted surface and the §5 branch audit
 - `Noninterference.v`, `Layout.v` and the Result end theorems contain NO

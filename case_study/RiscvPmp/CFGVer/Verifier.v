@@ -107,17 +107,15 @@ Open Scope Z_scope.
 (* ========================================================================= *)
 Inductive CLem : Set :=
   (* The array whose contents are NAMED (`arrv`, Sig.v; PLAN-rsa.md Phase 2,
-     PLAN-arrv; it replaced `arr`).  Lifted cons is not injective on RelVal, so
-     taking a cell comes in two forms: by EQUATION for a value that is a
-     variable (a loop's remainder), by PATTERN for one that is syntactically
-     a cons (a caller's own array handed back).  Every arrv lemma names the
-     TAG of each array it matches (PLAN-arrv D14/D17): one per array for
-     join/lockstep/pad (join's result has its own); the rest keep theirs. *)
+     PLAN-arrv; it replaced `arr`).  Taking a cell is by EQUATION only: on
+     the RelVal pair cons is injective and the solver decomposes
+     `x' :: r' = x :: r` (simplify_propeq_binop), so a value that is
+     syntactically a cons keeps its head's identity through the equation.
+     Every arrv lemma names the TAG of each array it matches (PLAN-arrv
+     D14/D17): one per array for join/lockstep (join's result has its own);
+     the rest keep theirs. *)
   (* arrv a n e vs ∗ n≠0 ⊢ ∃ x r, a ↦ₘ x ∗ range a ∗ arrv (a+s) (n-1) e r ∗ ⌜vs = x :: r⌝ *)
   | clem_arrv_take_first (w : nat) (s : Z) (t : string)
-  (* arrv a n e (x :: r) ⊢ a ↦ₘ x ∗ range a ∗ arrv (a+s) (n-1) e r -- no
-     n≠0 premise: a cons value has length ≥ 1, and the length is n *)
-  | clem_arrv_take_cons (w : nat) (s : Z) (t : string)
   (* arrv a n e vs ∗ (a-s) ↦ₘ x ∗ range (a-s) ⊢ arrv (a-s) (n+1) e (x :: vs) *)
   | clem_arrv_add_first (w : nat) (s : Z) (t : string)
   (* arrv a n e vs ∗ e ↦ₘ x ∗ range e ⊢ arrv a (n+1) (e+s) (vs ++ [x]) *)
@@ -131,11 +129,15 @@ Inductive CLem : Set :=
   | clem_arrv_take_last (w : nat) (s : Z) (t : string)
   (* arrv a n e vs ∗ a≠e ⊢ arrv a n e vs ∗ n≠0 *)
   | clem_arrv_nonempty (w : nat) (s : Z) (t : string)
-  (* secLeak a ⊢ arrv a 0 a [] -- `[]` is sound HERE because we choose it;
-     never conclude `vs = []` from a count of 0 (NonSyncVal [] [] exists) *)
+  (* secLeak a ⊢ arrv a 0 a [] *)
   | clem_arrv_empty (w : nat) (s : Z) (t : string)
-  (* arrv a 0 e vs ⊢ ⌜a = e⌝ -- and nothing about vs *)
+  (* arrv a 0 e vs ⊢ ⌜a = e⌝ ∗ ⌜vs = []⌝ (the second for w ≥ 1 only: then
+     cells are disjoint in-range memory, so a count of 0 mod 2^32 is length
+     0 in both runs, and a pair of two empty lists IS []) *)
   | clem_arrv_empty_elim (w : nat) (s : Z) (t : string)
+  (* the same fact keeping the array, w ≥ 1:
+       arrv a 0 e vs ⊢ arrv a 0 e vs ∗ ⌜vs = []⌝ *)
+  | clem_arrv_count0 (w : nat) (s : Z) (t : string)
   (* arrv a1 n e1 v1 ∗ arrv a2 n e2 v2 ∗ a1=e1 ⊢ both ∗ ⌜a2 = e2⌝ *)
   | clem_arrv_lockstep (w : nat) (s : Z) (t1 t2 : string)
   (* arrv a n e vs ⊢ True *)
@@ -145,10 +147,6 @@ Inductive CLem : Set :=
   (* arrv a n e v1 ∗ arrv e n2 e2 v2 ⊢ arrv a (n+n2) e2 (v1 ++ v2) -- no
      overflow premise: the count is the length mod 2^32 and wraps with it *)
   | clem_arrv_join (w : nat) (s : Z) (t1 t2 t : string)
-  (* arrv a n e vs ∗ arrv b 0 c ws ⊢ arrv a n e (vs ++ ws) ∗ arrv b 0 c ws --
-     absorb an empty remainder's (unknown, length-0) value without
-     claiming it is [] *)
-  | clem_arrv_pad (w : nat) (s : Z) (t t' : string)
   (* arrv a n e vs ∗ k ≤u n ⊢ ∃ v1 v2, arrv a k (a+s·k) v1 ∗
      arrv (a+s·k) (n-k) e v2 ∗ ⌜vs = v1 ++ v2⌝ *)
   | clem_arrv_split (w : nat) (s : Z) (t : string) (k : N)
@@ -166,28 +164,6 @@ Inductive CLem : Set :=
      address is bound (by the angelic match), so a seed made on a path that
      skips the loop it is meant for still sits at a known address. *)
   | clem_arrv_empty_at (w : nat) (s : Z) (t t' : string)
-  (* PLAN-rsa O4 (an AD HOC re-synchronisation, Emiel 2026-10-27):
-       A0 ↦ m ∗ arrv t' b n' e' (u :: rs) ∗ arrv t a n e (v :: rd)
-         ∗ ⌜v = clem_mux_byte u m⌝
-       ⊢ A0 ↦ m ∗ arrv t' b n' e' (u :: rs) ∗ arrv t a n e (u :: rd)
-     for byte arrays.  clem_mux_byte u m is EXACTLY what br_ccopy's body
-     stores when its source and destination byte are the same term u
-     (`((u ^ u) & m) ^ u`, zero-extended and cut back).  Under a secret m
-     that term is a NonSyncVal with equal projections; memory reads only
-     the projections, so the head may be u instead.  No rewrite could do
-     this (it would turn NonSyncVal into SyncVal under ≡).  u is bound by
-     the TWIN array t' and both heads by PATTERN, the tags pick the arrays:
-     deterministic (a cell-level version matching both cells angelically
-     made 64 candidates per use that the solver cannot refute, and four
-     uses never finished vm_compute). *)
-  | clem_arrv_resync_head (t t' : string)
-  (* PLAN-rsa O4: take_cons OR take_first, chosen ANGELICALLY by a lemma
-     boolean b (the executor resolves the match on an unbound angelic bool,
-     probe 2026-10-27).  For a loop whose remainder is a syntactic cons in
-     some trips and a variable in others -- br_ccopy's header phase -- with
-     ghosts that must be the same every trip.  Under the tag lifted cons is
-     not injective, so only the PATTERN take keeps a named head's identity. *)
-  | clem_arrv_take_any (w : nat) (s : Z) (t : string)
   (* PLAN-rsa GATE 2 (word ⇄ byte view at a CALL SITE): the first word's
      bytes in the open, as the slices le_bytes takes (clem_word_bytes):
        arrv 1 1 a n e (regroup (x :: r)) ⊢ arrv 1 1 a n e (x₀ :: x₁ :: x₂ :: x₃ :: regroup r)
@@ -236,17 +212,6 @@ Definition clem_x4 {Σ} (n : Term Σ ty_xlenbits) : Term Σ ty_xlenbits :=
 Arguments clem_arrv {Σ} w s t a n e vs.
 Arguments clem_arrv_angelic {Σ} w s t a n e vs.
 Arguments clem_ptsto {Σ} w x v.
-(* what br_ccopy's body (lbu x; lbu y; xor; and m; xor; sb) stores when its
-   two bytes are the same term u -- matched SYNTACTICALLY by clem_arrv_resync_head
-   (checked against the executor's own term: Example/Rsa/RsaCcopy.v) *)
-Definition clem_mux_byte {Σ} (u : Term Σ (clem_cell_ty 1)) (m : Term Σ ty_xlenbits)
-    : Term Σ (clem_cell_ty 1) :=
-  term_unop (uop.bvtake 8)
-    (term_binop bop.bvxor
-       (term_binop bop.bvand
-          (term_binop bop.bvxor (term_unop uop.zext u) (term_unop uop.zext u)) m)
-       (term_unop uop.zext u)).
-
 (* the four bytes of a word, least significant first, exactly as
    bv.le_bytes (the eval of uop.regroup) splits it: take 8 of successive
    drop 8's -- prepended to tl *)
@@ -273,15 +238,6 @@ Definition clem_lemma (k : CLem) : Lemma [ctx] :=
                              (term_var "e") (term_var "r"))
                     (asn.formula (formula_propeq (term_var "vs")
                        (term_binop bop.cons (term_var "x") (term_var "r")))))))))
-  | clem_arrv_take_cons w s t =>
-      MkLemma [ctx]
-        ["a"∷ty_xlenbits; "n"∷ty_xlenbits; "e"∷ty_xlenbits; "x"∷clem_cell_ty w; "r"∷clemv_ty w] [env]
-        (clem_arrv_angelic w s t (term_var "a") (term_var "n") (term_var "e")
-           (term_binop bop.cons (term_var "x") (term_var "r")))
-        (asn.sep (clem_ptsto w (term_var "a") (term_var "x"))
-           (asn.sep (clem_range w (term_var "a"))
-              (clem_arrv w s t (clem_off (term_var "a") s) (clem_off (term_var "n") (-1))
-                 (term_var "e") (term_var "r"))))
   | clem_arrv_add_first w s t =>
       MkLemma [ctx] (clemv_ctx w ▻ "x"∷clem_cell_ty w) [env]
         (asn.sep (clem_arrv_angelic w s t (term_var "a") (term_var "n") (term_var "e") (term_var "vs"))
@@ -322,10 +278,24 @@ Definition clem_lemma (k : CLem) : Lemma [ctx] :=
         (clem_arrv w s t (term_var "a") (term_val ty_xlenbits bv.zero) (term_var "a")
            (term_val (clemv_ty w) nil))
   | clem_arrv_empty_elim w s t =>
+      (* `vs = []` only for w ≥ 1 (SpecIris interp_arrv_count0): for w = 0
+         cells own no bytes, so a count of 0 mod 2^32 says nothing *)
       MkLemma [ctx] ["a"∷ty_xlenbits; "e"∷ty_xlenbits; "vs"∷clemv_ty w] [env]
         (clem_arrv_angelic w s t (term_var "a") (term_val ty_xlenbits bv.zero) (term_var "e")
            (term_var "vs"))
-        (asn.formula (formula_relop bop.eq (term_var "a") (term_var "e")))
+        (asn.sep (asn.formula (formula_relop bop.eq (term_var "a") (term_var "e")))
+           (asn.formula (if Nat.eqb w 0 then formula_true
+                         else formula_propeq (term_var "vs") (term_val (clemv_ty w) nil))))
+  | clem_arrv_count0 w s t =>
+      (* w ≥ 1 is what makes it sound (as for empty_elim); for w = 0 the
+         precondition is False *)
+      MkLemma [ctx] ["a"∷ty_xlenbits; "e"∷ty_xlenbits; "vs"∷clemv_ty w] [env]
+        (asn.sep (clem_arrv_angelic w s t (term_var "a") (term_val ty_xlenbits bv.zero) (term_var "e")
+                    (term_var "vs"))
+           (asn.formula (match w with O => formula_false | S _ => formula_true end)))
+        (asn.sep (clem_arrv w s t (term_var "a") (term_val ty_xlenbits bv.zero) (term_var "e")
+                    (term_var "vs"))
+           (asn.formula (formula_propeq (term_var "vs") (term_val (clemv_ty w) nil))))
   | clem_arrv_lockstep w s t1 t2 =>
       MkLemma [ctx]
         ["a1"∷ty_xlenbits; "n"∷ty_xlenbits; "e1"∷ty_xlenbits; "v1"∷clemv_ty w;
@@ -353,21 +323,6 @@ Definition clem_lemma (k : CLem) : Lemma [ctx] :=
            (clem_arrv w s t2 (term_var "e") (term_var "n2") (term_var "e2") (term_var "v2")))
         (clem_arrv w s t (term_var "a") (term_binop bop.bvadd (term_var "n") (term_var "n2"))
            (term_var "e2") (term_binop bop.append (term_var "v1") (term_var "v2")))
-  | clem_arrv_pad w s t t' =>
-      (* w ≥ 1 is what makes it sound: then cells are disjoint, in-range
-         memory, so a count of 0 (taken mod 2^32) means length 0 (SpecIris
-         interp_arrv_count0).  For w = 0 the precondition is False. *)
-      MkLemma [ctx]
-        ["a"∷ty_xlenbits; "n"∷ty_xlenbits; "e"∷ty_xlenbits; "vs"∷clemv_ty w;
-         "b"∷ty_xlenbits; "c"∷ty_xlenbits; "ws"∷clemv_ty w] [env]
-        (asn.sep (clem_arrv_angelic w s t (term_var "a") (term_var "n") (term_var "e") (term_var "vs"))
-           (asn.sep (clem_arrv_angelic w s t' (term_var "b") (term_val ty_xlenbits bv.zero) (term_var "c")
-                       (term_var "ws"))
-              (asn.formula (match w with O => formula_false | S _ => formula_true end))))
-        (asn.sep (clem_arrv w s t (term_var "a") (term_var "n") (term_var "e")
-                    (term_binop bop.append (term_var "vs") (term_var "ws")))
-           (clem_arrv w s t' (term_var "b") (term_val ty_xlenbits bv.zero) (term_var "c")
-              (term_var "ws")))
   | clem_arrv_split w s t k =>
       MkLemma [ctx] (clemv_ctx w) [env]
         (asn.sep (clem_arrv_angelic w s t (term_var "a") (term_var "n") (term_var "e") (term_var "vs"))
@@ -397,42 +352,6 @@ Definition clem_lemma (k : CLem) : Lemma [ctx] :=
         (asn.sep (clem_arrv w s t (term_var "a") (term_var "n") (term_var "e") (term_var "vs"))
            (clem_arrv w s t' (term_var "a") (term_val ty_xlenbits bv.zero) (term_var "a")
               (term_val (clemv_ty w) nil)))
-  | clem_arrv_resync_head t t' =>
-      MkLemma [ctx]
-        ["m"∷ty_xlenbits; "b"∷ty_xlenbits; "n'"∷ty_xlenbits; "e'"∷ty_xlenbits;
-         "u"∷clem_cell_ty 1; "rs"∷clemv_ty 1;
-         "a"∷ty_xlenbits; "n"∷ty_xlenbits; "e"∷ty_xlenbits; "v"∷clem_cell_ty 1; "rd"∷clemv_ty 1] [env]
-        (asn.sep (asn.chunk (chunk_ptsreg x10 (term_var "m")))
-           (asn.sep (clem_arrv_angelic 1 1 t' (term_var "b") (term_var "n'") (term_var "e'")
-                       (term_binop bop.cons (term_var "u") (term_var "rs")))
-              (asn.sep (clem_arrv_angelic 1 1 t (term_var "a") (term_var "n") (term_var "e")
-                          (term_binop bop.cons (term_var "v") (term_var "rd")))
-                 (asn.formula (formula_propeq (term_var "v")
-                    (clem_mux_byte (term_var "u") (term_var "m")))))))
-        (asn.sep (asn.chunk (chunk_ptsreg x10 (term_var "m")))
-           (asn.sep (clem_arrv 1 1 t' (term_var "b") (term_var "n'") (term_var "e'")
-                       (term_binop bop.cons (term_var "u") (term_var "rs")))
-              (clem_arrv 1 1 t (term_var "a") (term_var "n") (term_var "e")
-                 (term_binop bop.cons (term_var "u") (term_var "rd")))))
-  | clem_arrv_take_any w s t =>
-      MkLemma [ctx] (clemv_ctx w ▻ "b"∷ty.bool ▻ "x"∷clem_cell_ty w ▻ "r"∷clemv_ty w) [env]
-        (asn.match_bool (term_var "b")
-           (clem_arrv_angelic w s t (term_var "a") (term_var "n") (term_var "e")
-              (term_binop bop.cons (term_var "x") (term_var "r")))
-           (asn.sep (clem_arrv_angelic w s t (term_var "a") (term_var "n") (term_var "e") (term_var "vs"))
-              (clem_nonzero (term_var "n"))))
-        (asn.match_bool (term_var "b")
-           (asn.sep (clem_ptsto w (term_var "a") (term_var "x"))
-              (asn.sep (clem_range w (term_var "a"))
-                 (clem_arrv w s t (clem_off (term_var "a") s) (clem_off (term_var "n") (-1))
-                    (term_var "e") (term_var "r"))))
-           (asn.exist "x'" (clem_cell_ty w) (asn.exist "r'" (clemv_ty w)
-              (asn.sep (clem_ptsto w (term_var "a") (term_var "x'"))
-                 (asn.sep (clem_range w (term_var "a"))
-                    (asn.sep (clem_arrv w s t (clem_off (term_var "a") s) (clem_off (term_var "n") (-1))
-                                (term_var "e") (term_var "r'"))
-                       (asn.formula (formula_propeq (term_var "vs")
-                          (term_binop bop.cons (term_var "x'") (term_var "r'"))))))))))
   | clem_arrv_regroup_cons t =>
       MkLemma [ctx]
         ["a"∷ty_xlenbits; "n"∷ty_xlenbits; "e"∷ty_xlenbits; "x"∷clem_cell_ty 4; "r"∷clemv_ty 4] [env]

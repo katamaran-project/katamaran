@@ -202,7 +202,7 @@ ambiguity would return. Conventions: a top-level `DArr`/`DBytes` array's tag
 is its value name (D15, `gen_data_at`); a template takes its arrays' tags as
 Coq parameters (D16: `LoopN`'s `ln_tm ln_tx ln_tdm ln_tdx`, RSA's
 `sub_mem ta tb`); every lemma names the tag of EACH array it matches (D17):
-`join w s t1 t2 t` (result `t`), `lockstep w s t1 t2`, `pad w s t t'`, all
+`join w s t1 t2 t` (result `t`), `lockstep w s t1 t2`, all
 others one `t`, kept — `flip` included, so a done array keeps its tag until a
 `join` gives the result the source's (`join "db" "vb" "vb"`, RsaSpikeSub).
 A tag mismatch is a FAILED match, not an ambiguity: the ghost or block
@@ -215,25 +215,16 @@ variants. That hand-off is done by the SOLVER (`Solver.v` `ResimpSecLeak`,
 `secLeak vs` is re-split into `secLeak x`, `secLeak r`. Before it, the split
 happened only by luck of tree shape (a `replay` of a hoisted var-eq) and
 failed after a load or under an angelic choice between same-shape arrays
-(`Example/Rsa/RsaSpikeSb.v` `valid_cpy`). Catalogue (`clem_arrv_*`): `take_first` (equation, for a variable
-value) / `take_cons` (pattern on a syntactic `x :: r`), `take_last`
+(`Example/Rsa/RsaSpikeSb.v` `valid_cpy`). Catalogue (`clem_arrv_*`): `take_first` (`vs = x :: r`, the ONLY take:
+since 2026-11-01 the solver decomposes `x' :: r' = x :: r` on the pair,
+so a syntactic cons value keeps its head's identity through the equation;
+the pattern form `take_cons` and the angelic `take_any` are gone), `take_last`
 (`vs = r ++ [x]`), `add_first` (`x :: vs`), `add_last` (`vs ++ [x]`),
 `nonempty`, `empty` (`⊢ arrv a 0 a []`, `a` bound later by an ANGELIC match),
 `empty_at t t'` (`arrv t a … ⊢ itself ∗ arrv t' a 0 a []` — a seed at an
 existing array's start; use it when the seed is also made on a path that
 SKIPS the loop, e.g. memcpy's `beqz n, ret`: there `empty`'s address is never
 pinned and a later `join`'s plain match fails, `Example/Rsa/RsaMemcpy.v`),
-`take_any t` (`take_cons` OR `take_first`, chosen ANGELICALLY by a lemma
-boolean -- for a loop whose remainder is a syntactic cons in some trips and
-a variable in others, with ghosts that must be the same every trip; only the
-PATTERN take keeps a named head's identity, lifted cons is not injective
-under the tag), `resync_head t t'` (AD HOC, PLAN-rsa O4: a byte array whose
-head is `clem_mux_byte u m` -- exactly what br_ccopy stores for two equal
-bytes u under mask `A0 = m` -- gets head u back, u bound by the twin array
-t'; sound because memory reads only the projections. Match the arrays by
-tag and pattern, never two cells angelically: that version gave 64
-unrefutable candidates per use and `vm_compute` never finished;
-`Example/Rsa/RsaCcopy.v`),
 the CALL-SITE word ⇄ byte view (PLAN-rsa GATE 2, `Example/Rsa/RsaCcopyGate.v`):
 `regroup_cons t` (`regroup (x :: r)` ⊢ `x₀ :: x₁ :: x₂ :: x₃ :: regroup r`, the
 slices `clem_word_bytes` -- exactly le_bytes' take/drop -- so a callee
@@ -241,12 +232,14 @@ taking named header bytes matches), `word_of_bytes1 t` (`arrv 1 1 a 4 e
 [x₀;…;x₃]` ⊢ `arrv 4 4 a 1 e [x]`, pattern on the slices), `of_bytes_any t`
 (bytes whose value is NOT syntactically `regroup v`, e.g. a callee's unnamed
 output, back to words with a fresh `v` and `vs = regroup v`; needs `k <u
-2^30`). Way back for a header: `empty_at` at the array start, `take_cons`
+2^30`). Way back for a header: `empty_at` at the array start, `take_first`
 ×4, `add_last` ×4, `word_of_bytes1`, then `join` with the limbs,
-`empty_elim` (`a = e` only — never `vs = []`: `NonSyncVal [] []` exists),
+`empty_elim` (`a = e`, and `vs = []` for w ≥ 1: a count of 0 is length 0 in
+both runs, and on the pair that IS `[]`; consumes the array), `count0`
+(the same `vs = []`, w ≥ 1, KEEPING the array: memcpy/memmove's exit glue
+empties the source remainder this way before the `join` that retags it),
 `lockstep`, `drop`, `flip` (`rev vs`; `peval_rev` normalises to snoc form),
 `join` (`v1 ++ v2`, no overflow premise: the count is the length mod 2^32),
-`pad` (`arrv a n e vs ∗ arrv b 0 c ws ⊢ arrv a n e (vs ++ ws) ∗ …`, w ≥ 1),
 `split k` (`vs = v1 ++ v2`), and the word ⇄ byte VIEW of a value:
 `to_bytes` (`arrv 4 4 a n e ws ⊢ arrv 1 1 a (4 *ᵇ n) e (regroup ws)`) and
 `of_bytes` (PATTERN form: `arrv 1 1 a (4 *ᵇ k) e (regroup v) ∗ k <u 2^30 ⊢

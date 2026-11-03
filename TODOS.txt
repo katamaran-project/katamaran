@@ -329,13 +329,13 @@ Would it make sense to have an invariant like the leakage invariant for the pc?
 	lifted cons not injective (PLAN-arrv §1.1, PLAN-rsa O4). Each should become a plain per-projection fact or go.
 	(Not the arrv STRING tag of PLAN-arrv D14 -- that is an array index, unrelated to the RelVal tag.)
 	RSA-era (2026-10-21..27), in order of payoff:
-	+ clem_arrv_resync_head + clem_mux_byte (Verifier.v, "AD HOC", O4): under pairs MUX(secret, u, u) IS u, so a
+	+ DONE 2026-11-01 (issue/relval-rsa, deleted): clem_arrv_resync_head + clem_mux_byte (Verifier.v, "AD HOC", O4): under pairs MUX(secret, u, u) IS u, so a
 	  peval/solver rule (u ^ u -> 0, x & 0 -> 0, ... or the MUX identity directly) replaces the ghost lemma; delete it,
 	  its SpecIris soundness case, and ccf_glue's resync flag (RsaCcopy.v).
-	+ clem_arrv_take_any (Verifier.v): exists only because the EQUATION take loses a named head's identity (cons not
+	+ DONE 2026-11-01 (deleted; take_first + simplify_propeq's cons decomposition): clem_arrv_take_any (Verifier.v): exists only because the EQUATION take loses a named head's identity (cons not
 	  injective). With injective cons, take_first + the equation should suffice in br_ccopy's header phase.
-	+ the two take forms, take_first (equation) vs take_cons (pattern): may collapse to one.
-	+ clem_arrv_empty / empty_elim / pad: "never conclude vs = [] from a count of 0 (NonSyncVal [] [])". Under pairs a
+	+ DONE 2026-11-01 (take_cons deleted, take_first is the only take): the two take forms, take_first (equation) vs take_cons (pattern): may collapse to one.
+	+ DONE 2026-11-01 (empty_elim gives vs = [] for w >= 1; pad replaced by count0, which keeps the array; peval t ++ [] ~> t): clem_arrv_empty / empty_elim / pad: "never conclude vs = [] from a count of 0 (NonSyncVal [] [])". Under pairs a
 	  length-0 pair IS ([],[]) = SyncVal [], so empty_elim can give vs = [] and pad may become unnecessary.
 	+ try_isolate_inner (Solver.v, 8ee330d7): its secLeakT s guard is "load-bearing" only because of the tag
 	  (y - s is NonSyncVal a a <> SyncVal a). Under pairs the inversion is exact; drop the guard (relval_isolate).

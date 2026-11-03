@@ -1062,6 +1062,23 @@ Module Type GenericSolverOn
           | uop.regroup => simplify_eq_unop_default uop.regroup
           end.
 
+        (* rev is injective, per projection: `rev a = rev b` iff `a = b`, and
+           `rev a = v` iff `a = rev v` -- exact on the pair.  A flipped arrv
+           (clem_arrv_flip) carries `rev vs`, so an emptied one says
+           `rev vs = []`, which has to reach `vs`. *)
+        Definition simplify_propeq_unop_rev {σ} (t1 : Term Σ (ty.list σ))
+          (tr : Term Σ (ty.list σ)) : DList Σ :=
+          let default := simplify_eq_unop_default uop.rev t1 tr in
+          Term_list_case (fun _ => DList Σ)
+            (fun (*var*) _ _ => default)
+            (fun (*val*) v => simplify_eq_val t1 (List.rev v))
+            (fun (*relval*) _ => default)
+            (fun (*cons*) _ _ => default)
+            (fun (*append*) _ _ => default)
+            (fun (*rev*) t2 => simplify_eq t1 t2)
+            (fun (*regroup*) _ _ => default)
+            tr.
+
         Definition simplify_propeq_unop {σ1 σ2} (op : UnOp σ1 σ2) :
           Term Σ σ1 -> Term Σ σ2 -> DList Σ :=
           match op with
@@ -1069,7 +1086,7 @@ Module Type GenericSolverOn
           | uop.inr => simplify_eq_unop_inr
           | uop.neg => simplify_eq_unop_default uop.neg
           | uop.not => simplify_eq_unop_default uop.not
-          | uop.rev => simplify_eq_unop_default uop.rev
+          | uop.rev => simplify_propeq_unop_rev
           | uop.sext => simplify_eq_unop_default uop.sext
           | uop.zext => simplify_eq_unop_default uop.zext
           | uop.get_slice_int => simplify_eq_unop_get_slice_int
@@ -2107,6 +2124,47 @@ Module Type GenericSolverOn
           split; apply ty.RV_ext; assumption.
       Qed.
 
+      Lemma propeq_rev_split [σ] (t1 t2 : Term w (ty.list σ)) :
+        instpred (formula_propeq t1 t2) ⊣⊢
+        instpred (formula_propeq (term_unop uop.rev t1) (term_unop uop.rev t2)).
+      Proof.
+        constructor. intros ι _. cbn. unfold instpred_formula_propeq. cbn.
+        split.
+        - intros ->. reflexivity.
+        - intros H. pose proof (f_equal ty.projLeftRV H) as Hl.
+          pose proof (f_equal ty.projRightRV H) as Hr. cbn in Hl, Hr.
+          apply rev_inj in Hl, Hr. apply ty.RV_ext; assumption.
+      Qed.
+
+      Lemma propeq_rev_val [σ] (t1 : Term w (ty.list σ)) (v : Val (ty.list σ)) :
+        repₚ (ty.valToRelVal (σ := ty.list σ) (List.rev v)) t1 ⊣⊢
+        instpred (formula_propeq (term_unop uop.rev t1) (term_val _ v)).
+      Proof.
+        constructor. intros ι _. unfold repₚ. cbn. unfold instpred_formula_propeq. cbn.
+        unfold ty.valToRelVal.
+        remember (inst t1 ι) as x eqn:Ex. clear Ex. destruct x as [l r]. cbn.
+        split.
+        - intros H. pose proof (f_equal ty.projLeftRV H) as Hl.
+          pose proof (f_equal ty.projRightRV H) as Hr. cbn in Hl, Hr.
+          subst l r. rewrite rev_involutive. reflexivity.
+        - intros H. pose proof (f_equal ty.projLeftRV H) as Hl.
+          pose proof (f_equal ty.projRightRV H) as Hr. cbn in Hl, Hr.
+          subst v. apply rev_inj in Hr. subst r. rewrite rev_involutive. reflexivity.
+      Qed.
+
+      Lemma simplify_propeq_unop_rev_spec (sp : ∀ σ, Term w σ → Term w σ → DList w)
+        [σ] (tl : Term w (ty.list σ))
+        (IHtl : ∀ tr, instpred (sp _ tl tr) ⊣⊢ instpred (formula_propeq tl tr))
+        (tr : Term w (ty.list σ)) :
+        instpred (simplify_propeq_unop_rev (fun σ t1 t2 => dlist_propeq t1 t2) sp tl tr) ⊣⊢
+          instpred (formula_propeq (term_unop uop.rev tl) tr).
+      Proof.
+        destruct tr using Term_list_case; cbn -[simplify_eq_val];
+          try (unfold simplify_eq_unop_default; rewrite instpred_dlist_singleton; reflexivity).
+        - rewrite simplify_propeq_val_spec. apply propeq_rev_val.
+        - rewrite IHtl. apply propeq_rev_split.
+      Qed.
+
       Lemma simplify_propeq_binop_spec (sp : ∀ σ, Term w σ → Term w σ → DList w)
         [σ1 σ2 σ] (op : BinOp σ1 σ2 σ) (tl1 : Term w σ1) (tl2 : Term w σ2)
         (IHtl1 : ∀ tr, instpred (sp _ tl1 tr) ⊣⊢ instpred (formula_propeq tl1 tr))
@@ -2321,6 +2379,7 @@ Module Type GenericSolverOn
               destruct (inst tl ι); cbn; split; intro H; ty.rv_split;
                 repeat match goal with H : inr _ = inr _ |- _ => injection H as H end;
                 subst; reflexivity.
+          + (*rev*) apply simplify_propeq_unop_rev_spec; exact IHtl.
           + (*get_slice_int*)
             unfold simplify_eq_unop_get_slice_int.
             destruct (Term_eqb_spec (term_get_slice_int tl) tr); subst; arw.

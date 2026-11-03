@@ -529,29 +529,6 @@ Module RiscvPmpIrisInstanceWithContracts.
       rewrite bv.of_nat_S arrv_ring_end. auto.
     Qed.
 
-    (* No n≠0 premise: a cons value is non-empty, and a count that wrapped
-       to 0 still gives a consistent n-1 and end fact modulo 2^32. *)
-    Lemma interp_arrv_take_cons `{sailGS2 Σ} (w : nat) (s : Z) (a n e : bv xlenbits) x r :
-      interp_arrv w s (SV a) (SV n) (SV e) (bop.evalRel bop.cons x r) ⊢@{iPropI Σ}
-        ⌜(bv.unsigned a + Z.of_nat w <= Z.of_N maxAddr)%Z⌝ ∗
-        interp_ptstomem (SV a) x ∗
-        interp_arrv w s (SV (bv.add a (bv.of_Z s))) (SV (bv.add n (bv.of_Z (-1)))) (SV e) r.
-    Proof.
-      rewrite !interp_arrv_SV; unfold interp_arrv_body. destruct (arrv_proj_cons x r) as [-> ->].
-      iIntros "(%He & %Hlen & %Hn' & Hcells)".
-      cbn [zip big_opL]. iDestruct "Hcells" as "[[%Hr0 Hc0] Hrest]".
-      cbn [length] in Hlen, Hn'. rewrite bv.of_nat_S in Hn'. subst n e.
-      change (bv.of_nat 0) with (@bv.zero xlenbits) in Hr0. rewrite arrv_ring_zero in Hr0.
-      iSplit; [done|]. iSplitL "Hc0".
-      { change (bv.of_nat 0) with (@bv.zero xlenbits). rewrite arrv_ring_zero.
-        iApply (arrv_ptstomem_proj with "Hc0"); cbn; congruence. }
-      rewrite arr_neg1 -arrv_ring_pred.
-      iSplit; [iPureIntro; apply arrv_ring_end|].
-      iSplit; [iPureIntro; lia|]. iSplit; [done|].
-      iApply (big_sepL_mono with "Hrest"). intros i lr _. cbn.
-      rewrite bv.of_nat_S arrv_ring_end. auto.
-    Qed.
-
     Lemma interp_arrv_add_first `{sailGS2 Σ} (w : nat) (s : Z) (a n e : bv xlenbits) vs x :
       interp_arrv w s (SV a) (SV n) (SV e) vs ∗
       ⌜(bv.unsigned (bv.add a (bv.of_Z (- s))) + Z.of_nat w <= Z.of_N maxAddr)%Z⌝ ∗
@@ -601,17 +578,6 @@ Module RiscvPmpIrisInstanceWithContracts.
       iDestruct (interp_arrv_take_first with "Harr") as (x r) "(%Hvs & %Hr & Hc & Harr)";
         [exact Hne|].
       iExists x, r. iFrame "Hc Harr". auto.
-    Qed.
-
-    Lemma clem_arrv_take_cons_sound `{sailGS2 Σ} (w : nat) (s : Z) (t : string) :
-      ValidLemma (clem_lemma (clem_arrv_take_cons w s t)).
-    Proof.
-      intros ι. destruct_syminstance ι.
-      destruct a as [a a']; destruct n as [n n']; destruct e as [e e'];
-        cbn -[interp_arrv interp_ptstomem].
-      iIntros "Harr". arrv_sync "Harr". pdup.
-      iDestruct (interp_arrv_take_cons with "Harr") as "(%Hr & Hc & Harr)".
-      iFrame "Hc Harr". auto.
     Qed.
 
     Lemma clem_arrv_add_first_sound `{sailGS2 Σ} (w : nat) (s : Z) (t : string) :
@@ -746,17 +712,6 @@ Module RiscvPmpIrisInstanceWithContracts.
       apply (f_equal N.to_nat) in Hn. rewrite Nat2N.id in Hn.
       pose proof Hn as Hn'. rewrite Hlen in Hn'.
       apply length_zero_iff_nil in Hn, Hn'. split; assumption.
-    Qed.
-
-    Lemma interp_arrv_pad `{sailGS2 Σ} (w : nat) (s : Z) (a n e b c : bv xlenbits) vs ws :
-      interp_arrv (S w) s (SV a) (SV n) (SV e) vs ∗ interp_arrv (S w) s (SV b) (SV bv.zero) (SV c) ws
-      ⊢@{iPropI Σ}
-      interp_arrv (S w) s (SV a) (SV n) (SV e) (bop.evalRel bop.append vs ws)
-      ∗ interp_arrv (S w) s (SV b) (SV bv.zero) (SV c) ws.
-    Proof.
-      iIntros "[Ha Hb]". iDestruct (interp_arrv_count0 with "Hb") as %[HL HR].
-      iFrame "Hb". destruct (arrv_proj_app vs ws) as [E1 E2].
-      iApply (interp_arrv_proj with "Ha"); rewrite ?E1 ?E2 ?HL ?HR app_nil_r; done.
     Qed.
 
     Lemma arrv_snoc_split {σ} (vs : RelVal (ty.list σ)) tL hL tR hR :
@@ -959,7 +914,8 @@ Module RiscvPmpIrisInstanceWithContracts.
       iIntros "[%Ha _]". hnf in Ha. cbn in Ha. subst a'. iApply interp_arrv_empty.
     Qed.
 
-    (* count 0 gives start = end, and NOTHING about the value *)
+    (* count 0 gives start = end, and for w ≥ 1 the value [] (both runs hold
+       the empty list, interp_arrv_count0, and that pair IS SyncVal []) *)
     Lemma clem_arrv_empty_elim_sound `{sailGS2 Σ} (w : nat) (s : Z) (t : string) :
       ValidLemma (clem_lemma (clem_arrv_empty_elim w s t)).
     Proof.
@@ -967,7 +923,26 @@ Module RiscvPmpIrisInstanceWithContracts.
       destruct a as [a a']; destruct e as [e e'];
         cbn -[interp_arrv].
       iIntros "Harr". arrv_sync "Harr". pdup. iDestruct (interp_arrv_empty_elim with "Harr") as %Hae.
-      iSplit; [|done]. iPureIntro. split; exact Hae.
+      destruct w as [|w]; cbn -[interp_arrv].
+      - iSplit; [|done]. iSplit; iPureIntro; [split; exact Hae|done].
+      - iDestruct (interp_arrv_count0 with "Harr") as %[HL HR].
+        iSplit; (iSplit; [iPureIntro|done]).
+        + split; exact Hae.
+        + destruct vs as [vl vr]; cbn in *; subst; reflexivity.
+    Qed.
+
+    (* the same fact, the array kept; w = 0: the precondition is False *)
+    Lemma clem_arrv_count0_sound `{sailGS2 Σ} (w : nat) (s : Z) (t : string) :
+      ValidLemma (clem_lemma (clem_arrv_count0 w s t)).
+    Proof.
+      intros ι. destruct_syminstance ι. destruct w as [|w].
+      { cbn -[interp_arrv]. iIntros "(_ & %Hf & _)". done. }
+      destruct a as [a a']; destruct e as [e e'];
+        cbn -[interp_arrv].
+      iIntros "[Harr _]". arrv_sync "Harr". pdup.
+      iDestruct (interp_arrv_count0 with "Harr") as %[HL HR].
+      iFrame "Harr". iSplit; [|done]. iPureIntro.
+      destruct vs as [vl vr]; cbn in *; subst; reflexivity.
     Qed.
 
     Lemma clem_arrv_lockstep_sound `{sailGS2 Σ} (w : nat) (s : Z) (t1 t2 : string) :
@@ -1004,19 +979,6 @@ Module RiscvPmpIrisInstanceWithContracts.
         destruct n2 as [n2 n2']; destruct e2 as [e2 e2'];
         cbn -[interp_arrv].
       iIntros "[H1 H2]". arrv_sync "H1". arrv_sync "H2". pdup. iApply (interp_arrv_join with "[$H1 $H2]").
-    Qed.
-
-    (* w = 0: the precondition is False (cells own no bytes, so a count of
-       0 mod 2^32 says nothing about the length) *)
-    Lemma clem_arrv_pad_sound `{sailGS2 Σ} (w : nat) (s : Z) (t t' : string) :
-      ValidLemma (clem_lemma (clem_arrv_pad w s t t')).
-    Proof.
-      intros ι. destruct_syminstance ι. destruct w as [|w].
-      { cbn -[interp_arrv]. iIntros "(_ & _ & %Hf & _)". done. }
-      destruct a as [a a']; destruct n as [n n']; destruct e as [e e'];
-        destruct b as [b b']; destruct c as [c c'];
-        cbn -[interp_arrv].
-      iIntros "[Ha [Hb _]]". arrv_sync "Ha". arrv_sync "Hb". pdup. iApply (interp_arrv_pad with "[$Ha $Hb]").
     Qed.
 
     Lemma clem_arrv_split_sound `{sailGS2 Σ} (w : nat) (s : Z) (t : string) (k : N) :
@@ -1282,43 +1244,6 @@ Module RiscvPmpIrisInstanceWithContracts.
       iIntros "Harr". arrv_sync "Harr". pdup. iFrame "Harr". iApply interp_arrv_empty.
     Qed.
 
-    (* what br_ccopy stores for two equal bytes u under any mask m is u
-       (zext' is how uop.zext evaluates: append zeros) *)
-    Lemma mux_byte_same (u : bv 8) (m : bv 32) :
-      bv.take 8 (bv.lxor (bv.land (bv.lxor (bv.zext' u 24) (bv.zext' u 24)) m) (bv.zext' u 24)) = u.
-    Proof. rewrite bv.lxor_nilpotent bv.land_zero_l bv.lxor_zero_l. unfold bv.zext'. apply bv.take_app. Qed.
-
-    Lemma clem_arrv_resync_head_sound `{sailGS2 Σ} (t t' : string) :
-      ValidLemma (clem_lemma (clem_arrv_resync_head t t')).
-    Proof.
-      intros ι. destruct_syminstance ι.
-      cbn -[interp_arrv]. iIntros "(Hm & Hs & Hd & %Hv & _)".
-      iFrame "Hm Hs". iApply (interp_arrv_proj with "Hd").
-      all: subst v; destruct u as [ul ur], m as [ml mr], rd as [rl rr]; cbn;
-        f_equal; symmetry; apply mux_byte_same.
-    Qed.
-
-    (* take_cons for b = true, take_first for b = false *)
-    Lemma clem_arrv_take_any_sound `{sailGS2 Σ} (w : nat) (s : Z) (t : string) :
-      ValidLemma (clem_lemma (clem_arrv_take_any w s t)).
-    Proof.
-      intros ι. cbv [clemv_ctx] in ι. destruct_syminstance ι.
-      (* b with equal halves matches like that bool; else nothing *)
-      destruct b as [bl br]; cbn -[interp_arrv interp_ptstomem];
-        match goal with |- context [if ?d then _ else _] => destruct d as [<-|Hne] end;
-        [rename bl into bb | cbn; iIntros "[]"].
-      destruct bb; destruct a as [a a']; destruct n as [n n']; destruct e as [e e'];
-        cbn -[interp_arrv interp_ptstomem].
-      all: first
-        [ (iIntros "Harr"; arrv_sync "Harr"; pdup;
-           iDestruct (interp_arrv_take_cons with "Harr") as "(%Hr & Hc & Harr)";
-           iFrame "Hc Harr"; auto)
-        | (iIntros "[Harr [%Hne _]]"; arrv_sync "Harr"; pdup;
-           iDestruct (interp_arrv_take_first with "Harr") as (x' r') "(%Hvs & %Hr & Hc & Harr)";
-           [exact Hne|];
-           iExists x', r'; iFrame "Hc Harr"; auto) ].
-    Qed.
-
     (* ---- PLAN-rsa GATE 2: a word's bytes in the open ---- *)
     (* the bytes of a word are its four take/drop slices (clem_word_bytes) *)
     Lemma le_bytes_32 (x : bv 32) :
@@ -1424,16 +1349,16 @@ Module RiscvPmpIrisInstanceWithContracts.
     Lemma clemSem `{sailGS2 Σ} (k : CLem) :
       ValidLemma (clem_lemma k).
     Proof.
-      destruct k; [apply clem_arrv_take_first_sound|apply clem_arrv_take_cons_sound
+      destruct k; [apply clem_arrv_take_first_sound
                   |apply clem_arrv_add_first_sound|apply clem_arrv_add_last_sound
                   |apply clem_arrv_take_last_sound|apply clem_arrv_nonempty_sound
                   |apply clem_arrv_empty_sound|apply clem_arrv_empty_elim_sound
+                  |apply clem_arrv_count0_sound
                   |apply clem_arrv_lockstep_sound|apply clem_arrv_drop_sound
                   |apply clem_arrv_flip_sound|apply clem_arrv_join_sound
-                  |apply clem_arrv_pad_sound|apply clem_arrv_split_sound
+                  |apply clem_arrv_split_sound
                   |apply clem_arrv_to_bytes_sound|apply clem_arrv_of_bytes_sound
-                  |apply clem_arrv_empty_at_sound|apply clem_arrv_resync_head_sound
-                  |apply clem_arrv_take_any_sound|apply clem_arrv_regroup_cons_sound
+                  |apply clem_arrv_empty_at_sound|apply clem_arrv_regroup_cons_sound
                   |apply clem_arrv_word_of_bytes1_sound|apply clem_arrv_of_bytes_any_sound].
     Qed.
   End CLemSound.

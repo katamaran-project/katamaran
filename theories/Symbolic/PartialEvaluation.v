@@ -1775,8 +1775,18 @@ End CanonTerm.
        x - x, idempotence, the mask shapes) live in CFGVer/Example/ZZBvCore.v:
        inside this functor the terms are abstract, so they cannot compute. *)
 
+    (* t ++ [] ~> t, at an append leaf: exact on the pair (l ++ [] = l per
+       projection).  An emptied array remainder (clem_arrv_count0, rest = [])
+       leaves `done ++ []` against `done`. *)
+    Definition peval_append_nil {σ} (t1 t2 : Term Σ (ty.list σ)) : Term Σ (ty.list σ) :=
+      match term_get_val t2 with
+      | Some nil => t1
+      | _        => term_binop bop.append t1 t2
+      end.
+
     (* List append, right-associated with conses pulled out:
-         [] ++ t ~> t,  (x :: t) ++ u ~> x :: (t ++ u),  (a ++ b) ++ u ~> a ++ (b ++ u).
+         [] ++ t ~> t,  (x :: t) ++ u ~> x :: (t ++ u),  (a ++ b) ++ u ~> a ++ (b ++ u),
+         t ++ [] ~> t.
        A value-carrying array's loop invariant `vs = done ++ rest` is
        re-established after one step only if (done ++ [x]) ++ rest' and
        done ++ (x :: rest') meet syntactically (CFGVer `arrv`, PLAN-rsa.md,
@@ -1790,7 +1800,7 @@ End CanonTerm.
                           end
     | term_binop bop.cons x t, t2      => term_binop bop.cons x (peval_append t t2)
     | term_binop bop.append a b, t2    => peval_append a (peval_append b t2)
-    | t1, t2                           => term_binop bop.append t1 t2.
+    | t1, t2                           => peval_append_nil t1 t2.
 
     (* TODO: Comment out some stuff because I am too lazy to prove their soundness *)
     Definition peval_binop {σ1 σ2 σ} (op : BinOp σ1 σ2 σ) :
@@ -2707,10 +2717,20 @@ End CanonTerm.
       peval_bvsub t1 t2 ≡ term_binop bop.bvsub t1 t2.
     Proof. apply canon_term_equiv. Qed.
 
+    Lemma peval_append_nil_sound {σ} (t1 t2 : Term Σ (ty.list σ)) :
+      peval_append_nil t1 t2 ≡ term_binop bop.append t1 t2.
+    Proof.
+      unfold peval_append_nil.
+      destruct (term_get_val_spec t2) as [v ->|]; [|reflexivity].
+      destruct v; [|reflexivity].
+      intros ι; cbn. destruct (inst t1 ι); cbn; rewrite !app_nil_r; reflexivity.
+    Qed.
+
     Lemma peval_append_sound {σ} (t1 t2 : Term Σ (ty.list σ)) :
       peval_append t1 t2 ≡ term_binop bop.append t1 t2.
     Proof.
-      funelim (peval_append t1 t2); intros ι; try reflexivity.
+      funelim (peval_append t1 t2); intros ι; try reflexivity;
+        try exact (peval_append_nil_sound _ _ ι).
       - (* before any cbn: it would unfold peval_binop' *)
         destruct v; [|exact (peval_binop'_sound _ _ _ ι)].
         cbn. destruct (inst t2 ι); reflexivity.

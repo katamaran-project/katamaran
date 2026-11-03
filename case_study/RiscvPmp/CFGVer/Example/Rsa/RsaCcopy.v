@@ -149,8 +149,7 @@ Ltac mb_search_cc :=
   | |- _ => solve [ rv_leaf_cc ]
   end.
 
-(* evars no leaf constrains -- the unused side of a take_any (its pattern
-   head and tail, or its equation's value): any value *)
+(* evars no leaf constrains: any value *)
 Ltac fill_evar :=
   first [ exact (ty.SyncVal bv.zero) | exact (ty.SyncVal nil) | exact (ty.SyncVal true) ].
 
@@ -212,11 +211,10 @@ Definition lnil {Σ σ} : Term Σ (ty.list σ) := term_val (ty.list σ) nil.
 Definition hl4 {Σ σ} (a b c d : Term Σ σ) : list (Term Σ σ) :=
   List.cons a (List.cons b (List.cons c (List.cons d nil))).
 
-(* The loop takes each byte with clem_arrv_take_any: by PATTERN in the
-   header phase (the remainder is h_k :: .., and only a pattern take keeps
-   h_k's identity -- lifted cons is not injective under the tag), by
-   EQUATION in the limb phase (the remainder is a variable).  The choice is
-   angelic, so the ghosts are the same every trip. *)
+(* The loop takes each byte with clem_arrv_take_first in both phases.  In
+   the header phase the remainder is h_k :: .., and the take's equation
+   `h_k :: .. = x :: r` decomposes (cons is injective on the pair), so x IS
+   h_k and the stored byte stays syntactically h_k. *)
 
 (* the source's DONE array: a tag of br_ccopy's own *)
 Definition cc_sd : string := "ccopy.sd".
@@ -233,10 +231,10 @@ Definition cclCtx : LCtx :=
    "sl"∷clemv_ty 1; "dl"∷clemv_ty 1].
 
 Definition ccl_annot (ts td : string) : list AnnotInstr :=
-  [ {| ai_ghost_before := [ AnnotCLemma (clem_arrv_take_any 1 1 ts) ]
+  [ {| ai_ghost_before := [ AnnotCLemma (clem_arrv_take_first 1 1 ts) ]
      ; ai_instr := LOAD (bv.of_Z 0) A2 A4 true BYTE
      ; ai_ghost_after := [ AnnotCLemma (clem_arrv_add_last 1 1 cc_sd) ]; ai_block := None |}
-  ; {| ai_ghost_before := [ AnnotCLemma (clem_arrv_take_any 1 1 td) ]
+  ; {| ai_ghost_before := [ AnnotCLemma (clem_arrv_take_first 1 1 td) ]
      ; ai_instr := LOAD (bv.of_Z 0) A1 A5 true BYTE
      ; ai_ghost_after := nil; ai_block := None |}
   ; AST_AnnotInstr (ITYPE (bv.of_Z 1) A2 A6 RISCV_ADDI)
@@ -376,12 +374,12 @@ Definition cl (k : CLem) : Annot := AnnotCLemma k.
 (* Entry, after the `add a3` (the beqz's taken path is refuted: n = nl + 4,
    nl < 2^31): seed both DONE arrays at their array's start.  Exit, before
    the ret: the source joins back; the destination's emptied remainder goes;
-   then, header byte by header byte, both heads (syntactically h_k) come off
-   by pattern; the cells go back at the end. *)
+   then, header byte by header byte, both heads come off by take_first (its
+   equation decomposes, so they are h_k); the cells go back at the end. *)
 Definition ccf_seeds (ts td : string) : list Annot :=
   [ cl (clem_arrv_empty_at 1 1 ts cc_sd); cl (clem_arrv_empty_at 1 1 td td) ].
 Definition ccf_glue (ts td : string) : list Annot :=
-  let next := [cl (clem_arrv_take_cons 1 1 td); cl (clem_arrv_take_cons 1 1 ts)] in
+  let next := [cl (clem_arrv_take_first 1 1 td); cl (clem_arrv_take_first 1 1 ts)] in
   [ cl (clem_arrv_join 1 1 cc_sd ts ts); cl (clem_arrv_empty_elim 1 1 td) ]
   ++ next ++ next ++ next
   ++ [ cl (clem_arrv_add_first 1 1 ts); cl (clem_arrv_add_first 1 1 ts); cl (clem_arrv_add_first 1 1 ts)

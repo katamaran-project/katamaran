@@ -452,7 +452,7 @@ so nothing else in the solver covers this shape. It DOES decompose the four
 injective constructors `pair`/`cons`/`bvapp`/`bvcons` since 2026-10-31
 (`simplify_propeq_binop`, exact on the RelVal pair, `propeq_*_split`): before,
 `h :: hs = x :: xs` stayed one opaque equation, so `x` was never substituted
-(RsaCcopy's `take_any` byte heads).
+(RsaCcopy's byte heads; this is what let `take_first` replace the pattern takes `take_cons`/`take_any`, 2026-11-01).
 
 ### Every arm must normalise its input, fall-throughs included (fixed 2026-09-22)
 
