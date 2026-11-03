@@ -71,6 +71,15 @@ practice (2026-10-14) builds of files pet cannot open (`VerifierRel.v`,
 `Adequacy.v`, both OOM pet) went through after a failed `rocq_start` attempt.
 The discipline above stands either way.
 
+**How much to rebuild once the change is right is a different question: load
+`phase-check`.** The rule above is about ITERATING (do not use a build as a
+tactic loop). After an edit, especially to `Solver.v`, `PartialEvaluation.v`,
+`Verifier.v` or `SpecIris.v`, `phase-check` decides which files get a full proof
+check: changed files, users of changed names, and a sentinel set. Everything
+else gets `-vos`. The full `Results.vo` closure / `scripts/gate.sh` runs once,
+at the merge. `.claude/hooks/phase-check-guard.sh` denies a full-closure build
+until `phase-check` is loaded.
+
 ```
 rocq_compile_file(file, mode="vos")               # fast type-check, statements only
 rocq_compile_file(file, mode="full")              # validates proof bodies

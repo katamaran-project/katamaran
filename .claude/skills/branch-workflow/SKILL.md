@@ -64,39 +64,13 @@ The hook runs the gate against the *merged* working tree. If it exits non-zero t
 merge commit is aborted (the merge stays staged-but-uncommitted); recover with
 `git merge --abort`, fix on the topic branch, and merge again.
 
-## Checking a phase on a topic branch: NOT the full gate (Emiel, 2026-11-03)
+## Checking a phase on a topic branch: NOT the full gate
 
-The full gate runs **once**, at the merge into KatamaranRel. Between phases of
-a plan, do NOT rebuild the whole `Results.vo` closure (35–40 min at `-j1`) and do
-not offer that as the default next step. A phase check is:
-
-1. **Full check** (real `.vo`, proofs run) of:
-   - every file whose source changed;
-   - every file that USES a definition the change touched: `command grep`
-     (plain `grep` skips gitignored files) for each renamed, removed or
-     changed name, e.g. a CLem constructor;
-   - if the change touches EVERY VC (a solver or peval rule, the executor),
-     also the **sentinel set**, one heavy representative per family:
-     `Example/Muladd/MuladdParamLoopI.v`,
-     `Example/CheckScalar/CheckScalarParamLoop2.v`, `Example/Cmovznz4.v`,
-     `Example/Rsa/RsaCcopy.v`, plus one `*Result.v` for the Iris side.
-2. **Everything else** in the downstream closure only has to become loadable
-   again. Compile it with `-vos` (statements only, proofs skipped), then `-vok`
-   the files from 1. Coq forces SOME recompilation below a changed file, but it
-   does not force re-checking every proof. Caveat: files with section
-   variables (`Adequacy.v`, `VerifierRel.v`'s Soundness section) run their
-   proofs even under `-vos` (rocq-implementation skill §1). This route has not
-   been timed on this closure yet, so measure it the first time.
-3. Negative controls in touched files must still fail, and diffs to a trusted
-   statement still go to Emiel.
-
-**The accepted risk:** a solver rule changes the terms of every VC, so a file
-outside the sentinel set can still break (a closer stops matching, or it slows
-down past the 1.5× cutoff). The merge gate catches that, later. For a change
-confined to `Verifier.v`/`SpecIris.v`, step 1's grep is close to exact. Also
-check `_CoqProject` for files OUTSIDE `Results.vo`'s closure (e.g. RsaMemcpy,
-RsaMemset, RsaMemmove, RsaSpikeSb and RsaSpikeArrv as of 2026-11-01): the gate
-never builds them, so step 1 is their only check.
+Between phases the full gate is NOT the check. It runs once, at this merge. What
+to rebuild mid-plan (changed files, users of changed names, a sentinel set, `-vos`
+for the rest) is the **phase-check** skill, and
+`.claude/hooks/phase-check-guard.sh` denies a full-closure build until it is
+loaded (Emiel, 2026-11-03).
 
 ## What the gate checks (`scripts/gate.sh`)
 
