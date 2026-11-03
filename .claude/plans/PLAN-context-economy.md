@@ -2,9 +2,9 @@
 
 Status 2026-11-03: Phase 0 DONE (`5b5abc52`, idle-resume guard). Phase 1 DONE
 (`dc6b57c3`, telemetry hook). D11 handoff automation DONE (`/handoff` skill +
-`handoff-announce.sh`). Phase 2 WRITTEN, NOT YET LIVE-CHECKED (three agents +
-per-agent skill markers, committed with this status): agent files load only at
-session start. **Next: Phase 2 live checks, then Phase 2b.**
+`handoff-announce.sh`). Phase 2 DONE (three agents + per-agent skill markers;
+live checks passed 2026-11-03: `maxTurns` works, `reader` starts at 22.9k,
+per-agent marker live; `zz-probe` deleted). **Next: Phase 2b (runner).**
 
 ## Why (measured, October 2026 transcripts: 31 sessions, 6,536 requests)
 
@@ -163,8 +163,22 @@ session start. **Next: Phase 2 live checks, then Phase 2b.**
      session unchanged. `test-skill-agent-key.sh` 17/17 (real marker hook vs the
      three guards, both directions, id sanitising); existing suites 32+23+11
      still green. Live from the moment of the edit (scripts re-read per run).
-   - Left for the live checks: `.claude/agents/zz-probe.md` (untracked,
-     haiku, `maxTurns: 2`, `autoCompactWindow: 50000`, tools Bash/Agent/Skill).
+   - **Live checks DONE (2026-11-03, new process).** (1) The Agent tool lists
+     `phase-worker`, `rocq-prover`, `reader`, `zz-probe`. (2) `maxTurns: 2`
+     WORKS: asked for 4 Bash calls, the probe stopped after 2 with "stopped at
+     its 2-turn limit"; a stopped agent can be continued by SendMessage.
+     `autoCompactWindow: 50000` raised no error but is UNVERIFIED (the probe
+     never passed 28k); no real agent uses it, so nothing to drop. (3) `reader`
+     (Sonnet) on "where is `skill-load-marker.sh` registered": correct
+     ANSWER/EVIDENCE/NOT CHECKED report (settings.json PreToolUse, matcher
+     `Skill`, nowhere else); start-up context **22.9k** (Explore 19k,
+     general-purpose 53k), 4 requests, 25k tokens total. (4) Live per-agent
+     marker: a subagent's `Skill` call wrote
+     `/tmp/claude-skillload-gmap-pitfalls-<sid>_<agent_id>` and NO bare-`<sid>`
+     marker — D14 holds live. (5) `zz-probe.md` deleted. Side finding:
+     `transcript-usage.py` with no arguments finds 0 sessions and dies on a
+     ZeroDivisionError (`line 110`) — guard it in Phase 2b, where it is the
+     benchmark tool. Telemetry log: no line, as expected (nothing crossed 150k).
 2b. **Phase runner** (D12b, D13). A script (e.g. `.claude/tools/phase-runner.sh`):
    read `.claude/HANDOFF` → stop if it carries `NEEDS-EMIEL:` (or is absent) →
    run ONE headless session with the start line, transcript/stream logged to a
