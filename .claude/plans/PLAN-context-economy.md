@@ -1,6 +1,8 @@
 # PLAN-context-economy — keep long autonomous runs from ballooning context
 
-Status: DRAFT 2026-11-03. Phase 0 DONE (`5b5abc52`). Next: Phase 1, in a FRESH session.
+Status: 2026-11-03. Phase 0 DONE (`5b5abc52`). Phase 1 DONE (telemetry hook, see
+"Phase 1 result"). Next: Phase 2 (agents), needs `skill-creator`? no — agents are
+not skills; Phase 3 (the skill) does.
 
 ## Why (measured, October 2026 transcripts: 31 sessions, 6,536 requests)
 
@@ -66,6 +68,31 @@ Status: DRAFT 2026-11-03. Phase 0 DONE (`5b5abc52`). Next: Phase 1, in a FRESH s
    `ts agent ctx tool`. First check what `transcript_path`/`agent_id` a hook sees
    INSIDE a subagent (one trivial background agent, 2–3 tool calls). Never blocks;
    offline tests like `idle-resume-guard.test.sh`.
+   **Phase 1 result (2026-11-03).** `.claude/hooks/context-telemetry.sh`, wired as
+   PostToolUse matcher `*`, 13 offline tests (`context-telemetry.test.sh`), 0.02 s
+   on a 16 MB transcript, prints nothing (zero context cost for the agent).
+   - PROBED (temporary line in the already-registered rocq-error-injector, then
+     reverted): inside a subagent the hook input has `agent_id`, `agent_type`,
+     `prompt_id`, `scratchpad_dir`, `effort`; **`transcript_path` is the PARENT's**.
+     The hook therefore reads `<dir>/<session_id>/subagents/agent-<agent_id>.jsonl`
+     (verified on real data: the probe agent reported its own 19k, not the
+     parent's 236k). `scratchpad_dir` is the session's, same for every agent.
+   - Log: `<scratchpad>/telemetry/events.log`, one line per first crossing of
+     150k/300k/450k/600k/750k (`CLAUDE_TELEMETRY_STEPS`), e.g.
+     `… | phase-worker:abc1234 "Phase 2 of PLAN-x" | ctx 310k (crossed 300k) | calls 2 | Bash`.
+     The main session is labelled `main` (the coordinator sees its own growth too).
+   - Coordinator recipe: `Monitor` with
+     `touch <scratchpad>/telemetry/events.log; tail -n0 -F <scratchpad>/telemetry/events.log`,
+     `timeout_ms` max, re-arm on expiry.
+   - NOT done, deliberately: stall events (a 30-min compile is normal silence)
+     and error events (failed tools fire a different hook event — check it
+     exists before relying on it).
+   - Trap hit and fixed: `IFS=$'\t' read` COLLAPSES empty fields (tab is IFS
+     whitespace), so a main-session call (no agent_id) shifted every field; use
+     `\x1f`. Bash `TMPDIR` is unset in this environment — use `scratchpad_dir`.
+   - Hook config is captured at session start: both hooks apply from the next
+     session on. The probe worked mid-session only because a registered SCRIPT
+     is re-read on every run.
 2. **Agents** (`.claude/agents/`): `phase-worker` (executes one plan phase, keeps the
    handoff current, messages main in a fixed one-line format on milestone / stuck /
    done, budget), `rocq-prover` (D5 contract; knows preamble mode and the rocq-mcp
@@ -103,7 +130,8 @@ Status: DRAFT 2026-11-03. Phase 0 DONE (`5b5abc52`). Next: Phase 1, in a FRESH s
 
 ## Handoff (for the next session)
 
-Start: "Execute PLAN-context-economy Phase 1" in a fresh session. Read this file
+Start: "Execute PLAN-context-economy Phase 2" in a fresh session. Read this file
 only; the evidence behind the numbers is in the 2026-11-03 session, not needed to
-proceed. Phase 1 needs no skill-creator consult (hooks are not skills); Phases 2–3
-do.
+proceed. Agents (Phase 2) are not skills, so no skill-creator consult; the skill
+(Phase 3) needs one. Open questions above still unanswered — ask before Phase 2's
+`phase-worker` (they shape its message format and stop rights).
