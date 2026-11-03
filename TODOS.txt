@@ -384,3 +384,8 @@ Would it make sense to have an invariant like the leakage invariant for the pc?
 	  introduced for cannot arise; every CLem currently carries 1-3 tag arguments.
 	+ E. Shrink the word <-> byte view lemmas (to_bytes, of_bytes, regroup_cons, word_of_bytes1, of_bytes_any) if B
 	  indexes by byte; the view change at a call site itself stays (PLAN-rsa S2 decision).
+- skills describe the TAGGED RelVal model (2026-11-03, Emiel: leave them for now, he is streamlining the skills): after
+	the relval-pair merge, formula_bool/formula_relop are POINTWISE (P l /\ P r) and secLeak rv := projLeft rv =
+	projRight rv; there is no "NonSyncVal => False" any more. Stale text in secret-data-walls (whole premise),
+	relval-model, relval-rewrite-over-secrets, core-executor-internals, cfgver-solve-vc, cfgver-executor,
+	rocq-implementation + references/peval-mask-algebra.md (grep 'NonSyncVal.*False' under .claude/skills).
