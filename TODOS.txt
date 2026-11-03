@@ -389,3 +389,8 @@ Would it make sense to have an invariant like the leakage invariant for the pc?
 	projRight rv; there is no "NonSyncVal => False" any more. Stale text in secret-data-walls (whole premise),
 	relval-model, relval-rewrite-over-secrets, core-executor-internals, cfgver-solve-vc, cfgver-executor,
 	rocq-implementation + references/peval-mask-algebra.md (grep 'NonSyncVal.*False' under .claude/skills).
+- merge gate DISABLED (2026-11-03, Emiel: "cost us more than it has gained us"): .git/hooks/pre-merge-commit renamed to
+	pre-merge-commit.disabled-2026-11-03; scripts/gate.sh kept for manual use. Docs still describe it as mandatory:
+	branch-workflow + phase-check skills ("runs once, at the merge", the accepted-risk section), CLAUDE.md (Results.v
+	"the merge gate's build target", phase-check paragraph), git-workflow-guard.sh's deny text. Fold into the skill
+	streamlining. Also decide the phase-check step 2: -vos/-vok leaves no .vo (measured slower than a full rebuild).

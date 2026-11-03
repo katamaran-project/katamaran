@@ -510,3 +510,28 @@ CountdownComposedResult.v, SwapComposedResult.v, IrisInstanceBinary.v,
 3. Rebuild; RSA files green (RsaCcopy alone is ~23 min / 9.6 GB).
 4. Confirm the backlog order (§12.0 OPEN) with Emiel before R1/R4 and the
    RSA cleanup.
+
+### 12.7 End of migration (2026-11-03, D-M5 steps 1-4)
+- **Trusted surface vs KatamaranRel 8185c80b: EMPTY.** Noninterference.v,
+  Layout.v, Machine.v, RiscvPmp/Base.v byte-identical; the 8 Result files that
+  differ change only proof bodies (stmtdiff.py two-ref) except `ccf_annotV`
+  (RsaCcopyGateResult, ghost list, proof-side only: dropped the mux flag of
+  `ccf_glue`). No `*_instrs`/`_data`/`_regs` changed. The 7 changed files in
+  the kernel's import closure change only relational definitions; the step
+  relation (SmallStep/Step.v) runs on `evalVal`/`CStoreVal`/
+  `pattern_match_val`, all unchanged. Shown to Emiel.
+- **Comprehension check** done with Emiel (Q1-Q5).
+- **Merge gate DISABLED** by Emiel mid-step ("cost us more than it has gained
+  us"): `.git/hooks/pre-merge-commit` renamed `.disabled-2026-11-03`.
+- **Full timed closure build** after merging KatamaranRel (0308ecb9): `make -j1
+  -B` of Results.vo + GenCompose.vo + the 5 gate-less RSA files, 160 files
+  green, 1:09:20 wall, 3604 s user, peak 10.4 GB (MuladdParamVC). Hole scan
+  clean; axiom probes NOT run (gate off). Per file:
+  `relval-pair-baseline/rsa-final-per-file.tsv`. On the 146 files with a
+  baseline (`per-file.tsv` = KatamaranRel at the relval-pair branch point):
+  **0.79x total**; MuladdParamVC 298 s (0.46x of 651.5), TailVC 177 s (0.50x),
+  Solver.vo 0.86x. Above 1.15x: Contracts 1.42x (10.4 vs 7.4 s), LoopK 1.38x,
+  LoopM 1.36x, CheckScalarParamLoop1 1.29x, MuladdParamTail 1.24x -- small
+  absolutes; LoopK/M were already ≈1.06x on KatamaranRel's arrv version, so
+  ≈1.3x is the pair model's own. RsaCcopy 56 s (was 625 s on 10-31, ~23 min
+  on KatamaranRel).
