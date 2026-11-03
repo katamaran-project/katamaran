@@ -64,6 +64,14 @@ The hook runs the gate against the *merged* working tree. If it exits non-zero t
 merge commit is aborted (the merge stays staged-but-uncommitted); recover with
 `git merge --abort`, fix on the topic branch, and merge again.
 
+## Checking a phase on a topic branch: NOT the full gate
+
+Between phases the full gate is NOT the check. It runs once, at this merge. What
+to rebuild mid-plan (changed files, users of changed names, a sentinel set, `-vos`
+for the rest) is the **phase-check** skill, and
+`.claude/hooks/phase-check-guard.sh` denies a full-closure build until it is
+loaded (Emiel, 2026-11-03).
+
 ## What the gate checks (`scripts/gate.sh`)
 
 1. **Build (target closure)** — regenerates `Makefile.coq`, then

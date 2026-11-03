@@ -70,6 +70,12 @@ The active development area is `case_study/RiscvPmp/CFGVer/`.
 >   silently-killed/OOM signature, and **`cfgver-scaling-diagnostics`** for
 >   running/writing up a scaling-driver investigation as a durable record (the
 >   fuller treatment of `rocq-timeout-triage`'s own one-factor-at-a-time step).
+>   Also **`phase-check`** (2026-11-03): how much to rebuild and re-check
+>   mid-plan. Changed files, users of changed names and a sentinel set get a
+>   full check, the rest `-vos`; the full gate runs once, at the merge. It is
+>   gated by `.claude/hooks/phase-check-guard.sh`, which denies a full-closure
+>   build (`Results.vo`, bare `make -f Makefile.coq`, `scripts/gate.sh`) until
+>   the skill is loaded.
 >
 > Caveat measured the same day: `name-only` *de-weights* competition, it does not
 > remove it — a bare NAME can still win on an exact jargon match (`iApply` →
