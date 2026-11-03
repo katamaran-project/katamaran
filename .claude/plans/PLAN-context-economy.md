@@ -59,6 +59,18 @@ Status 2026-11-03: Phase 0 DONE (`5b5abc52`, idle-resume guard). Phase 1 DONE
   SessionStart hook announces the pending handoff → user says "go".
   (Hooks cannot trigger `/clear` themselves.)
 
+- D12 Claude restarts ITSELF during long solo work, by two mechanisms (Emiel,
+  2026-11-03, "I want Claude to be able to do this himself"):
+  (a) within a session: the coordinator restarts workers (Phase 2, D9);
+  (b) across sessions: a phase-runner script chains headless `claude -p`
+  sessions, one per phase, driven by `.claude/HANDOFF` (Phase 2b).
+- D13 Runner stop rule: an OPEN QUESTION or DESIGN CHOICE in the handoff — and
+  only that (red build, phase cap, token budget were offered and NOT chosen).
+  Machine-readable form: `/handoff` writes a 4th pointer field
+  `NEEDS-EMIEL: <question>`; the runner stops on it, the announcer shows it.
+  PROPOSED, not decided: a no-progress guard (same pointer after a run → stop),
+  without which a phase that never finishes is restarted indefinitely.
+
   **D11 result.** `.claude/skills/handoff/SKILL.md` (user-invoked only,
   `disable-model-invocation: true`, like `reading-quiz`; made via skill-creator,
   no trigger evals since it is never model-invoked) and
@@ -122,6 +134,16 @@ Status 2026-11-03: Phase 0 DONE (`5b5abc52`, idle-resume guard). Phase 1 DONE
    general-purpose's 53k). Verify `maxTurns`/`autoCompactWindow` with a trivial agent.
    Check whether `skill-path-guard.sh` recognises a skill loaded INSIDE a subagent
    (its marker is keyed by session id).
+2b. **Phase runner** (D12b, D13). A script (e.g. `.claude/tools/phase-runner.sh`):
+   read `.claude/HANDOFF` → stop if it carries `NEEDS-EMIEL:` (or is absent) →
+   run ONE headless session with the start line, transcript/stream logged to a
+   file → on exit, re-read the pointer and loop. Extend `/handoff` and
+   `handoff-announce.sh` with the 4th field. To verify, not assume: how auto
+   permission mode behaves under `claude -p`; that rocq-mcp and the project
+   hooks load headless; how the user is told a run stopped (desktop
+   notification?). **Benchmark ONE phase before chaining** (July 2026: an
+   unmeasured `claude -p` fan-out drained the quota) — measure it with
+   `transcript-usage.py`. Ask Emiel about the no-progress guard (D13) first.
 3. **Skill** `session-economy` via `skill-creator`; gate = named by the telemetry
    hook and idle guard when they fire, plus a pointer from `phase-check`. CLAUDE.md
    skill-map line → `skill-routing-maintenance` (scoped: ~6 queries).
@@ -167,4 +189,7 @@ a subagent (its marker is keyed by session id; a subagent shares the parent's
 session_id, per the Phase 1 probe). `phase-worker` must keep the Handoff section
 current at every milestone (D9) and is the natural caller of the `/handoff`
 steps — it cannot invoke the user-only skill, so give it the steps by pointer to
-`.claude/skills/handoff/SKILL.md`. No open questions.
+`.claude/skills/handoff/SKILL.md`. Also check early whether a worker subagent
+can itself start subagents (e.g. `rocq-prover`); if not, the coordinator starts
+the proof agents. One open question, for Phase 2b but cheap to ask at the start:
+the no-progress guard (D13).
