@@ -337,6 +337,16 @@ Would it make sense to have an invariant like the leakage invariant for the pc?
 	+ DONE 2026-11-01 (take_cons deleted, take_first is the only take): the two take forms, take_first (equation) vs take_cons (pattern): may collapse to one.
 	+ DONE 2026-11-01 (empty_elim gives vs = [] for w >= 1; pad replaced by count0, which keeps the array; peval t ++ [] ~> t): clem_arrv_empty / empty_elim / pad: "never conclude vs = [] from a count of 0 (NonSyncVal [] [])". Under pairs a
 	  length-0 pair IS ([],[]) = SyncVal [], so empty_elim can give vs = [] and pad may become unnecessary.
+	+ OPEN, ACCEPTED FOR NOW (Emiel, 2026-11-03): the take_cons -> take_first swap costs RsaCcopyGate.v 1.8x in its
+	  closer (solve_cc_all 9.1 -> 16.4 s user, same-session A/B against f4f50562; vm_compute + solve_vc unchanged at
+	  ~1.1 s; file 37 -> 57 s). Cause: take_first's precondition clem_nonzero n (take_cons had none, its value was
+	  syntactically x :: r). The solver cannot prove `k + 4*ml <> 0` (k = 1..4, way_back's header takes) or `1 + k <> 0`
+	  (twice, loop glue) without a bound, so these six conjuncts reach the residual: rv_leaf_cc leaves 8 -> 20,
+	  ~0.44 s each, mostly its `cbn -[inst_symprop] in *` over the whole context, not the arithmetic. Options:
+	  (1) a goal-only fast path in rv_leaf_cc for evar-free `<> 0` leaves (RsaCcopy.v, closer only, symptom);
+	  (2) state take_first's precondition as `vs <> []` instead of `n <> 0` (equivalent given the arrv, w >= 1), so a
+	  known cons value discharges it in the solver (Verifier.v + SpecIris.v + AUDIT row; check whether the loop-glue
+	  takes also have a known cons value); (3) leave it. Claude's recommendation: (2).
 	+ try_isolate_inner (Solver.v, 8ee330d7): its secLeakT s guard is "load-bearing" only because of the tag
 	  (y - s is NonSyncVal a a <> SyncVal a). Under pairs the inversion is exact; drop the guard (relval_isolate).
 	Pre-RSA, same cause (used by RSA, lower priority):
