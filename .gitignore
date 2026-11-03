@@ -44,3 +44,5 @@ case_study/RiscvPmp/CFGVer/Example/ZZ*
 
 # per-machine phase-handoff pointer (PLAN-context-economy D11; written by /handoff)
 .claude/HANDOFF
+# phase-runner.sh logs: stream-json transcripts, runs.tsv, stops.log, lock (PLAN-context-economy 2b)
+.claude/runner-logs/

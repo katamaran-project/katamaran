@@ -2,8 +2,10 @@
 # SessionStart: announce a pending phase handoff written by /handoff.
 # PLAN-context-economy D11:  /handoff  ->  /clear  ->  (this hook)  ->  "go".
 #
-# .claude/HANDOFF holds ONE line:   <plan path> | <start line> | <date> <commit>
+# .claude/HANDOFF holds ONE line:   <plan path> | <start line> | <date> <commit> [| NEEDS-EMIEL: <question>]
 # e.g.  .claude/plans/PLAN-context-economy.md | Execute PLAN-context-economy Phase 2 | 2026-11-03 abc1234
+# The optional 4th field (D13) marks a phase blocked on Emiel's answer; it is
+# what stops phase-runner.sh, and here it is shown as the question to ask first.
 #
 # Fires on source=startup|clear only (resume/compact continue an existing
 # session, which already knows). Shows the user a one-line systemMessage and
@@ -28,9 +30,14 @@ line=$(grep -m1 -v '^[[:space:]]*$' "$f" 2>/dev/null) || exit 0
 plan=$(printf '%s' "$line" | awk -F' [|] ' '{print $1}')
 start=$(printf '%s' "$line" | awk -F' [|] ' '{print $2}')
 stamp=$(printf '%s' "$line" | awk -F' [|] ' '{print $3}')
+need=$(printf '%s' "$line" | awk -F' [|] ' '{print $4}')
+case "$need" in NEEDS-EMIEL:*) q=${need#NEEDS-EMIEL:}; q=${q# } ;; *) q= ;; esac
 [ -n "$plan" ] && [ -n "$start" ] || exit 0
 
-if [ -r "$root/$plan" ]; then
+if [ -r "$root/$plan" ] && [ -n "$q" ]; then
+  msg="Pending handoff BLOCKED on your answer: $q  ($start, $plan, $stamp)."
+  ctx="PENDING HANDOFF from .claude/HANDOFF (written $stamp): \"$start\", plan $plan -- BLOCKED on a question for Emiel: \"$q\". The phase-runner stopped on it. If the user answers it or says go: read the plan's status line and Handoff section (the question's context is there), record his answer as a decision in the plan, remove the NEEDS-EMIEL field from .claude/HANDOFF, then execute the start line. If the user asks for something else, ignore this."
+elif [ -r "$root/$plan" ]; then
   msg="Pending handoff: $start  ($plan, $stamp). Reply \"go\" to start it."
   ctx="PENDING HANDOFF from .claude/HANDOFF (written $stamp): \"$start\". Plan: $plan. If the user replies \"go\" (or similar), execute exactly that: read the plan's status line and its Handoff section, plus only what that section names -- not the whole plan history. If the user asks for something else, ignore this. When the phase ends, suggest /handoff to the user (it is user-invoked; you cannot run it)."
 else

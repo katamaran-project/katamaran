@@ -59,5 +59,8 @@ STUCK | <PLAN-name> Phase <N> | <short commit or -> | <the question or blocker, 
 Before DONE: make the plan's status line and Handoff name the NEXT phase
 (handoff steps 2–4), commit, and write `.claude/HANDOFF` (step 5). Before STUCK:
 the Handoff must already describe where you are, and the question must be
-answerable without reading your transcript. After the line: commits made, what
+answerable without reading your transcript. When the STUCK is a question or a
+design choice for Emiel, also rewrite `.claude/HANDOFF` with the 4th field
+`| NEEDS-EMIEL: <the question>` (handoff step 5): in a headless run that field
+is what stops the phase runner instead of letting it retry (D13). After the line: commits made, what
 was verified and how, what was deliberately not done. No goal dumps, no logs.

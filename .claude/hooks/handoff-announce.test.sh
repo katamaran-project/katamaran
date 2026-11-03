@@ -9,6 +9,7 @@ t () { # $1 expect ANNOUNCE|STALE|SILENT, $2 label, $3 source
   local out got r
   out=$(jq -n --arg s "$3" '{source:$s,session_id:"s"}' | bash "$H" 2>/dev/null); rc=$?
   if [ -z "$out" ]; then got=SILENT
+  elif printf '%s' "$out" | jq -e '.systemMessage|startswith("Pending handoff BLOCKED")' >/dev/null 2>&1; then got=BLOCKED
   elif printf '%s' "$out" | jq -e '.systemMessage|startswith("Pending")' >/dev/null 2>&1; then got=ANNOUNCE
   elif printf '%s' "$out" | jq -e '.systemMessage|startswith("Stale")' >/dev/null 2>&1; then got=STALE
   else got=BADJSON; fi
@@ -23,6 +24,12 @@ t SILENT   "resume: session already knows"        resume
 t SILENT   "compact: session already knows"       compact
 printf '\n\n.claude/plans/PLAN-x.md | Execute PLAN-x Phase 3 | d c\n' > "$R/.claude/HANDOFF"
 t ANNOUNCE "leading blank lines tolerated"        clear
+echo ".claude/plans/PLAN-x.md | Execute PLAN-x Phase 3 | d c | NEEDS-EMIEL: A or B?" > "$R/.claude/HANDOFF"
+t BLOCKED  "4th field NEEDS-EMIEL -> question shown" clear
+out=$(jq -n '{source:"clear"}' | bash "$H" | jq -r .systemMessage)
+case "$out" in *"A or B?"*) echo "ok   question text in message"; pass=$((pass+1));; *) echo "FAIL question text: $out"; fail=$((fail+1));; esac
+echo ".claude/plans/PLAN-x.md | Execute PLAN-x Phase 3 | d c | some note" > "$R/.claude/HANDOFF"
+t ANNOUNCE "4th field without NEEDS-EMIEL: plain"  clear
 echo ".claude/plans/PLAN-gone.md | Execute PLAN-gone Phase 1 | d c" > "$R/.claude/HANDOFF"
 t STALE    "plan file missing -> stale, not announced" clear
 echo "garbage without separators" > "$R/.claude/HANDOFF"

@@ -1,6 +1,7 @@
 """Sum Claude Code token usage over a project's session transcripts.
 
-Usage: python3 -I .claude/tools/transcript-usage.py ~/.claude/projects/-home-emiel-Documents-katamaran
+Usage: python3 -I .claude/tools/transcript-usage.py ~/.claude/projects/-home-emiel-Documents-katamaran [SESSION_ID...]
+       (SESSION_IDs restrict the sums to those sessions, e.g. one phase-runner run)
 
 Per session (main + its subagents/): requests, cache reads/writes, output, an
 input-equivalent WEIGHTED total (cache read 0.1, 5-min write 1.25, 1-h write 2,
@@ -17,7 +18,10 @@ Local only: reads files, makes no API calls.
 """
 import json, sys, glob, os, collections
 
+if len(sys.argv) < 2 or not os.path.isdir(sys.argv[1]):
+    sys.exit(__doc__.split("\n\n")[1] + "\nerror: first argument must be a project transcript directory")
 root = sys.argv[1]
+only = set(sys.argv[2:])
 # Relative price weights vs base input (Anthropic list-price ratios):
 W = dict(inp=1.0, cw5=1.25, cw1h=2.0, cr=0.1, out=5.0)
 
@@ -81,6 +85,8 @@ def load(path):
 sessions = {}
 for p in glob.glob(os.path.join(root, '*.jsonl')):
     sid = os.path.basename(p)[:-6]
+    if only and sid not in only:
+        continue
     main = load(p)
     subs = [load(s) for s in glob.glob(os.path.join(root, sid, 'subagents', '*.jsonl'))]
     sessions[sid] = (main, subs)
@@ -104,6 +110,8 @@ for k in ['req', 'inp', 'cw5', 'cw1h', 'cr', 'out', 'weighted']:
     print(f"  {k:9s} {M(grand[k])}   subagents {M(grand_sub[k])}")
 print("models (requests):", dict(models))
 tw = grand['weighted'] + grand_sub['weighted']
+if not tw:
+    sys.exit("no usage found (wrong directory, or no matching session ids)")
 print("\nshare of weighted cost by component (main+sub):")
 for k in W:
     v = (grand[k] + grand_sub[k]) * W[k]

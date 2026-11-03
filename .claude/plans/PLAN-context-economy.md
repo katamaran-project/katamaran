@@ -3,8 +3,9 @@
 Status 2026-11-03: Phase 0 DONE (`5b5abc52`, idle-resume guard). Phase 1 DONE
 (`dc6b57c3`, telemetry hook). D11 handoff automation DONE (`/handoff` skill +
 `handoff-announce.sh`). Phase 2 DONE (three agents + per-agent skill markers;
-live checks passed 2026-11-03: `maxTurns` works, `reader` starts at 22.9k,
-per-agent marker live; `zz-probe` deleted). **Next: Phase 2b (runner).**
+live checks passed 2026-11-03, `52baf302`). Phase 2b BUILT OFFLINE (runner +
+coordinator prompt + NEEDS-EMIEL field, 18+14 tests). **Next: Phase 2b benchmark,
+one real `claude -p` run. Which phase it runs on is Emiel's call.**
 
 ## Why (measured, October 2026 transcripts: 31 sessions, 6,536 requests)
 
@@ -77,6 +78,16 @@ per-agent marker live; `zz-probe` deleted). **Next: Phase 2b (runner).**
   probe): a subagent's hook input carries the parent's `session_id`, so a skill
   the coordinator loaded would otherwise satisfy a worker that never loaded it.
   Each agent must load its own skills.
+- D15 Run shape (Emiel, 2026-11-03): each headless run is a COORDINATOR session
+  driving ONE `phase-worker`, restarted on telemetry. It is not a session that
+  does the phase itself. Restart threshold: the worker's first `crossed 450k`
+  line, and only if HEAD moved since that worker started. Otherwise the run ends
+  as STUCK. The threshold is **Claude's pick**, not Emiel's.
+- D16 `/handoff` STAYS user-invoked (Emiel, 2026-11-03). He first chose to make it
+  model-invocable. Once D15 meant the worker writes the handoff itself
+  (handoff steps 2–5), that would no longer help the runner, and he reversed it.
+- D17 The `claude -p` benchmark runs on a REAL plan phase (Emiel, 2026-11-03), not
+  a dummy. Which phase is still open (see Handoff).
 
   **D11 result.** `.claude/skills/handoff/SKILL.md` (user-invoked only,
   `disable-model-invocation: true`, like `reading-quiz`; made via skill-creator,
@@ -189,6 +200,43 @@ per-agent marker live; `zz-probe` deleted). **Next: Phase 2b (runner).**
    notification?). **Benchmark ONE phase before chaining** (July 2026: an
    unmeasured `claude -p` fan-out drained the quota) — measure it with
    `transcript-usage.py`. Ask Emiel about the no-progress guard (D13) first.
+   **Phase 2b result so far (2026-11-03): built and tested OFFLINE, no real
+   `claude -p` run yet.**
+   - `.claude/tools/phase-runner.sh [--once] [--dry-run]`. It stops on: an absent,
+     empty, malformed or stale pointer; a start line that is not `Execute …`; a
+     `NEEDS-EMIEL:` 4th field; and the no-progress guard (pointer unchanged after
+     `RUNNER_RETRIES`=2 consecutive runs; a crashing `claude` counts as no
+     progress). No phase cap and no budget (D13). An `flock` allows one runner
+     per tree. Each run: `claude -p "<start>" --permission-mode auto
+     --output-format stream-json --verbose --append-system-prompt "<coordinator>"`
+     → `.claude/runner-logs/<ts>.jsonl` (gitignored), `runs.tsv` (ts, session id,
+     rc, pointer before/after), `stops.log`, plus `notify-send` on each stop
+     (`RUNNER_NOTIFY=0` disables). `--append-system-prompt-file` is not in
+     `claude --help` 2.1.317, so the runner passes the file's content.
+   - `.claude/tools/phase-runner-coordinator.md`: the coordinator's system prompt
+     (D15). It neither reads nor edits; it arms a telemetry Monitor, spawns
+     `phase-worker`, waits, restarts per D15, and ends with
+     `RUN-END | DONE|STUCK|ABORTED | …`.
+   - 4th pointer field `| NEEDS-EMIEL: <question>`: in `handoff/SKILL.md` step 5
+     (body only, D16) and in `phase-worker.md` (it writes the field before a
+     question-STUCK, so the coordinator never touches the tree, D10).
+     `handoff-announce.sh` shows "Pending handoff BLOCKED on your answer: <q>"
+     and tells the model to record the answer as a decision and clear the field.
+   - Tests: `phase-runner.test.sh` 18/18 (stub `claude` replaying per-run
+     actions), `handoff-announce.test.sh` 14/14 (3 new).
+   - `transcript-usage.py` now takes optional SESSION_IDs, to measure one run,
+     and refuses a bad directory. The "ZeroDivisionError" from Phase 2 was
+     Claude passing `--help` as the directory.
+   - Trap: `skill-bash-write-guard.sh` DENIED a Python heredoc that wrote
+     `phase-worker.md` only because its text MENTIONED
+     `.claude/skills/handoff/SKILL.md`. That is a false positive (the
+     "interpreter opening it for writing" rule matches any SKILL.md path in the
+     command). Workaround: the Edit tool. Not fixed.
+   - UNVERIFIED and the main risk: whether `claude -p` waits for a BACKGROUND
+     subagent. If the coordinator's turn ends while the worker is running, the
+     process may exit and kill the run. Also unverified: auto mode under `-p`,
+     whether rocq-mcp and the hooks load headless, and the session id in the
+     stream-json init line.
 3. **Skill** `session-economy` via `skill-creator`; gate = named by the telemetry
    hook and idle guard when they fire, plus a pointer from `phase-check`. CLAUDE.md
    skill-map line → `skill-routing-maintenance` (scoped: ~6 queries).
@@ -214,29 +262,27 @@ None open (answered 2026-11-03 as D8–D10).
 
 ## Handoff (for the next session)
 
-Start line: **Execute PLAN-context-economy Phase 2**
+Start line: **Execute PLAN-context-economy Phase 2b**  (the benchmark step)
 
-Read: the status line, D8–D10 + D13–D14, "Established facts", and Phase 2
-(its "result so far"). Then Phase 2b. Nothing else is needed.
+Read: the status line, D13 and D15–D17, and Phase 2b's "result so far". Nothing else.
 
-Preconditions: a NEW `claude` process (the agents were added 2026-11-03; agent
-files, like hooks, are captured at session start). `.claude/agents/zz-probe.md`
-must still exist (untracked).
+Preconditions: none beyond this commit. The runner is started by Emiel from a
+terminal, not from inside a session.
 
-Phase 2 live checks, cheap, in this order — record each result in Phase 2:
-1. The Agent tool lists `phase-worker`, `rocq-prover`, `reader`, `zz-probe`.
-2. `zz-probe` asked for 4 single Bash calls: does `maxTurns: 2` cut it off?
-   `autoCompactWindow` is only checkable indirectly — note whether the agent
-   errors on it; if unverifiable cheaply, say so and drop it from the agents.
-3. One `reader` run on a real question (e.g. "where is `skill-load-marker.sh`
-   registered and on which matcher"): check the report shape, and its start-up
-   context from `<scratchpad>/telemetry/events.log` or
-   `.claude/tools/transcript-usage.py` on its subagent transcript (target:
-   near Explore's 19k).
-4. A live per-agent marker: a subagent loads a skill → the marker is
-   `claude-skillload-<slug>-<sid>_<agent_id>` in /tmp.
-5. Delete `zz-probe.md`. `phase-worker` and `rocq-prover` get their real test
-   in Phase 4 (trial), not here.
+Open question, ask FIRST: **which real plan phase is the benchmark (D17)?** It
+must have a current Handoff section and a pointer-ready start line.
 
-Then Phase 2b (runner), with the no-progress guard = N retries (D13, default
-N=2). Benchmark ONE headless run before chaining.
+Then, in order:
+1. Recommended, needs Emiel's OK: a ~1-minute Haiku smoke test of the main risk.
+   `claude -p --model haiku --output-format stream-json --verbose "spawn a
+   general-purpose agent (model haiku) that runs echo hi; wait for its result;
+   then reply DONE"`. Check that the stream contains the subagent's result
+   BEFORE the final `result` record. If `-p` does not wait, the coordinator design
+   (D15) needs a foreground mechanism before any Opus run.
+2. Write `.claude/HANDOFF` for the chosen phase. Emiel runs
+   `.claude/tools/phase-runner.sh --once`.
+3. Measure: `python3 -I .claude/tools/transcript-usage.py
+   ~/.claude/projects/-home-emiel-Documents-katamaran <session id from runs.tsv>`.
+   Check the coordinator's own context stayed small, and record auto mode,
+   rocq-mcp and hook loading as observed.
+4. Only then run the runner without `--once` (chaining), and move on to Phase 3.

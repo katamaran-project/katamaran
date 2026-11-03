@@ -51,6 +51,15 @@ plan's status line + Handoff section alone, without asking anything?**
    ```
    If the plan is now finished, delete `.claude/HANDOFF` instead, so no stale
    pointer gets announced.
+   **If the next phase cannot start without Emiel's answer** (an open question
+   or a design choice; PLAN-context-economy D13), append a 4th field:
+   ```
+   <plan path> | Execute <PLAN-name> Phase <N> | <YYYY-MM-DD> <short commit> | NEEDS-EMIEL: <the question>
+   ```
+   This field is the one thing that stops `.claude/tools/phase-runner.sh`.
+   The announcer shows the question, and the next session asks it before
+   starting. The question must also be written in the Handoff section, with
+   enough context to be answered from there.
 
 6. **Tell the user**, in three lines at most: what was recorded, the commit, and
    the next step — `/clear`, then reply **go**.
@@ -58,6 +67,11 @@ plan's status line + Handoff section alone, without asking anything?**
    EXIT and relaunch `claude` instead. Hook configuration is captured when a
    session starts, so a `/clear` in the same process may not run the new hooks,
    including the announcer itself.
+
+**Headless runs** (`phase-runner.sh`): this skill stays user-invoked. A
+`phase-worker` instead reads this file and does steps 2–4 at every milestone,
+and step 5 (pointer, incl. `NEEDS-EMIEL`) at DONE or at a question-STUCK. It
+skips step 6, because nobody is there to read it.
 
 ## What the next session sees
 
