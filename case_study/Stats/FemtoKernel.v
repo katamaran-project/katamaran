@@ -13,7 +13,8 @@ From Katamaran Require Import
      RiscvPmp.BlockVer.Spec
      RiscvPmp.BlockVer.PartialVerifier
      RiscvPmp.Everything
-     RiscvPmp.FemtoKernel.
+     RiscvPmp.FemtoKernel.Kernel
+     RiscvPmp.FemtoKernel.BlockVerification.
 
 Import Sig.RiscvPmpSignature.
 Import RiscvPmpProgram.
@@ -24,7 +25,7 @@ Import SymProp.Statistics.
 Import ListNotations.
 
 (* Number of instructions, then [raw; postprocess; postprocess2 (the VC used in
-   FemtoKernel.v)]. *)
+   FemtoKernel/BlockVerification.v)]. *)
 Definition block_stats {Σ} pre b post : N * list (list N) :=
   let vc := @RVPTVl.sannotated_block_verification_condition Σ pre b post wnil in
   (N.of_nat (length (filter_AST b)),
