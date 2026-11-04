@@ -157,6 +157,10 @@ Module inv := invariants.
     Definition femto_pmp0cfg_bits_1 : Val (ty.bvec 12) := fst (imm_split_bv femto_pmp0cfg_bits).
     Definition femto_pmp0cfg_bits_2 : Val (ty.bvec 20) := snd (imm_split_bv femto_pmp0cfg_bits).
 
+    (* adv_addr_end (= maxAddr) no longer fits in a 12-bit immediate. *)
+    Definition adv_addr_end_1 : Val (ty.bvec 12) := fst (imm_split_bv (bv.of_N adv_addr_end)).
+    Definition adv_addr_end_2 : Val (ty.bvec 20) := snd (imm_split_bv (bv.of_N adv_addr_end)).
+
     (* ASTs with a very limited form of labels, that allow us to refer to the address of the current instruction *)
     (* TODO: have the symbolic executor work with these types of instructions directly? *)
     Inductive ASM :=
@@ -200,7 +204,8 @@ Module inv := invariants.
         UTYPE bv.zero ra RISCV_AUIPC
         ; Λ x, ITYPE (bv.of_N (adv_start - (x - 4))) ra ra RISCV_ADDI
         ; CSR MPMPADDR0 ra zero false CSRRW
-        ; ITYPE (bv.of_N adv_addr_end) zero ra RISCV_ADDI
+        ; UTYPE adv_addr_end_2 ra RISCV_LUI
+        ; ITYPE adv_addr_end_1 ra ra RISCV_ADDI
         ; CSR MPMPADDR1 ra zero false CSRRW
         ; UTYPE femto_pmp0cfg_bits_2 ra RISCV_LUI
         ; ITYPE femto_pmp0cfg_bits_1 ra ra RISCV_ADDI
@@ -874,7 +879,7 @@ Module inv := invariants.
   Defined.
 
   Lemma adv_is_live y : (y ∈ advAddrs)%stdpp → (y ∈ liveAddrs)%stdpp.
-  Proof. unfold advAddrs, liveAddrs.
+  Proof. rewrite liveAddrs_eq; unfold advAddrs, liveAddrs_def.
          apply bv.seq_subseteq; now compute.
   Qed.
 
@@ -910,13 +915,13 @@ Module inv := invariants.
     intros [p HPmp]. rewrite /femto_pmpentries.
     cbv [Pmp_access Gen_Pmp_access pmp_check_aux pmp_check_rec pmp_match_entry] in HPmp.
     cbn in HPmp.
-    case_if H; first now compute. clear H.
+    case_if H; first (exfalso; compute in HPmp; easy). clear H.
     case_if H; first by exfalso.
     apply orb_false_elim in H as [_ Hhi]. apply bv.uleb_ugt, bv.ult_iff_unsigned_lt in Hhi.
     case_if H'; last by exfalso.
     apply andb_prop in H' as [Hlo _]. apply bv.uleb_ule, bv.ule_iff_unsigned_le in Hlo.
     apply bv.elem_of_seq_bounds; first now compute.
-    revert Hlo Hhi. rewrite -!bv.of_Z_N -!bv.unsigned_of_Z_small; try lia; now compute.
+    revert Hlo Hhi. rewrite -!bv.of_Z_N -!bv.unsigned_of_Z_small; try lia; try (intros; split); now compute.
   Qed.
 
   (* Use permutation rather than membership to avoid indexes *)
@@ -1417,8 +1422,7 @@ Module inv := invariants.
                                         bv.seq (bv.of_N mmio_handler_addr_block2) (Z.of_N mmio_handler_size_block2) ++
                                        (bv.seq (bv.of_N data_addr) (Z.of_N data_size) (* There is no data; conjunct is just here for conformity *)) ++ advAddrs.
   Proof.
-    (* TODO: scalable proof *)
-    by compute.
+    rewrite liveAddrs_eq. by vm_compute.
   Qed.
 
   Lemma intro_ptstomem_word `{sailGS Σ, iostateG IOState Σ} v0 v1 v2 v3 (a : Val ty_word) :
@@ -1511,6 +1515,7 @@ Module inv := invariants.
     iApply (big_sepL_mono with "Hlist"). intros ? ? Hsom. cbn.
     iIntros "$". iPureIntro.
     rewrite /= withinMMIO_one /not; apply mmio_ram_False.
+    rewrite liveAddrs_eq.
     eapply bv.seq_subseteq, list_elem_of_lookup_2, Hsom;
       change (bv.unsigned (bv.of_N minAddr)) with (Z.of_N minAddr); lia.
   Qed.

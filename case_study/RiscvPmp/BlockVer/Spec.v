@@ -1065,6 +1065,7 @@ Module Type RiscvPmpIrisInstanceWithContracts
       { rewrite bool_decide_eq_false.
         intros Hw. pose proof (proj1 Hw).
         eapply mmio_ram_False, withinMMIO_elem_of_base, Hw.
+        rewrite liveAddrs_eq.
         apply bv.elem_of_seq_bounds; first done.
         change xlenbits with 32 in *. cbn. unfold maxAddr, minAddr in *. lia.
       }

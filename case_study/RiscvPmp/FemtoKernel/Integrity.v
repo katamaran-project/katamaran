@@ -280,7 +280,7 @@ Section Integrity.
         asn_interpret femtokernel_handler_secret_write_pre
           (csrs_valuation archstate vmie ►► [env].["x1" ∷ ty_xlenbits ↦ vx1].["secret" ∷ ty_xlenbits ↦ secret]
                                          ►► [env].["a" ∷ ty_xlenbits ↦ bv.of_N handler_secret_write_addr]) ∗
-        interp_gprs {[x1]} ∗
+        interp_gprs {[x1; x5]} ∗
         phantom_res ∗
         ptsto_instrs (bv.of_N handler_exit_addr) (filter_AST femtokernel_handler_exit) ∗
         ▷ (∀ priv ms ss pc, ⌜priv ≠ Machine⌝ -∗
@@ -296,12 +296,12 @@ Section Integrity.
       iApply (RVPTVl.WP_loop_semTripleBlock with "Hpro [Hpre] Htrip"); first iExact "Hpre".
       iIntros (an) "(Hpost & Hpc & Hinstrs & Hnpc)".
       iEval (cbn - [interp_ptstomem]) in "Hpost".
-      iDestruct "Hpost" as "(Hshared & Hmstatus & [%Han _] & Hx1 & Hdata)".
-      iAssert (interp_gprs ∅) with "[Hgprs Hx1]" as "Hgprs".
-      { iApply (interp_gprs_with_excluded (exclude := {[x1]})); try solve_subseteq.
+      iDestruct "Hpost" as "(Hshared & Hmstatus & [%Han _] & Hx1 & Hdata & Hx5)".
+      iAssert (interp_gprs ∅) with "[Hgprs Hx1 Hx5]" as "Hgprs".
+      { iApply (interp_gprs_with_excluded (exclude := {[x1; x5]})); try solve_subseteq.
         iFrame "Hgprs".
         reduce_big_sepS_big_sepL.
-        iFrame "Hx1". by cbn. }
+        iFrame "Hx1 Hx5". by cbn. }
       iAssert (▷ (∀ priv ms ss pc, ⌜priv ≠ Machine⌝ -∗
                  ptsto_instrs (bv.of_N handler_exit_addr) (filter_AST femtokernel_handler_exit) -∗
                  LoopVerificationl.M_Trap (femto_archstate priv ms ss pc) -∗ phantom_res -∗ WP_loop))%I
@@ -360,11 +360,11 @@ Section Integrity.
           unfold WP_loop.
           iApply (semWP_fun_loop_off with "[Hoff]"); [iExact "Hoff" | by iIntros].
       - (* Perform the secret write. *)
-        iAssert (interp_gprs {[x1]}) with "[Hgprs Hx5 Hx10]" as "Hgprs".
-        { iApply (interp_gprs_with_excluded_gen {[x1]} (exclude2 := {[x5; x10]})); try solve_subseteq.
+        iAssert (interp_gprs {[x1; x5]}) with "[Hgprs Hx10]" as "Hgprs".
+        { iApply (interp_gprs_with_excluded_gen {[x1; x5]} (exclude2 := {[x10]})); try solve_subseteq.
           iFrame "Hgprs".
           reduce_big_sepS_big_sepL.
-          iFrame "Hx5 Hx10". by cbn. }
+          iFrame "Hx10". by cbn. }
         iDestruct "Hdata" as "(%secret & Hdata)".
         iAssert (▷ (∀ priv ms ss pc, ⌜priv ≠ Machine⌝ -∗
                    ptsto_instrs (bv.of_N handler_secret_write_addr) (filter_AST femtokernel_handler_secret_write) -∗
@@ -376,7 +376,7 @@ Section Integrity.
           iApply ("Hk" with "[//] Hinstrs Hhshutdown Hhsecret [Hdata] Hhexit Htrap HR").
           by iExists _. }
         iApply (femtokernel_handler_secret_write_safe _ secret _ _ Hmpp with "Hinv"); cbn - [interp_ptstomem].
-        iFrame "Hhsecret Hpc Hnpc Hmscratch HaccU Hmstatus Hgprs Hhexit Hx1 Hdata HR Hksecret".
+        iFrame "Hhsecret Hpc Hnpc Hmscratch HaccU Hmstatus Hgprs Hhexit Hx1 Hx5 Hdata HR Hksecret".
         repeat iDestruct "Hshared" as "($ & Hshared)". iFrame "Hshared".
         repeat iSplit; try iPureIntro; try done; by vm_compute.
     Qed.

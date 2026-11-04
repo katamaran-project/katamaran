@@ -249,7 +249,7 @@ Section BlockVerification.
         mstatus ↦ term_record rmstatus [nenv term_var "mstatus_mpp"; term_var "mstatus_spp"; term_var "mstatus_mpie"; term_var "mstatus_spie"; term_val ty.bool false; term_var "mstatus_sie"] ∗
         term_var "an" = term_val ty_xlenbits (bv.of_N handler_exit_addr) ∗
         x1 ↦ term_val ty_xlenbits bv.zero ∗
-        x5 ↦ term_val ty_xlenbits (bv.of_N 42) ∗
+        x5 ↦ term_val ty_xlenbits (bv.of_N mmioStartAddr) ∗
         term_val ty_xlenbits (bv.of_N data_addr) ↦ₘ term_var "secret" ∗
         (* The (only) observable write of the handler. The event is fully
            determined, so that both executions agree on it. *)
@@ -264,7 +264,8 @@ Section BlockVerification.
       asn.sub_assertion (femtokernel_handler_shared_pre handler_secret_write_addr) (sub_up1 (sub_cat_left _)) ∗
         mstatus ↦ term_record rmstatus [nenv term_var "mstatus_mpp"; term_var "mstatus_spp"; term_var "mstatus_mpie"; term_var "mstatus_spie"; term_val ty.bool false; term_var "mstatus_sie"] ∗
         x1 ↦ term_var "x1" ∗
-        term_val ty_xlenbits (bv.of_N data_addr) ↦ₘ term_var "secret".
+        term_val ty_xlenbits (bv.of_N data_addr) ↦ₘ term_var "secret" ∗
+        x5 ↦ term_val ty_xlenbits mmioShutdownAddr.
 
     Example femtokernel_handler_secret_write_post :
       Assertion (Σ__csrs ▻▻ ["x1" :: ty_xlenbits; "secret" :: ty_xlenbits] ▻▻ ["a" :: ty_xlenbits; "an"::ty_xlenbits]) :=
@@ -272,7 +273,8 @@ Section BlockVerification.
         mstatus ↦ term_record rmstatus [nenv term_var "mstatus_mpp"; term_var "mstatus_spp"; term_var "mstatus_mpie"; term_var "mstatus_spie"; term_val ty.bool false; term_var "mstatus_sie"] ∗
         term_var "an" = term_var "a" +ᵇ term_val ty_xlenbits (bv.of_N handler_secret_write_size) ∗
                                         x1 ↦ term_val ty_xlenbits bv.zero ∗
-                                        term_val ty_xlenbits (bv.of_N data_addr) ↦ₘ term_var "secret".
+                                        term_val ty_xlenbits (bv.of_N data_addr) ↦ₘ term_var "secret" ∗
+                                        x5 ↦ term_val ty_xlenbits (bv.of_N mmioStartAddr).
 
     Example femtokernel_handler_shutdown_check_pre : Assertion (Σ__csrs ▻▻ ["x1" :: ty_xlenbits; "x5" :: ty_xlenbits; "x10" :: ty_xlenbits] ▻▻ ["a" :: ty_xlenbits]) :=
       asn.sub_assertion (femtokernel_handler_shared_pre handler_shutdown_check_addr) (sub_up1 (sub_cat_left _)) ∗
@@ -1007,6 +1009,7 @@ Section Shared.
     iApply (big_sepL_mono with "Hlist"). intros ? ? Hsom. cbn.
     iIntros "$". iPureIntro.
     rewrite /= withinMMIO_one /not; apply mmio_ram_False.
+    rewrite liveAddrs_eq.
     eapply bv.seq_subseteq, list_elem_of_lookup_2, Hsom;
       change (bv.unsigned (bv.of_N minAddr)) with (Z.of_N minAddr); lia.
   Qed.

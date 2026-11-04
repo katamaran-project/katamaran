@@ -122,7 +122,9 @@ Module Type RiscvPmpIrisAdeqParams
              then McMemGS2 (McMemGS gH gT gP gW) (McMemGS gHo gTo gPo gWo)
              else McMemGS2 (McMemGS gHo gTo gPo gWo) (McMemGS gH gT gP gW)).
     iPoseProof (big_sepM_list_to_map with "Hmapsto") as "Hm".
-    { eapply NoDup_liveAddrs. }
+    { change (map ?f liveAddrs) with (fmap f liveAddrs).
+      rewrite -list_fmap_compose (list_fmap_ext _ id); last by intros.
+      rewrite list_fmap_id. apply NoDup_liveAddrs. }
     change (map ?f liveAddrs) with (fmap f liveAddrs).
     rewrite big_sepL_fmap.
     unfold mem_state_interp, mem_res, phantom_res, otherInstance, leftOrRightInstance.

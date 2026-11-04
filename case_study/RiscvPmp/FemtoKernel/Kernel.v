@@ -138,6 +138,20 @@ Section FemtoKernel.
   Definition femto_pmp0cfg_bits_1 : Val (ty.bvec 12) := fst (imm_split_bv femto_pmp0cfg_bits).
   Definition femto_pmp0cfg_bits_2 : Val (ty.bvec 20) := snd (imm_split_bv femto_pmp0cfg_bits).
 
+  (* The addresses below lie at or above maxAddr, which no longer fits in a
+     12-bit immediate, so they are loaded with LUI + ADDI (or used as LUI +
+     a 12-bit offset for loads and stores). *)
+  Definition adv_addr_end_1 : Val (ty.bvec 12) := fst (imm_split_bv (bv.of_N adv_addr_end)).
+  Definition adv_addr_end_2 : Val (ty.bvec 20) := snd (imm_split_bv (bv.of_N adv_addr_end)).
+
+  Definition mmio_write_addr_1 : Val (ty.bvec 12) := fst (imm_split_bv (bv.of_N mmio_write_addr)).
+  Definition mmio_write_addr_2 : Val (ty.bvec 20) := snd (imm_split_bv (bv.of_N mmio_write_addr)).
+  Definition mmio_write_adv_1  : Val (ty.bvec 12) := fst (imm_split_bv (bv.of_N mmio_write_adv)).
+  Definition mmio_write_adv_2  : Val (ty.bvec 20) := snd (imm_split_bv (bv.of_N mmio_write_adv)).
+
+  Definition mmio_shutdown_1 : Val (ty.bvec 12) := fst (imm_split_bv (bv.of_N (mmioStartAddr + mmioLenAddr - N.of_nat bytes_per_word))).
+  Definition mmio_shutdown_2 : Val (ty.bvec 20) := snd (imm_split_bv (bv.of_N (mmioStartAddr + mmioLenAddr - N.of_nat bytes_per_word))).
+
   (* ASTs with a very limited form of labels, that allow us to refer to the address of the current instruction *)
   (* TODO: have the symbolic executor work with these types of instructions directly? *)
   Inductive ASM :=
@@ -180,7 +194,8 @@ Section FemtoKernel.
       UTYPE bv.zero ra RISCV_AUIPC
     ; Λ x, ITYPE (bv.of_N (adv_start - (x - 4))) ra ra RISCV_ADDI
     ; CSR MPMPADDR0 ra zero false CSRRW
-    ; ITYPE (bv.of_N adv_addr_end) zero ra RISCV_ADDI
+    ; UTYPE adv_addr_end_2 ra RISCV_LUI
+    ; ITYPE adv_addr_end_1 ra ra RISCV_ADDI
     ; CSR MPMPADDR1 ra zero false CSRRW
     ; UTYPE femto_pmp0cfg_bits_2 ra RISCV_LUI
     ; ITYPE femto_pmp0cfg_bits_1 ra ra RISCV_ADDI
@@ -197,16 +212,6 @@ Section FemtoKernel.
 
   Example femtokernel_init' (init_start : N) (handler_start : N) (adv_start : N) : list AnnotInstr :=
     resolve_ASM (femtokernel_init_asm handler_start adv_start) init_start.
-
-  Example femtokernel_handler_asm : list ASM :=
-    [
-      ITYPE (bv.of_N 42) zero t0 RISCV_ADDI
-    ; AnnotLemmaInvocation (close_mmio_write (bv.of_N mmio_write_addr) WORD) [nenv exp_val ty_xlenbits bv.zero;  exp_val ty_regno t0]%env (* TODO: notation to avoid lemma call copying LOAD instruction/internalize immediate as well?*)
-    ; STORE (bv.of_N mmio_write_addr) t0 zero WORD (* works because mmio_write_addr fits into 12 bits. *)
-    ; MRET
-    ].
-  Example femtokernel_handler' (handler_start : N) : list AnnotInstr :=
-    resolve_ASM (femtokernel_handler_asm) handler_start.
 
   (* The trap handler is invoked for writes to MMIO. Only M-mode can access
      the MMIO addresses directly, but we provide (the only) a syscall that
@@ -238,7 +243,8 @@ Section FemtoKernel.
      - femtokernel_handler_exit_asm
        -> Jumps back to U-mode (MRET). End of handler code. *)
   Example femtokernel_handler_entry_asm (handler_skip_size : N) : list AnnotInstr :=
-    [ ADDI t0 zero (bv.of_N mmio_write_adv)
+    [ UTYPE mmio_write_adv_2 t0 RISCV_LUI
+    ; ADDI t0 t0 mmio_write_adv_1 (* t0 = mmio_write_adv *)
     ; BNE mmio_write_arg_reg t0 (bv.of_N (handler_skip_size + N.of_nat bytes_per_instr)) (* If the requested write argument is not one the trap invoker can write to, we need to jump over (hence the + bytes_per_instr) the dispatch, not_zero and is_zero blocks. *)
     ].
 
@@ -260,12 +266,14 @@ Section FemtoKernel.
   (* First performs the public write, then the private write. *)
   Example femtokernel_handler_not_zero_asm' (data_addr exit_addr : N) : list ASM :=
     [ ADDI t0 zero (bv.of_N 42)
-    ; AnnotLemmaInvocation (close_mmio_write (bv.of_N mmio_write_adv) WORD) [nenv exp_val ty_xlenbits bv.zero; exp_val ty_regno t0]%env
-    ; STORE (bv.of_N mmio_write_adv) t0 zero WORD (* works because mmio_write_adv fits into 12 bits. *)
+    ; UTYPE mmio_write_adv_2 ra RISCV_LUI (* ra = mmioStartAddr *)
+    ; AnnotLemmaInvocation (close_mmio_write mmio_write_adv_1 WORD) [nenv exp_val ty_xlenbits (bv.of_N mmioStartAddr); exp_val ty_regno t0]%env
+    ; STORE mmio_write_adv_1 t0 ra WORD
     ; UTYPE bv.zero ra RISCV_AUIPC
     ; Λ x, LOAD (bv.of_N (data_addr - (x - 4))) ra ra false WORD
-    ; AnnotLemmaInvocation (close_mmio_write (bv.of_N mmio_write_addr) WORD) [nenv exp_val ty_xlenbits bv.zero; exp_val ty_regno ra]%env
-    ; STORE (bv.of_N mmio_write_addr) ra zero WORD
+    ; UTYPE mmio_write_addr_2 t0 RISCV_LUI (* t0 = mmioStartAddr *)
+    ; AnnotLemmaInvocation (close_mmio_write mmio_write_addr_1 WORD) [nenv exp_val ty_xlenbits (bv.of_N mmioStartAddr); exp_val ty_regno ra]%env
+    ; STORE mmio_write_addr_1 ra t0 WORD
     ; ADD ra zero zero (* We need to clear ra, as it contains the secret *)
     ; RISCV_JALR (bv.of_N exit_addr) zero zero (* works because the exit block addr fits into 12 bits *)
     ].
@@ -276,11 +284,12 @@ Section FemtoKernel.
   Example femtokernel_handler_is_zero_asm' (data_addr exit_addr : N) : list ASM :=
     [ UTYPE bv.zero ra RISCV_AUIPC
     ; Λ x, LOAD (bv.of_N (data_addr - (x - 4))) ra ra false WORD
-    ; AnnotLemmaInvocation (close_mmio_write (bv.of_N mmio_write_addr) WORD) [nenv exp_val ty_xlenbits bv.zero; exp_val ty_regno ra]%env
-    ; STORE (bv.of_N mmio_write_addr) ra zero WORD
-    ; ADDI t0 zero (bv.of_N 42)
-    ; AnnotLemmaInvocation (close_mmio_write (bv.of_N mmio_write_adv) WORD) [nenv exp_val ty_xlenbits bv.zero; exp_val ty_regno t0]%env
-    ; STORE (bv.of_N mmio_write_adv) t0 zero WORD
+    ; UTYPE mmio_write_addr_2 t0 RISCV_LUI (* t0 = mmioStartAddr *)
+    ; AnnotLemmaInvocation (close_mmio_write mmio_write_addr_1 WORD) [nenv exp_val ty_xlenbits (bv.of_N mmioStartAddr); exp_val ty_regno ra]%env
+    ; STORE mmio_write_addr_1 ra t0 WORD
+    ; ADDI ra zero (bv.of_N 42)
+    ; AnnotLemmaInvocation (close_mmio_write mmio_write_adv_1 WORD) [nenv exp_val ty_xlenbits (bv.of_N mmioStartAddr); exp_val ty_regno ra]%env
+    ; STORE mmio_write_adv_1 ra t0 WORD
     ; ADD ra zero zero (* We need to clear ra, as it contains the secret *)
     ; RISCV_JALR (bv.of_N exit_addr) zero zero
     ].
@@ -291,7 +300,7 @@ Section FemtoKernel.
      passing shutdown_code as argument. If so, we fall through to the shutdown
      block, otherwise we jump over it to the secret write. In both cases, the
      shutdown address is prepared in t0 (it does not fit in a 12-bit
-     immediate, hence the two ADDIs).
+     immediate, hence the LUI + ADDI).
      NOTE: preparing t0 here, rather than in the shutdown block itself, is a
      limitation of WP2_loop_semTripleBlock_power_off, which only supports a
      block of a single instruction: the power tokens are handed to the block
@@ -301,8 +310,8 @@ Section FemtoKernel.
      blocks `instrs ++ [instr]`, where only the final instruction uses the
      power tokens. *)
   Example femtokernel_handler_shutdown_check_asm (shutdown_size : N) : list AnnotInstr :=
-    [ ADDI t0 zero (bv.of_N 2047)
-    ; ADDI t0 t0 (bv.of_N 1021) (* t0 = mmioShutdownAddr *)
+    [ UTYPE mmio_shutdown_2 t0 RISCV_LUI
+    ; ADDI t0 t0 mmio_shutdown_1 (* t0 = mmioShutdownAddr *)
     ; ADDI ra zero (bv.of_N shutdown_code)
     ; BNE mmio_write_arg_reg ra (bv.of_N (shutdown_size + N.of_nat bytes_per_instr))
     ].
@@ -314,13 +323,17 @@ Section FemtoKernel.
     ].
 
   (* Performs a "secret" MMIO write. The secret itself is read from the
-     `data` address and then written to the MMIO address.
+     `data` address and then written to the MMIO address. The MMIO address
+     does not fit in 12 bits, so t0 (left holding mmioShutdownAddr by the
+     shutdown check, which is the only way to reach this block) is reused as
+     the base register.
      Block falls through to femtokernel_handler_exit_asm. *)
   Example femtokernel_handler_secret_write_asm' (data_addr : N) : list ASM :=
     [ UTYPE bv.zero ra RISCV_AUIPC
     ; Λ x, LOAD (bv.of_N (data_addr - (x - 4))) ra ra false WORD
-    ; AnnotLemmaInvocation (close_mmio_write (bv.of_N mmio_write_addr) WORD) [nenv exp_val ty_xlenbits bv.zero; exp_val ty_regno t0]%env 
-    ; STORE (bv.of_N mmio_write_addr) ra zero WORD (* works because mmio_write_adv fits into 12 bits. *)
+    ; UTYPE mmio_write_addr_2 t0 RISCV_LUI (* t0 = mmioStartAddr *)
+    ; AnnotLemmaInvocation (close_mmio_write mmio_write_addr_1 WORD) [nenv exp_val ty_xlenbits (bv.of_N mmioStartAddr); exp_val ty_regno ra]%env
+    ; STORE mmio_write_addr_1 ra t0 WORD
     ; ADD ra zero zero (* We need to clear ra, as it contains the secret *)
     ].
   Example femtokernel_handler_secret_write_asm (secret_write_addr data_addr : N) : list AnnotInstr :=
@@ -481,7 +494,7 @@ Section FemtoKernel.
   Defined.
 
   Lemma adv_is_live y : (y ∈ advAddrs)%stdpp → (y ∈ liveAddrs)%stdpp.
-  Proof. unfold advAddrs, liveAddrs.
+  Proof. rewrite liveAddrs_eq; unfold advAddrs, liveAddrs_def.
          apply bv.seq_subseteq; now compute.
   Qed.
 
@@ -517,13 +530,13 @@ Section FemtoKernel.
     intros [p HPmp]. rewrite /femto_pmpentries.
     cbv [Pmp_access Gen_Pmp_access pmp_check_aux pmp_check_rec pmp_match_entry] in HPmp.
     cbn in HPmp.
-    case_if H; first now compute. clear H.
+    case_if H; first (exfalso; compute in HPmp; easy). clear H.
     case_if H; first by exfalso.
     apply orb_false_elim in H as [_ Hhi]. apply bv.uleb_ugt, bv.ult_iff_unsigned_lt in Hhi.
     case_if H'; last by exfalso.
     apply andb_prop in H' as [Hlo _]. apply bv.uleb_ule, bv.ule_iff_unsigned_le in Hlo.
     apply bv.elem_of_seq_bounds; first now compute.
-    revert Hlo Hhi. rewrite -!bv.of_Z_N -!bv.unsigned_of_Z_small; try lia; now compute.
+    revert Hlo Hhi. rewrite -!bv.of_Z_N -!bv.unsigned_of_Z_small; try lia; try (intros; split); now compute.
   Qed.
 
   (* Use permutation rather than membership to avoid indexes *)
@@ -584,8 +597,7 @@ Section FemtoKernel.
   (* Note that the split differs depending on whether or not we have an MMIO region! *)
   Lemma liveAddrs_split : (liveAddrs = bv.seq (bv.of_N init_addr) (Z.of_N init_size) ++ bv.seq (bv.of_N handler_entry_addr) (Z.of_N handler_size) ++ bv.seq (bv.of_N data_addr) (Z.of_nat bytes_per_word) ++ advAddrs)%list.
   Proof.
-    (* TODO: scalable proof *)
-    by compute.
+    rewrite liveAddrs_eq. by vm_compute.
   Qed.
 
   Lemma handlerAddrs_split : (@bv.seq xlenbits (bv.of_N handler_entry_addr) (Z.of_N handler_size) = bv.seq (bv.of_N handler_entry_addr) (Z.of_N handler_entry_size) ++ bv.seq (bv.of_N handler_dispatch_addr) (Z.of_N handler_dispatch_size) ++ bv.seq (bv.of_N handler_not_zero_addr) (Z.of_N handler_not_zero_size) ++ bv.seq (bv.of_N handler_is_zero_addr) (Z.of_N handler_is_zero_size) ++ bv.seq (bv.of_N handler_shutdown_check_addr) (Z.of_N handler_shutdown_check_size) ++ bv.seq (bv.of_N handler_shutdown_addr) (Z.of_N handler_shutdown_size) ++ bv.seq (bv.of_N handler_secret_write_addr) (Z.of_N handler_secret_write_size) ++ bv.seq (bv.of_N handler_exit_addr) (Z.of_N handler_exit_size))%list.
