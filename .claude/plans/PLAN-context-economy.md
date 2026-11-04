@@ -4,8 +4,11 @@ Status 2026-11-03: Phase 0 DONE (`5b5abc52`, idle-resume guard). Phase 1 DONE
 (`dc6b57c3`, telemetry hook). D11 handoff automation DONE (`/handoff` skill +
 `handoff-announce.sh`). Phase 2 DONE (three agents + per-agent skill markers;
 live checks passed 2026-11-03, `52baf302`). Phase 2b BUILT OFFLINE (runner +
-coordinator prompt + NEEDS-EMIEL field, 18+14 tests). **Next: Phase 2b benchmark,
-one real `claude -p` run. Which phase it runs on is Emiel's call.**
+coordinator prompt + NEEDS-EMIEL field, 18+14 tests). Smoke tests 2026-11-04
+DONE (`-p` waits for a background agent; agents need `permissionMode: auto`,
+now set — see Phase 2b "Smoke tests"). **Next: Phase 2b benchmark, one real
+`claude -p` run, on PLAN-rsa Phase 3 spike S3 (Emiel, 2026-11-03) once its
+handoff is rewritten.**
 
 ## Why (measured, October 2026 transcripts: 31 sessions, 6,536 requests)
 
@@ -232,6 +235,25 @@ one real `claude -p` run. Which phase it runs on is Emiel's call.**
      `.claude/skills/handoff/SKILL.md`. That is a false positive (the
      "interpreter opening it for writing" rule matches any SKILL.md path in the
      command). Workaround: the Edit tool. Not fixed.
+   - **Smoke tests (2026-11-04, six Haiku-coordinator runs, ~$0.5 total;
+     answers the bullet below).** (a) `-p` WAITS for a background agent: the
+     coordinator's turn ends, the process stays, the completion notification
+     starts a new turn. Side effect: TWO `result` records (the first holds the
+     premature "waiting" text) and two `init` lines with the same session id —
+     harmless, the runner judges progress by the pointer and takes the first
+     session id. (b) SessionStart hooks run, rocq-mcp connects, the custom
+     agents are listed. (c) `--permission-mode auto` does NOT reach the session:
+     `init.permissionMode` is `"default"`, and with nobody to answer, every write
+     needing approval is auto-denied (`permission_denials` in the result record;
+     Claude Code's own text "needs approval", NOT one of our hooks). Unsettled
+     whether that is `-p` or Haiku. (d) FIX: `permissionMode: auto` in the agent
+     frontmatter (phase-worker, rocq-prover, reader): an Opus subagent defined
+     that way wrote a repo-root file by Bash and by Write with zero denials while
+     its coordinator stayed `default`. Fine because the coordinator never edits
+     (D15). Test traps: a path outside the project dir and anything under
+     `.claude/` are denied for OTHER reasons — probe with a plain repo-root file.
+     TODO: the runner should log a non-empty `permission_denials` to
+     `stops.log`; today a denied worker looks like plain no-progress.
    - UNVERIFIED and the main risk: whether `claude -p` waits for a BACKGROUND
      subagent. If the coordinator's turn ends while the worker is running, the
      process may exit and kill the run. Also unverified: auto mode under `-p`,

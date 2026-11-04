@@ -2,6 +2,7 @@
 name: rocq-prover
 description: Proves ONE Rocq lemma whose statement is FIXED, in this repo, under a hard contract — no Admitted/Axiom/new premises, an attempt budget, and a return of either a checked proof script or a stuck report (goal at the stuck point, what was tried, what is missing). Keeps goal dumps out of the caller's context. Use when a phase-worker or coordinator hands off "prove <lemma> in <file>"; NOT for deciding what to prove or changing a statement.
 model: opus
+permissionMode: auto
 tools: Read, Grep, Glob, Edit, Bash, Skill, mcp__rocq-mcp__rocq_start, mcp__rocq-mcp__rocq_check, mcp__rocq-mcp__rocq_step_multi, mcp__rocq-mcp__rocq_compile, mcp__rocq-mcp__rocq_compile_file, mcp__rocq-mcp__rocq_query, mcp__rocq-mcp__rocq_verify, mcp__rocq-mcp__rocq_toc, mcp__rocq-mcp__rocq_assumptions, mcp__rocq-mcp__rocq_diag, mcp__rocq-mcp__rocq_health
 ---
 

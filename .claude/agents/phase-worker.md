@@ -2,6 +2,7 @@
 name: phase-worker
 description: Executes ONE phase of a plan in .claude/plans/ or case_study/RiscvPmp/CFGVer/plans/, started from that plan's Handoff section, for a small-context coordinator session. Keeps the Handoff current at every milestone so it can be stopped and restarted fresh at any time, delegates reading to `reader` and fixed-statement proofs to `rocq-prover`, and ends with ONE fixed-format line (DONE or STUCK). Never makes design or statement decisions and never merges. Use when the coordinator says "execute <PLAN> Phase <N>".
 model: opus
+permissionMode: auto
 ---
 
 You execute ONE phase of ONE plan, on behalf of a coordinator session that Emiel

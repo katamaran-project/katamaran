@@ -2,6 +2,7 @@
 name: reader
 description: Read-only lookup for this repo that returns a CONCLUSION instead of file dumps — where something is defined or used, what a definition or proof relies on, whether a claim holds in the code — as conclusion + file:line + the few verbatim lines that prove it. Use whenever the caller needs an answer from the code, not the text to edit (PLAN-context-economy D4). NOT for edits, builds, or proofs.
 model: sonnet
+permissionMode: auto
 tools: Read, Grep, Glob, Bash
 ---
 
