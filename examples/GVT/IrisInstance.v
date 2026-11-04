@@ -565,12 +565,12 @@ Module RiscvPmpIrisInstance <:
     Qed.
 
     Lemma pmp_match_entry_reduced_width (bytes w : Xlenbits) :
-      forall paddr cfg p hi lo,
+      forall paddr cfg hi lo,
         (bv.unsigned paddr + bv.unsigned bytes < 2 ^ Z.of_nat xlenbits)%Z ->
         bv.zero <ᵘ w ->
         w <=ᵘ bytes ->
-        pmp_match_entry paddr bytes p cfg hi lo = PMP_Success ->
-        pmp_match_entry paddr w p cfg hi lo = PMP_Success.
+        pmp_match_entry paddr bytes cfg hi lo = PMP_Success ->
+        pmp_match_entry paddr w cfg hi lo = PMP_Success.
     Proof.
       unfold pmp_match_entry.
       intros.
@@ -580,11 +580,11 @@ Module RiscvPmpIrisInstance <:
     Qed.
 
     Lemma pmp_match_entry_reduced_width_continue (bytes w : Xlenbits) :
-      forall paddr cfg p hi lo,
+      forall paddr cfg hi lo,
         (bv.unsigned paddr + bv.unsigned bytes < 2 ^ Z.of_nat xlenbits)%Z ->
         w <=ᵘ bytes ->
-        pmp_match_entry paddr bytes p cfg hi lo = PMP_Continue ->
-        pmp_match_entry paddr w p cfg hi lo = PMP_Continue.
+        pmp_match_entry paddr bytes cfg hi lo = PMP_Continue ->
+        pmp_match_entry paddr w cfg hi lo = PMP_Continue.
     Proof.
       unfold pmp_match_entry.
       intros.
@@ -607,7 +607,7 @@ Module RiscvPmpIrisInstance <:
         intros;
         first now simpl in *.
       cbn in *.
-      destruct (pmp_match_entry paddr bytes _ _ _ _) eqn:E; last done.
+      destruct (pmp_match_entry paddr bytes _ _ _) eqn:E; last done.
       - apply pmp_match_entry_reduced_width with (w := w) in E; auto.
         now rewrite E.
       - apply pmp_match_entry_reduced_width_continue with (w := w) in E; auto.
@@ -655,13 +655,13 @@ Module RiscvPmpIrisInstance <:
       - rewrite !pmp_match_addr_match. solve_bv.
     Qed.
 
-    Lemma pmp_match_entry_addr_S_width_pred_success (bytes : nat) : forall paddr p cfg lo hi,
+    Lemma pmp_match_entry_addr_S_width_pred_success (bytes : nat) : forall paddr cfg lo hi,
         (0 < @bv.unsigned xlenbits (bv.of_nat bytes))%Z ->
         (bv.unsigned paddr + Z.of_nat (S bytes) < 2 ^ Z.of_nat xlenbits)%Z ->
-        pmp_match_entry paddr (bv.of_nat (S bytes)) p cfg lo hi = PMP_Success ->
-        pmp_match_entry (paddr + bv.one) (bv.of_nat bytes) p cfg lo hi = PMP_Success.
+        pmp_match_entry paddr (bv.of_nat (S bytes)) cfg lo hi = PMP_Success ->
+        pmp_match_entry (paddr + bv.one) (bv.of_nat bytes) cfg lo hi = PMP_Success.
     Proof.
-      intros paddr p cfg lo hi Hb Hrep.
+      intros paddr cfg lo hi Hb Hrep.
       unfold pmp_match_entry.
       intros H.
       destruct (pmp_match_addr paddr _ _) eqn:E;
@@ -671,13 +671,13 @@ Module RiscvPmpIrisInstance <:
       discriminate H.
     Qed.
 
-    Lemma pmp_match_entry_addr_S_width_pred_continue (bytes : nat) : forall paddr p cfg lo hi,
+    Lemma pmp_match_entry_addr_S_width_pred_continue (bytes : nat) : forall paddr cfg lo hi,
         (0 < @bv.unsigned xlenbits (bv.of_nat bytes))%Z ->
         (bv.unsigned paddr + Z.of_nat (S bytes) < 2 ^ Z.of_nat xlenbits)%Z ->
-        pmp_match_entry paddr (bv.of_nat (S bytes)) p cfg lo hi = PMP_Continue ->
-        pmp_match_entry (paddr + bv.one) (bv.of_nat bytes) p cfg lo hi = PMP_Continue.
+        pmp_match_entry paddr (bv.of_nat (S bytes)) cfg lo hi = PMP_Continue ->
+        pmp_match_entry (paddr + bv.one) (bv.of_nat bytes) cfg lo hi = PMP_Continue.
     Proof.
-      intros paddr p cfg lo hi Hb Hrep.
+      intros paddr cfg lo hi Hb Hrep.
       unfold pmp_match_entry.
       intros H.
       destruct (pmp_match_addr paddr _ _) eqn:E;
@@ -701,7 +701,7 @@ Module RiscvPmpIrisInstance <:
       unfold pmp_check_aux.
       unfold pmp_check_aux in H.
       simpl in *.
-      destruct (pmp_match_entry paddr _ _ cfg0 _ _) eqn:Ecfg0; auto.
+      destruct (pmp_match_entry paddr _ cfg0 _ _) eqn:Ecfg0; auto.
       apply pmp_match_entry_addr_S_width_pred_success in Ecfg0; auto.
       now rewrite Ecfg0.
       apply pmp_match_entry_addr_S_width_pred_continue in Ecfg0; auto.

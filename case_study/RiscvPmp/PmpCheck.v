@@ -91,7 +91,7 @@ Section Implementation.
     | None          => PMP_NoMatch
     end.
 
-  Definition pmp_match_entry (a width : Xlenbits) (m : Privilege) (cfg : Pmpcfg_ent) (lo hi : Xlenbits) : PmpMatch :=
+  Definition pmp_match_entry (a width : Xlenbits) (cfg : Pmpcfg_ent) (lo hi : Xlenbits) : PmpMatch :=
     let rng := pmp_addr_range cfg hi lo in
     match pmp_match_addr a width rng with
     | PMP_NoMatch      => PMP_Continue
@@ -145,7 +145,7 @@ Section Implementation.
   Fixpoint pmp_check_rec (a width lo : Xlenbits) (entries : list PmpEntryCfg) (p : Privilege) (acc : AccessType) : bool :=
     match entries with
     | (cfg , hi) :: entries =>
-        match pmp_match_entry a width p cfg lo hi with
+        match pmp_match_entry a width cfg lo hi with
         | PMP_Success  => decide_access_pmp_perm acc (pmp_get_perms cfg p)
         | PMP_Fail     => false
         | PMP_Continue => pmp_check_rec a width hi entries p acc
@@ -173,11 +173,6 @@ Section PmpCheckPrivilege.
       pmp_get_RWX cfg User = pmp_get_RWX cfg Supervisor.
   Proof. reflexivity. Qed.
 
-  Lemma pmp_match_entry_priv_irrelevant :
-    ∀ (a width : Xlenbits) (p1 p2 : Privilege) (cfg : Pmpcfg_ent) (lo hi : Xlenbits),
-      pmp_match_entry a width p1 cfg lo hi = pmp_match_entry a width p2 cfg lo hi.
-  Proof. reflexivity. Qed.
-
   Lemma pmp_check_rec_s_u_eq :
     ∀ (a width lo : Xlenbits) (entries : list PmpEntryCfg) (acc : AccessType),
       pmp_check_rec a width lo entries User acc = pmp_check_rec a width lo entries Supervisor acc.
@@ -185,7 +180,6 @@ Section PmpCheckPrivilege.
     intros a width lo entries. revert a width lo.
     induction entries as [|[cfg0 addr0] entries IHentries];
       intros a width lo acc; cbn; auto.
-    rewrite (pmp_match_entry_priv_irrelevant _ _ User Supervisor _ _ _).
     destruct pmp_match_entry; auto.
   Qed.
 
@@ -401,9 +395,9 @@ Section PmpMatchAddr.
 End PmpMatchAddr.
 
 Section PmpMatchEntry.
-  Lemma pmp_match_entry_PMP_Continue : ∀ a width m cfg prev_pmpaddr pmpaddr rng,
+  Lemma pmp_match_entry_PMP_Continue : ∀ a width cfg prev_pmpaddr pmpaddr rng,
       pmp_addr_range cfg pmpaddr prev_pmpaddr = rng ->
-      pmp_match_entry a width m cfg prev_pmpaddr pmpaddr = PMP_Continue ->
+      pmp_match_entry a width cfg prev_pmpaddr pmpaddr = PMP_Continue ->
       A cfg = OFF
       ∨ (A cfg ≠ OFF ∧
          (∃ lo hi, (rng = Some (lo , hi) /\
@@ -434,23 +428,23 @@ Section PmpMatchEntry.
       now left.
   Qed.
 
-  Lemma pmp_match_entry_cfg_OFF_PMP_Continue : ∀ a width m cfg lo hi,
+  Lemma pmp_match_entry_cfg_OFF_PMP_Continue : ∀ a width cfg lo hi,
       A cfg = OFF ->
-      pmp_match_entry a width m cfg lo hi = PMP_Continue.
+      pmp_match_entry a width cfg lo hi = PMP_Continue.
   Proof.
     intros; unfold pmp_match_entry.
     now rewrite (proj2 (pmp_addr_range_None _ _ _) H).
   Qed.
 
-  Lemma pmp_match_entry_cfg_ON_PMP_Continue : ∀ a width m cfg prev_pmpaddr pmpaddr lo hi,
+  Lemma pmp_match_entry_cfg_ON_PMP_Continue : ∀ a width cfg prev_pmpaddr pmpaddr lo hi,
       pmp_addr_range cfg pmpaddr prev_pmpaddr = Some (lo , hi) ->
       (A cfg ≠ OFF ∧
          (hi <ᵘ lo
           ∨ (lo <=ᵘ hi ∧ (a + width)%bv <=ᵘ lo)
           ∨ (lo <=ᵘ hi ∧ lo <ᵘ (a + width)%bv ∧ hi <=ᵘ a))) ->
-      pmp_match_entry a width m cfg prev_pmpaddr pmpaddr = PMP_Continue.
+      pmp_match_entry a width cfg prev_pmpaddr pmpaddr = PMP_Continue.
   Proof.
-    intros ? ? ? ? ? ? ? ? Hrng H; unfold pmp_match_entry.
+    intros ? ? ? ? ? ? ? Hrng H; unfold pmp_match_entry.
     destruct H as [HA H].
     rewrite Hrng.
     cbn.
@@ -458,14 +452,14 @@ Section PmpMatchEntry.
       now bv_comp_bool.
   Qed.
 
-  Lemma pmp_match_entry_PMP_Success_1 : ∀ a width m cfg prev_pmpaddr pmpaddr lo hi,
+  Lemma pmp_match_entry_PMP_Success_1 : ∀ a width cfg prev_pmpaddr pmpaddr lo hi,
       pmp_addr_range cfg pmpaddr prev_pmpaddr = Some (lo , hi) ->
-      pmp_match_entry a width m cfg prev_pmpaddr pmpaddr = PMP_Success ->
+      pmp_match_entry a width cfg prev_pmpaddr pmpaddr = PMP_Success ->
       A cfg ≠ OFF
       ∧ lo <=ᵘ hi ∧ lo <ᵘ (a + width)%bv ∧ lo <=ᵘ a
       ∧ a <ᵘ hi ∧ (a + width)%bv <=ᵘ hi.
   Proof.
-    unfold pmp_match_entry; intros ? ? ? ? ? ? ? ? Hrng H.
+    unfold pmp_match_entry; intros ? ? ? ? ? ? ? Hrng H.
     rewrite Hrng in H.
     destruct (pmp_match_addr _ _ _) eqn:Ha;
       try discriminate.
@@ -474,28 +468,28 @@ Section PmpMatchEntry.
     auto.
   Qed.
 
-  Lemma pmp_match_entry_PMP_Success_2 : ∀ a width m cfg prev_pmpaddr pmpaddr lo hi,
+  Lemma pmp_match_entry_PMP_Success_2 : ∀ a width cfg prev_pmpaddr pmpaddr lo hi,
       pmp_addr_range cfg pmpaddr prev_pmpaddr = Some (lo , hi) ->
       A cfg ≠ OFF
       ∧ lo <=ᵘ hi ∧ lo <ᵘ (a + width)%bv ∧ lo <=ᵘ a
       ∧ a <ᵘ hi ∧ (a + width)%bv <=ᵘ hi ->
-      pmp_match_entry a width m cfg prev_pmpaddr pmpaddr = PMP_Success.
+      pmp_match_entry a width cfg prev_pmpaddr pmpaddr = PMP_Success.
   Proof.
-    intros ? ? ? ? ? ? ? ? Hrng H; unfold pmp_match_entry.
+    intros ? ? ? ? ? ? ? Hrng H; unfold pmp_match_entry.
     destruct H as (HA & H).
     rewrite Hrng.
     rewrite (proj2 (pmp_match_addr_match _ _ _ _) H).
     auto.
   Qed.
 
-  Lemma pmp_match_entry_PMP_Success : ∀ a width m cfg prev_pmpaddr pmpaddr lo hi,
+  Lemma pmp_match_entry_PMP_Success : ∀ a width cfg prev_pmpaddr pmpaddr lo hi,
       pmp_addr_range cfg pmpaddr prev_pmpaddr = Some (lo , hi) ->
-      (pmp_match_entry a width m cfg prev_pmpaddr pmpaddr = PMP_Success <->
+      (pmp_match_entry a width cfg prev_pmpaddr pmpaddr = PMP_Success <->
        A cfg ≠ OFF
        ∧ lo <=ᵘ hi ∧ lo <ᵘ (a + width)%bv ∧ lo <=ᵘ a
        ∧ a <ᵘ hi ∧ (a + width)%bv <=ᵘ hi).
   Proof.
-    intros ? ? ? ? ? ? ? ? H; split; revert H.
+    intros ? ? ? ? ? ? ? H; split; revert H.
     - apply pmp_match_entry_PMP_Success_1.
     - apply pmp_match_entry_PMP_Success_2.
   Qed.

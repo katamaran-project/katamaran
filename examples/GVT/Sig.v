@@ -622,7 +622,7 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
         rewrite Epmp in IHentries;
         cbn in H;
         last done.
-      destruct (pmp_match_entry a width p cfg0 prev_pmpaddr pmpaddr) eqn:Hm;
+      destruct (pmp_match_entry a width cfg0 prev_pmpaddr pmpaddr) eqn:Hm;
         try discriminate.
       + destruct (A cfg0) eqn:HA.
         * left; split.
@@ -632,7 +632,7 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
           now simpl in Hm.
         * rewrite <- HA.
           apply (pmp_addr_range_Some_TOR cfg0 pmpaddr prev_pmpaddr) in HA.
-          apply (pmp_match_entry_PMP_Success _ _ _ _ _ _ _ _ HA) in Hm.
+          apply (pmp_match_entry_PMP_Success _ _ _ _ _ _ _ HA) in Hm.
           apply Pmp_check_perms_Access_pmp_perm in H.
           rewrite cfg_record.
           right; split; repeat split; intuition.
@@ -649,7 +649,7 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
           remember Hrng as HA.
           clear HeqHA.
           apply (pmp_addr_range_Some_TOR cfg0 pmpaddr prev_pmpaddr) in Hrng.
-          apply (pmp_match_entry_PMP_Continue _ _ _ _ _ _ _ Hrng) in Hm as [?|Hm]; auto.
+          apply (pmp_match_entry_PMP_Continue _ _ _ _ _ _ Hrng) in Hm as [?|Hm]; auto.
           destruct Hm as [? (lo' & hi' & [Heq Hm])].
           inversion Heq; subst; auto.
   Qed.
@@ -684,7 +684,7 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
           apply addr_match_type_neq_off_cases in Hrng.
           apply (pmp_addr_range_Some_TOR cfg0 addr0 Vlo) in Hrng.
           subst Vlo.
-          rewrite (pmp_match_entry_cfg_ON_PMP_Continue _ _ _ _ _ _ _ _ Hrng (conj HA H)).
+          rewrite (pmp_match_entry_cfg_ON_PMP_Continue _ _ _ _ _ _ _ Hrng (conj HA H)).
           now apply IHentries.
           rewrite cfg_record in H.
           rewrite Pmp_check_perms_Access_pmp_perm in H.
@@ -695,7 +695,7 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
           apply addr_match_type_neq_off_cases in Hrng.
           apply (pmp_addr_range_Some_TOR cfg0 addr0 Vlo) in Hrng.
           subst Vlo.
-          now rewrite (proj2 (pmp_match_entry_PMP_Success _ _ _ _ _ _ _ _ Hrng) (conj HA H)).
+          now rewrite (proj2 (pmp_match_entry_PMP_Success _ _ _ _ _ _ _ Hrng) (conj HA H)).
         * destruct (A cfg0) eqn:HA.
           unfold pmp_match_entry in H.
           rewrite (proj2 (pmp_addr_range_None _ _ _) HA) in H.
@@ -710,14 +710,14 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
           remember (inst lo ι) as Vlo.
           apply (pmp_addr_range_Some_TOR cfg0 addr0 Vlo) in Hrng.
           subst Vlo.
-          destruct (pmp_match_entry _ _ _ _ _ _) eqn:Hpmp;
+          destruct (pmp_match_entry _ _ _ _ _) eqn:Hpmp;
             try discriminate.
           right; split; auto.
-          apply (pmp_match_entry_PMP_Success _ _ _ _ _ _ _ _ Hrng) in Hpmp.
+          apply (pmp_match_entry_PMP_Success _ _ _ _ _ _ _ Hrng) in Hpmp.
           auto; intuition.
-          apply (pmp_match_entry_PMP_Success _ _ _ _ _ _ _ _ Hrng) in Hpmp.
+          apply (pmp_match_entry_PMP_Success _ _ _ _ _ _ _ Hrng) in Hpmp.
           intuition.
-          apply (pmp_match_entry_PMP_Continue _ _ _ _ _ _ _ Hrng) in Hpmp as [Hcon|[? (lo' & hi' & [Heq Hpmp])]];
+          apply (pmp_match_entry_PMP_Continue _ _ _ _ _ _ Hrng) in Hpmp as [Hcon|[? (lo' & hi' & [Heq Hpmp])]];
             first (rewrite HA in Hcon; discriminate).
           left; split; last by apply IHentries.
           inversion Heq; subst; right; auto.
@@ -764,9 +764,9 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
           subst.
         destruct p0 as [lo' hi'].
         rewrite <- H0 in Hc.
-        destruct (pmp_match_entry _ _ _ _ _ _) eqn:Hpmp;
+        destruct (pmp_match_entry _ _ _ _ _) eqn:Hpmp;
           try discriminate.
-        apply (pmp_match_entry_PMP_Success _ _ _ _ _ _ _ _ Hrng) in Hpmp.
+        apply (pmp_match_entry_PMP_Success _ _ _ _ _ _ _ Hrng) in Hpmp.
         rewrite Pmp_check_perms_Access_pmp_perm; unfold Access_pmp_perm.
         rewrite H0 in Hc.
         right; split; auto.
@@ -782,7 +782,7 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
         rewrite Hs in IHv.
         destruct IHv as (? & IH).
         left; split; last now apply IH in Hc.
-        apply (pmp_match_entry_PMP_Continue _ _ _ _ _ _ _ Hrng) in Hpmp.
+        apply (pmp_match_entry_PMP_Continue _ _ _ _ _ _ Hrng) in Hpmp.
         destruct Hpmp as [HA|(HA & (lo'' & hi'' & (Heq & [|[|]])))];
           first (rewrite H0 in HA; simpl in HA; auto);
           apply addr_match_type_neq_off_cases in HA;
@@ -831,7 +831,7 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
         apply addr_match_type_neq_off_cases in Hrng.
         apply (pmp_addr_range_Some_TOR cfg0 addr0 Vlo) in Hrng.
         subst.
-        rewrite (pmp_match_entry_cfg_ON_PMP_Continue _ _ _ _ _ _ _ _ Hrng (conj HA H)).
+        rewrite (pmp_match_entry_cfg_ON_PMP_Continue _ _ _ _ _ _ _ Hrng (conj HA H)).
         cbn in IHentries; unfold Gen_Pmp_access, pmp_check_aux in IHentries.
         specialize (IHentries (term_val ty_xlenbits addr0) p acc ι).
         now apply IHentries.
@@ -844,7 +844,7 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
         apply addr_match_type_neq_off_cases in Hrng.
         apply (pmp_addr_range_Some_TOR cfg0 addr0 Vlo) in Hrng.
         subst.
-        now rewrite (proj2 (pmp_match_entry_PMP_Success _ _ _ _ _ _ _ _ Hrng) (conj HA H)).
+        now rewrite (proj2 (pmp_match_entry_PMP_Success _ _ _ _ _ _ _ Hrng) (conj HA H)).
       + destruct (A cfg0) eqn:HA.
         * unfold pmp_match_entry in H.
           rewrite (pmp_addr_range_None_2 _ _ _ HA) in H.
@@ -860,14 +860,14 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
           subst.
           rewrite cfg_record.
           rewrite Pmp_check_perms_Access_pmp_perm.
-          destruct (pmp_match_entry _ _ _ _ _ _) eqn:Hpmp;
+          destruct (pmp_match_entry _ _ _ _ _) eqn:Hpmp;
             try discriminate.
-          apply (pmp_match_entry_PMP_Success _ _ _ _ _ _ _ _ HA) in Hpmp.
+          apply (pmp_match_entry_PMP_Success _ _ _ _ _ _ _ HA) in Hpmp.
           right; split; auto.
           intuition.
           destruct Hpmp as (? & Hpmp).
           auto.
-          apply (pmp_match_entry_PMP_Continue _ _ _ _ _ _ _ HA) in Hpmp as [Ha|Ha].
+          apply (pmp_match_entry_PMP_Continue _ _ _ _ _ _ HA) in Hpmp as [Ha|Ha].
           left; split.
           left; auto.
           now apply IHentries.
