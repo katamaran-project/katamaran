@@ -675,6 +675,41 @@ Phase check (changed files + sentinels + negatives):
 
 The per-atom `wco` scan therefore costs nothing measurable on the sentinels.
 
+### O4 RESULT (2026-11-05)
+
+Full closure, Emiel's go-ahead: every `_CoqProject` file, forced
+(`make -B -j1 TIMED=1 TIMING=1`), under the watchdog (kill past
+max(1.5×, +10 s) of the baseline).
+- **Green:** exit 0, no errors, no watchdog kill. 161 files built, the 160
+  baseline files plus `SolverLin.v`. That includes the RSA files outside
+  `Results.vo`'s closure.
+- **Cost:** 3466 s user / 555 s sys / 4027 s wall (67 min), peak 9.95 GB.
+- **Against the baseline** (`theories/plans/relval-pair-baseline/rsa-final-per-file.tsv`,
+  the relval-rsa end state, on user CPU): **0.960×** in total (3457 s against
+  3603 s). Per-file table: `plans/bv-arith-solver-o4-per-file.tsv`.
+
+  | file | O4 | baseline | ratio |
+  |---|---|---|---|
+  | MuladdParamVC | 303.4 s | 298.3 s | 1.02× |
+  | Solver.vo | 294.1 s | 297.9 s | 0.99× |
+  | MuladdParamTailVC | 139.6 s | 177.5 s | 0.79× |
+  | InvMixColumns | 46.3 s | 40.5 s | 1.14× |
+  | BearSSLCheckScalarLoop1 | 27.8 s | 24.1 s | 1.16× |
+  | RsaCcopy | 29.7 s | 56.1 s | 0.53× |
+  | RsaCcopyGate | 33.1 s | 52.4 s | 0.63× |
+  | SolverLin (new) | 7.1 s | — | — |
+
+  BearSSLCheckScalarLoop1 is the only file above 1.15× and +3 s, at +3.7 s on
+  a single run. InvMixColumns is just under that bar. Neither was
+  investigated. The other RSA files (Memcpy/Memset/Memmove/SpikeSb/SpikeArrv)
+  sit at 0.88–0.99×.
+- **Hole scan:** gate.sh's pattern over CFGVer plus `Solver.v`, ZZ excluded.
+  Clean.
+- **Axiom probe:** NOT run. It is ~332 s / 10.4 GB and needs Emiel's go-ahead
+  (memory: merge gate disabled). Every lemma O1–O3 added is closed by `Qed`
+  with no new `Axiom`/`Parameter`, so the probe can only fail on something
+  that predates this plan.
+
 ### Timing
 
 | date | phase | start | end | wall min | CPU min | notes |
@@ -682,3 +717,4 @@ The per-atom `wco` scan therefore costs nothing measurable on the sentinels.
 | 2026-11-05 | O0 | — | — | 2.3 | 2.3 | ZZMmqShape.v dump (vm_compute+solve_vc 91 s, peak 7.7 GB); preamble checks < 1 s |
 | 2026-11-05 | O2 | — | — | 26 | 21 | Solver.vo 306 s; sentinels 956 s user / 1191 s wall (incl. -vos closure); one earlier failed round (RsaCcopy, lin_view QSub) ~6 min + 5.3 min |
 | 2026-11-05 | O3 | — | — | 26 | 21 | Solver.vo 306 s (first try); sentinels + SolverLin 946 s user / 1183 s wall (incl. -vos closure); preamble port checks ~10 s |
+| 2026-11-05 | O4 | — | — | 67 | 58 | full closure forced -j1 TIMED: 3466 s user / 4027 s wall, peak 9.95 GB; 0.960× the relval-rsa baseline; no kills |
