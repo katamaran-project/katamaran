@@ -1,5 +1,6 @@
 (* Regression tests for the linear-difference solver rules S1 (decide) and
-   S2 (isolate the innermost unit variable), PLAN-bv-arith-solver O2.
+   S2 (isolate the innermost unit variable), PLAN-bv-arith-solver O2, and
+   the interval rule S3 (decide from wco ranges), O3.
 
    Each row runs the real solver entry point `simplify_formula` on one
    formula in a small world and checks the OUTCOME CLASS by `vm_compute`:
@@ -116,4 +117,58 @@ Definition s2_sub_tests :=
   ).
 Lemma s2_sub_tests_ok :
   s2_sub_tests = (Some (Some 0, true), Some (Some 0, true), Some (Some 0, true), Some 0).
+Proof. vm_compute. reflexivity. Qed.
+
+(* ---- S3: decide by unsigned intervals seeded from the path condition ----
+   PLAN-bv-arith-solver O3.  The raw deciders first (rng_eqb / rng_ultb /
+   rng_uleb take the path condition explicitly), then the same verdicts
+   through simplify_formula, which reaches S3 via try_lin_cancel /
+   try_lin_propeq (eq/neq/propeq) and simplify_relop's bvule/bvult arms.
+   The `None`/`Open` rows are controls: D0 (only c <> 0 known, so T + c = 1 + T
+   is satisfiable) and a WRAP (k + 4c over k <u 2049 with c unbounded may hit
+   0 mod 2^32, so the interval must not decide it). *)
+Definition Cdead : PathCondition ΣT :=
+  [ctx] ▻ formula_relop bop.neq vk (tz 0) ▻ formula_relop bop.bvult vk (tz 2049).
+Definition shl2 (t : Term ΣT ty_xlenbits) : Term ΣT ty_xlenbits := term_binop bop.shiftl t (tz 2).
+Definition Cgate : PathCondition ΣT :=
+  [ctx] ▻ formula_relop bop.bvule (tz 1) vk ▻ formula_relop bop.bvult vk (tz (2^30))
+        ▻ formula_relop bop.bvult vc (tz (2^28)).
+Definition Cx : PathCondition ΣT := [ctx] ▻ formula_relop bop.bvult vx (tz 10).
+Definition rult (a b : Term ΣT ty_xlenbits) : Formula ΣT := formula_relop bop.bvult a b.
+Definition rule (a b : Term ΣT ty_xlenbits) : Formula ΣT := formula_relop bop.bvule a b.
+
+Definition s3_raw :=
+  ( rng_eqb Cdead vx (shl2 vk ⊕ vx)          (* P0 dead beq      : Some false *)
+  , rng_ultb Cdead (tz 63 ⊕ vk) (tz 64)      (* P0 dead bltu     : Some false *)
+  , rng_eqb Cgate (vk ⊕ tz 4 ⊗ vc) (tz 0)    (* RsaCcopyGate     : Some false *)
+  , rng_eqb CD0 (vT ⊕ vc) (tz 1 ⊕ vT)        (* D0 control       : None *)
+  , rng_eqb Cdead (vk ⊕ tz 4 ⊗ vc) (tz 0)    (* wrap control     : None *)
+  , (rng_eqb Cx vx (tz 5), rng_ultb Cx vx (tz 10), rng_ultb Cx vx (tz 5),
+     rng_uleb Cx vx (tz 9), rng_uleb Cx (tz 10) vx, rng_eqb Cx vx (tz 12)) ).
+Lemma s3_raw_ok : s3_raw =
+  (Some false, Some false, Some false, None, None,
+   (None, Some true, None, Some true, Some false, Some false)).
+Proof. vm_compute. reflexivity. Qed.
+
+Definition s3_tests :=
+  ( classify (sf Cdead (peq vx (shl2 vk ⊕ vx)))       (* propeq, dead     : Refuted *)
+  , classify (sf Cdead (req vx (shl2 vk ⊕ vx)))       (* relop eq, dead   : Refuted *)
+  , classify (sf Cdead (rult (tz 63 ⊕ vk) (tz 64)))   (* bvult arm        : Refuted *)
+  , classify (sf Cgate (req (vk ⊕ tz 4 ⊗ vc) (tz 0))) (* RsaCcopyGate     : Refuted *)
+  , classify (sf Cx (rult vx (tz 10)))                (* bvult entailed   : Valid *)
+  , classify (sf Cx (rule vx (tz 9)))                 (* bvule entailed   : Valid *)
+  , classify (sf Cx (rule (tz 10) vx))                (* bvule refuted    : Refuted *)
+  , classify (sf Cx (rneq vx (tz 12)))                (* neq entailed     : Valid *)
+  ).
+Lemma s3_tests_ok :
+  s3_tests = (Refuted, Refuted, Refuted, Refuted, Valid, Valid, Refuted, Valid).
+Proof. vm_compute. reflexivity. Qed.
+
+(* ---- S3 negative controls: must stay Open ---- *)
+Definition s3_neg :=
+  ( classify (sf Cdead (req (vk ⊕ tz 4 ⊗ vc) (tz 0))) (* wrap: c unbounded *)
+  , classify (sf Cx (rult vx (tz 5)))                 (* x <u 10 says nothing about 5 *)
+  , classify (sf Cx (rule (tz 3) vx))                 (* nor about 3 <=u x *)
+  ).
+Lemma s3_neg_ok : s3_neg = (Open, Open, Open).
 Proof. vm_compute. reflexivity. Qed.

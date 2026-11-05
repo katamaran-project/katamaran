@@ -629,9 +629,56 @@ Cmovznz4Result: all green, 956 s user / 1191 s wall, peak 8.3 GB, no
 watchdog kill. Per-VC times: MuladdParamLoopI 18.6 s (was 18.1),
 CheckScalarParamLoop2 7.3 s (was 7.4), RsaCcopy 11.3 s + 4.6 s.
 
+### O3 RESULT (2026-11-05)
+
+S3 hooked into `theories/Symbolic/Solver.v`:
+- Placement: Sections RngA/RngB/RngDec plus the world-level `rng_decide` /
+  `rng_decide_propeq`, just above `try_lin_cancel`. They reuse Section Lin's
+  `lin_diff`.
+- Dispatch: S1 → S3 → the old rule, in `try_lin_cancel` (eq/neq) and
+  `try_lin_propeq` (propeq).
+- `simplify_relop` gains explicit `bvule`/`bvult` arms that try `rng_decide`
+  before `simplify_relopb`. `bvsle`/`bvslt` stay in the catch-all.
+
+The S3 code was verified in preamble before the port. `Solver.vo` compiled on
+the first try.
+
+**Gotcha (found in preamble, so no build was lost):** in
+`simplify_relop_spec`, the `eqn:Hr` hypothesis `rng_decide bop.bvule .. = None`
+must be CLEARED before `arw`. Its head matches on `op`, which is now a
+constructor, so `arw`'s `cbn in *` reduces it into `canon_term` on open terms
+and times out. `try_lin_cancel` hypotheses do not trigger this, because their
+head does not reduce. Both branches `clear Hr`.
+
+Regression rows in `SolverLin.v`, all green:
+- `s3_raw`: ZZO1Dec's o1 rows on the raw deciders.
+- `s3_tests`: the same verdicts through `simplify_formula`, covering propeq,
+  relop eq, the bvult/bvule arms and neq.
+- `s3_neg`: controls that must stay Open: the wrap case `k + 4c = 0` with c
+  unbounded, and `x <u 10` against 5 and 3.
+
+`SolverLin.v` is now in `_CoqProject`.
+
+Phase check (changed files + sentinels + negatives):
+- `Solver.vo`: 305.8 s user / 3.64 GB (O2: 306 s).
+- `-vos` closure (39 files) plus `-vok` of SolverLin, RsaCcopy,
+  MuladdParamLoopI, CheckScalarParamLoop2, Cmovznz4 and Cmovznz4Result: all
+  green, 946 s user / 1183 s wall, peak 8.3 GB (O2: 956 / 1191 / 8.3), no
+  watchdog kill.
+- Per-VC times (single runs):
+
+  | VC | O3 | O2 |
+  |---|---|---|
+  | MuladdParamLoopI | 16.0 s | 18.6 s |
+  | CheckScalarParamLoop2 | 6.2 s | 7.3 s |
+  | RsaCcopy | 7.9 s + 4.2 s | 11.3 s + 4.6 s |
+
+The per-atom `wco` scan therefore costs nothing measurable on the sentinels.
+
 ### Timing
 
 | date | phase | start | end | wall min | CPU min | notes |
 |---|---|---|---|---|---|---|
 | 2026-11-05 | O0 | — | — | 2.3 | 2.3 | ZZMmqShape.v dump (vm_compute+solve_vc 91 s, peak 7.7 GB); preamble checks < 1 s |
 | 2026-11-05 | O2 | — | — | 26 | 21 | Solver.vo 306 s; sentinels 956 s user / 1191 s wall (incl. -vos closure); one earlier failed round (RsaCcopy, lin_view QSub) ~6 min + 5.3 min |
+| 2026-11-05 | O3 | — | — | 26 | 21 | Solver.vo 306 s (first try); sentinels + SolverLin 946 s user / 1183 s wall (incl. -vos closure); preamble port checks ~10 s |
