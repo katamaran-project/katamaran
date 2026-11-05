@@ -528,7 +528,49 @@ S = solver (`issue/solver-o5`, `theories/`). C = closer (`issue/rsa-montymul`,
   The negative self-tests in O1 and the negative controls in O2 are the
   defence, plus the axiom probe at O4.
 
+### O0 RESULT (2026-11-05)
+
+Method: the mmq exit leaf was dumped from the real VC (probe
+`Example/Rsa/ZZMmqShape.v`, untracked, on issue/rsa-montymul, `Set Printing
+Depth 200` at the first top-level disjunction). The other rows were
+re-normalised in a preamble (`Example.Prelude`): `peval (l + (-1)·r)` over a
+one-world context with the row's atoms as variables. The P0 rows' formulas
+come from the 2026-09-29 table (`Example/ZZBvA0.v`), with
+`M = ((31 + b) >> 5)`.
+
+**Finding 1: the mmq leaf is ground.** The wrong branch's first conjunct is
+`eformula_propeq (eterm_var "q") (bvadd (val 0x180) (eterm_var "q"))`. Both
+`q`s are the contract's base parameter (the last entry of the env), not an
+existential. So the solver saw it at VC time and S1 refutes it there; the
+S4 precheck is NOT needed for this leaf (it stays as a guard for leaves the
+closer creates by instantiating evars).
+
+**Finding 2: `canon_term` keeps zero-coefficient monomials.**
+`peval (q + (-1)·(0x180 + q)) = 0xfffffe80 + 0·q`, not `0xfffffe80`;
+`(4+q) - (q+4)` gives `0·q`, not `0`. So S1's test is "constant after
+dropping 0-coefficient monomials", and S2's "occurs in no other atom" must
+skip 0-coefficient atoms. The pruning goes inside `lin_diff`'s decision only:
+peval's output, and with it every read spelling, stays as it is.
+
+| row | source | `lin_diff` under current peval | true? | covered by |
+|---|---|---|---|---|
+| mmq exit pc `q = 0x180 + q` | VC dump | `-0x180 + 0·q` | false | **S1** (refute) |
+| `x + 4 <> x` | — | `4 + 0·x` (shape as above) | true | **S1** (discharge) |
+| P0 dead beq `x = (M<<2) + x` | 09-29 table | `0·x + (-4)·M` | false | S1 normalises, **S3** refutes (`1 <= M <= 2048`) |
+| P0 dead bltu `63 + b <u 64` | 09-29 table | relop, not a difference | false | **S3** |
+| P0 masked count `x + (M<<2) = 4 + (x + (((-1+M) & 0x3fffffff) << 2))` | 09-29 table | `-4 + 0·x + (-4)·((-1+M) & 0x3fffffff) + 4·M` | true | **none of S1–S3**: needs the mask identity as a TERM equality; interval arithmetic loses the correlation between `M` and `(M-1) & mask`. Stays with the closer (`bv_lin` reads ones-masks since 4463953f) |
+| P0 `(b+63)>>5` (shift identity) | 09-29 table | — | true | **none** (closer), as above |
+| mmq `k = T + (-1)·c` (k existential) | preamble | `k + c + (-1)·T` | — | **S2** isolates `k` (innermost, coeff +1, sole occurrence) → `k = T + (-1)·c`; with the caller's `T = u + cx` the same: all three atoms have coefficient ±1, `k` innermost |
+| RsaCcopyGate `k + 4·ml <> 0` | preamble | `k + 4·ml` | true under ranges | **S3** (needs a lower bound ≥ 1 on `k` or `ml` in `wco`, no wrap) |
+| D0 `T + c = 1 + T`, only `c <> 0` known | 09-30 rows | `-1 + c + 0·T` | NOT entailed | **negative control**: S1 must fall through, S3 must not discharge (range of `c` is `[1, 2^32)`, contains `1`) |
+
+Consequence for the plan: no change to S1–S4. Two notes for O1: (i) the
+0-coefficient pruning above; (ii) the two true P0 identities (masked count,
+shift identity) are outside D1 (decide-only) by design and remain closer
+work; they are the cases D1's "write rewrites back" alternative would buy.
+
 ### Timing
 
 | date | phase | start | end | wall min | CPU min | notes |
 |---|---|---|---|---|---|---|
+| 2026-11-05 | O0 | — | — | 2.3 | 2.3 | ZZMmqShape.v dump (vm_compute+solve_vc 91 s, peak 7.7 GB); preamble checks < 1 s |
