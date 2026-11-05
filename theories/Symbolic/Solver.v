@@ -3137,6 +3137,238 @@ Module Type GenericSolverOn
       | None => None
       end.
 
+    (* ---- PLAN-bv-arith-solver S1: decide bv eq/neq/propeq by a LINEAR DIFFERENCE ----
+       `t1 - t2` in canon_term normal form, read back as `c + sum k_i * atom_i`
+       (lin_view).  If every coefficient is 0 mod 2^n the difference IS the
+       constant c, so `t1 = t2` holds iff c = 0 -- whatever the orientation and
+       nesting of the two sides.  This is what refutes `q = 0x180 + q`
+       (PLAN-rsa O5), which the shape-matching rules below miss.
+       NO PUBLICNESS GUARD: both sides differ by the SAME public constant in
+       both runs, so pair equality (propeq) and the pointwise relop are decided
+       componentwise by it.  None means "not a constant": fall through to the
+       older rules (kept until PLAN-bv-arith-solver O6).
+       Keep lin_diff FOLDED in proofs and use `cbn -[lin_const]`: unfolded,
+       cbn / the kernel try to compute canon_term on open terms (timeout). *)
+Section Lin.
+  Context {Σ : LCtx} {n : nat}.
+  Local Notation T := (Term Σ (ty.bvec n)).
+  Add Ring LinTR : (Term_bv_ring_theory Σ n) (setoid (@term_equivalence Σ (ty.bvec n)) (Term_bv_ring_eq_ext Σ n)).
+  Local Notation "a ⊕ b" := (term_binop bop.bvadd a b) (at level 50, left associativity).
+  Local Notation "a ⊗ b" := (term_binop bop.bvmul a b) (at level 40, left associativity).
+
+  Definition tvZ (z : Z) : T := term_val (ty.bvec n) (bv.of_Z z).
+
+  Fixpoint lin_neg (ms : list (Z * T)) : list (Z * T) :=
+    match ms with nil => nil | cons (k, a) ms' => cons ((- k)%Z, a) (lin_neg ms') end.
+
+  (* linear view of a canon_term output: c + Σ k·atom (atoms: anything else).
+     canon_term prints a NEGATIVE ring coefficient with bvsub (Pphi_dev;
+     they arise from a bvsub in its input, e.g. peval_bvsub of a SUB), so
+     QSub/QNeg must be read too: as atoms they hid a bare variable from S2
+     (`a - k·c` one atom: S2 isolated the universal nl instead of the
+     existential a, RsaCcopy valid_ccl_loop, 2026-11-05) *)
+  Fixpoint lin_view (fuel : nat) (t : T) : Z * list (Z * T) :=
+    match fuel with
+    | O => (0%Z, cons (1%Z, t) nil)
+    | S f =>
+        match q_view t with
+        | QVal v => (bv.unsigned v, nil)
+        | QAdd a b => let '(c1, m1) := lin_view f a in let '(c2, m2) := lin_view f b in
+                      ((c1 + c2)%Z, List.app m1 m2)
+        | QSub a b => let '(c1, m1) := lin_view f a in let '(c2, m2) := lin_view f b in
+                      ((c1 - c2)%Z, List.app m1 (lin_neg m2))
+        | QNeg a => let '(c1, m1) := lin_view f a in ((- c1)%Z, lin_neg m1)
+        | QMul a b => match q_view a with
+                      | QVal k => (0%Z, cons (bv.unsigned k, b) nil)
+                      | _ => (0%Z, cons (1%Z, t) nil)
+                      end
+        | _ => (0%Z, cons (1%Z, t) nil)
+        end
+    end.
+  Definition lin_eval (c : Z) (ms : list (Z * T)) : T :=
+    fold_right (fun '(k, a) acc => tvZ k ⊗ a ⊕ acc) (tvZ c) ms.
+
+  Lemma tvZ_add (a b : Z) : (tvZ (a + b) : T) ≡ tvZ a ⊕ tvZ b.
+  Proof. intros ι. cbn. unfold ty.valToRelVal. rewrite bv.of_Z_add. reflexivity. Qed.
+  Lemma tvZ_opp (k : Z) : (tvZ (- k) : T) ≡ term_unop uop.negate (tvZ k).
+  Proof. intros ι. cbn. unfold ty.valToRelVal. rewrite bv.of_Z_negate. reflexivity. Qed.
+  Lemma tvZ_unsigned (v : bv n) : (tvZ (bv.unsigned v) : T) = term_val (ty.bvec n) v.
+  Proof. unfold tvZ. now rewrite bv.of_Z_unsigned. Qed.
+  Lemma tvZ_one : (tvZ 1 : T) ≡ term_val (ty.bvec n) bv.one.
+  Proof. intros ι. cbn. now rewrite bv.of_Z_one. Qed.
+  Lemma tvZ_zero : (tvZ 0 : T) ≡ term_val (ty.bvec n) bv.zero.
+  Proof. reflexivity. Qed.
+  Lemma tvZ_m1 : (tvZ (-1) : T) ≡ term_unop uop.negate (term_val (ty.bvec n) bv.one).
+  Proof.
+    intros ι. cbn. unfold ty.valToRelVal.
+    replace (@bv.of_Z n (-1)) with (bv.negate (@bv.of_Z n 1)) by (rewrite bv.of_Z_negate; reflexivity).
+    rewrite bv.of_Z_one. reflexivity.
+  Qed.
+  Lemma lin_eval_cons c k a ms : lin_eval c (cons (k, a) ms) = tvZ k ⊗ a ⊕ lin_eval c ms.
+  Proof. reflexivity. Qed.
+  Lemma lin_eval_nil c : lin_eval c nil = tvZ c.
+  Proof. reflexivity. Qed.
+  Lemma lin_eval_app c1 m1 c2 m2 :
+    lin_eval (c1 + c2) (List.app m1 m2) ≡ lin_eval c1 m1 ⊕ lin_eval c2 m2.
+  Proof.
+    induction m1 as [|[k a] m1 IH]; cbn [List.app].
+    - rewrite lin_eval_nil. induction m2 as [|[k a] m2 IH2].
+      + rewrite !lin_eval_nil. apply tvZ_add.
+      + rewrite !lin_eval_cons IH2. ring.
+    - rewrite !lin_eval_cons IH. ring.
+  Qed.
+  Lemma lin_eval_neg c ms : lin_eval (- c) (lin_neg ms) ≡ term_unop uop.negate (lin_eval c ms).
+  Proof.
+    induction ms as [|[k a] ms IH]; cbn [lin_neg].
+    - rewrite !lin_eval_nil. apply tvZ_opp.
+    - rewrite !lin_eval_cons IH tvZ_opp. ring.
+  Qed.
+  Lemma lin_eval_sub c1 m1 c2 m2 :
+    lin_eval (c1 - c2) (List.app m1 (lin_neg m2)) ≡ term_binop bop.bvsub (lin_eval c1 m1) (lin_eval c2 m2).
+  Proof.
+    replace (c1 - c2)%Z with (c1 + - c2)%Z by lia.
+    rewrite lin_eval_app lin_eval_neg. ring.
+  Qed.
+  Lemma lin_view_sound fuel (t : T) :
+    let '(c, ms) := lin_view fuel t in lin_eval c ms ≡ t.
+  Proof.
+    revert t; induction fuel as [|f IH]; intros t; cbn [lin_view].
+    - rewrite lin_eval_cons lin_eval_nil tvZ_one tvZ_zero. ring.
+    - pose proof (q_view_spec t) as Hs. destruct (q_view t) eqn:Hq.
+      + specialize (IH a) as Ha. specialize (IH b) as Hb.
+        destruct (lin_view f a) as [c1 m1]. destruct (lin_view f b) as [c2 m2].
+        rewrite lin_eval_app Ha Hb. now subst t.
+      + specialize (IH a) as Ha. specialize (IH b) as Hb.
+        destruct (lin_view f a) as [c1 m1]. destruct (lin_view f b) as [c2 m2].
+        rewrite lin_eval_sub Ha Hb. now subst t.
+      + pose proof (q_view_spec a) as Ha. destruct (q_view a);
+          rewrite lin_eval_cons lin_eval_nil;
+          try (rewrite tvZ_one tvZ_zero; ring).
+        rewrite tvZ_unsigned tvZ_zero. subst. ring.
+      + specialize (IH a) as Ha. destruct (lin_view f a) as [c1 m1].
+        rewrite lin_eval_neg Ha. now subst t.
+      + rewrite lin_eval_cons lin_eval_nil tvZ_one tvZ_zero. ring.
+      + rewrite lin_eval_nil tvZ_unsigned. now subst.
+      + rewrite lin_eval_cons lin_eval_nil tvZ_one tvZ_zero. ring.
+  Qed.
+
+  (* drop monomials whose coefficient is 0 mod 2^n (canon_term keeps them) *)
+  Definition lin_prune (ms : list (Z * T)) : list (Z * T) :=
+    List.filter (fun '(k, _) => negb (bv.eqb (@bv.of_Z n k) bv.zero)) ms.
+  Lemma lin_eval_prune c ms : lin_eval c (lin_prune ms) ≡ lin_eval c ms.
+  Proof.
+    induction ms as [|[k a] ms IH]; cbn [lin_prune List.filter]; [reflexivity|].
+    destruct (bv.eqb_spec (@bv.of_Z n k) bv.zero) as [Hk|Hk]; cbn [negb].
+    - fold (lin_prune ms). rewrite IH lin_eval_cons.
+      assert (Hz : (tvZ k : T) ≡ tvZ 0) by (unfold tvZ; now rewrite Hk).
+      rewrite Hz tvZ_zero. ring.
+    - fold (lin_prune ms). rewrite !lin_eval_cons IH. reflexivity.
+  Qed.
+
+  (* S1 *)
+  Definition lin_diff (t1 t2 : T) : T := canon_term (t1 ⊕ tvZ (-1) ⊗ t2).
+  (* keep lin_diff FOLDED in proofs: unfolded, Qed's kernel check tries to
+     compute canon_term on open terms (timed out, 2026-11-05) *)
+  Lemma lin_diff_equiv t1 t2 : lin_diff t1 t2 ≡ t1 ⊕ tvZ (-1) ⊗ t2.
+  Proof. apply canon_term_equiv. Qed.
+  Definition lin_const (t1 t2 : T) : option (bv n) :=
+    let '(c, ms) := lin_view qfuel (lin_diff t1 t2) in
+    match lin_prune ms with nil => Some (bv.of_Z c) | _ => None end.
+  Lemma lin_const_equiv t1 t2 v : lin_const t1 t2 = Some v ->
+    t1 ≡ term_val (ty.bvec n) v ⊕ t2.
+  Proof.
+    unfold lin_const. pose proof (lin_view_sound qfuel (lin_diff t1 t2)) as Hs.
+    destruct (lin_view qfuel (lin_diff t1 t2)) as [c ms].
+    pose proof (lin_eval_prune c ms) as Hp.
+    destruct (lin_prune ms) eqn:E; [|discriminate]. intros [= <-].
+    rewrite lin_eval_nil in Hp. rewrite lin_diff_equiv in Hs.
+    assert (Hv : term_val (ty.bvec n) (bv.of_Z c) ≡ t1 ⊕ tvZ (-1) ⊗ t2)
+      by (change (term_val (ty.bvec n) (bv.of_Z c)) with (tvZ c : T); now rewrite Hp).
+    clear -Hv. rewrite Hv tvZ_m1. ring.
+  Qed.
+  Lemma lin_const_inst t1 t2 v : lin_const t1 t2 = Some v ->
+    forall ι, inst t1 ι = inst t2 ι <-> v = bv.zero.
+  Proof.
+    intros H ι. rewrite (lin_const_equiv t1 t2 H ι). cbn.
+    destruct (inst t2 ι) as [a1 a2]. unfold ty.valToRelVal, bop.evalRel, ty.liftBinOp, ty.liftBinOpRV; cbn.
+    split.
+    - intros Hq. pose proof (f_equal ty.projLeftRV Hq) as HL. cbn in HL.
+      apply (bv.add_cancel_r (z := a1)). rewrite bv.add_zero_l. exact HL.
+    - intros ->. rewrite !bv.add_zero_l. reflexivity.
+  Qed.
+  Lemma lin_const_proj (t1 t2 : T) v : lin_const t1 t2 = Some v -> forall ι : Valuation Σ,
+    ty.projLeftRV (inst t1 ι : RelVal (ty.bvec n)) = bv.add v (ty.projLeftRV (inst t2 ι : RelVal (ty.bvec n))) /\
+    ty.projRightRV (inst t1 ι : RelVal (ty.bvec n)) = bv.add v (ty.projRightRV (inst t2 ι : RelVal (ty.bvec n))).
+  Proof.
+    intros H ι. rewrite (lin_const_equiv t1 t2 H ι). cbn.
+    destruct (inst t2 ι) as [a1 a2]. unfold ty.valToRelVal, bop.evalRel, ty.liftBinOp, ty.liftBinOpRV; cbn.
+    split; reflexivity.
+  Qed.
+End Lin.
+
+    Definition lin_decide {w : World} {σ} (op : RelOp σ) (t1 t2 : STerm σ w) : option (DList w) :=
+      match σ return RelOp σ -> STerm σ w -> STerm σ w -> option (DList w) with
+      | ty.bvec n => fun op t1 t2 =>
+          match op with
+          | bop.eq => match lin_const t1 t2 with
+                      | Some v => Some (if bv.eqb v bv.zero then empty else error)
+                      | None => None end
+          | bop.neq => match lin_const t1 t2 with
+                      | Some v => Some (if bv.eqb v bv.zero then error else empty)
+                      | None => None end
+          | _ => None
+          end
+      | _ => fun _ _ _ => None
+      end op t1 t2.
+    Definition lin_decide_propeq {w : World} {σ} (t1 t2 : STerm σ w) : option (DList w) :=
+      match σ return STerm σ w -> STerm σ w -> option (DList w) with
+      | ty.bvec n => fun t1 t2 =>
+          match lin_const t1 t2 with
+          | Some v => Some (if bv.eqb v bv.zero then empty else error)
+          | None => None end
+      | _ => fun _ _ => None
+      end t1 t2.
+    Lemma lin_decide_propeq_spec {w : World} {σ} (t1 t2 : STerm σ w) (d : DList w) :
+      lin_decide_propeq t1 t2 = Some d -> instpred d ⊣⊢ instpred (formula_propeq t1 t2).
+    Proof.
+      unfold lin_decide_propeq. intros Hc. destruct σ; cbn in Hc; try discriminate.
+      destruct (lin_const t1 t2) as [v|] eqn:Hl; try discriminate. injection Hc as <-.
+      rewrite instpred_formula_propeqₚ.
+      pose proof (lin_const_inst t1 t2 Hl) as Hi.
+      destruct (bv.eqb_spec v bv.zero) as [Hv|Hv];
+        [rewrite instpred_dlist_empty | rewrite instpred_dlist_error];
+        constructor; intros ι Hwco; cbn; specialize (Hi ι); split; intros HH;
+        first [ solve [exact I] | solve [destruct HH] | solve [apply Hi; exact Hv]
+              | solve [exfalso; apply Hv, Hi, HH] ].
+    Qed.
+    (* NB cbn -[lin_const]: a bare cbn unfolds canon_term on open terms -> timeout *)
+    Lemma lin_decide_spec {w : World} {σ} (op : RelOp σ) (t1 t2 : STerm σ w) (d : DList w) :
+      lin_decide op t1 t2 = Some d -> instpred d ⊣⊢ instpred (formula_relop op t1 t2).
+    Proof.
+      unfold lin_decide. destruct σ; cbn; try discriminate.
+      depelim op; cbn -[lin_const]; try discriminate.
+      all: destruct (lin_const t1 t2) as [v|] eqn:Hl; try discriminate; intros [= <-];
+        pose proof (lin_const_proj t1 t2 Hl) as Hp;
+        destruct (bv.eqb_spec v bv.zero) as [Hv|Hv];
+        first [rewrite instpred_dlist_empty | rewrite instpred_dlist_error];
+        constructor; intros ι Hwco; cbn -[lin_const]; unfold instpred_formula_relop;
+        specialize (Hp ι); destruct (inst t1 ι) as [l1 r1], (inst t2 ι) as [l2 r2]; cbn in Hp;
+        destruct Hp as [-> ->]; unfold bop.evalRel, ty.liftBinOp; cbn -[lin_const].
+      all: assert (Hc : forall a : bv n, bv.add v a = a <-> v = bv.zero) by
+           (intros a; split; [intros H; apply (bv.add_cancel_r (z := a)); now rewrite bv.add_zero_l
+                             | intros ->; apply bv.add_zero_l]);
+         rewrite ?Hc; split; intros HH;
+         first [ solve [exact I] | solve [destruct HH] | solve [split; assumption]
+               | solve [exfalso; destruct HH as [HH _]; now apply HH] | solve [exfalso; now apply Hv, HH] ].
+    Qed.
+
+    Definition try_lin_cancel {w : World} {σ} (op : RelOp σ)
+      (t1 t2 : STerm σ w) : option (DList w) :=
+      match lin_decide op t1 t2 with
+      | Some d => Some d
+      | None => try_bvadd_cancel op t1 t2
+      end.
+
     Definition simplify_relop {w : World} {σ} (op : RelOp σ) :
       forall (t1 t2 : STerm σ w), DList w :=
       match op in RelOp σ return forall (t1 t2 : STerm σ w), DList w with
@@ -3145,14 +3377,14 @@ Module Type GenericSolverOn
          spec proof's `match goal with context[...]` from seeing the real
          terms. *)
       | bop.eq => fun t1 t2 =>
-          match try_bvadd_cancel bop.eq (peval t1) (peval t2) with
+          match try_lin_cancel bop.eq (peval t1) (peval t2) with
           | Some d => d
           | None => simplify_eq Term_eqb_relval
                       (λ (σ : Ty) (t1 t2 : Term w σ), dlist_eq t1 t2)
                       (peval t1) (peval t2)
           end
       | bop.neq => fun t1 t2 =>
-          match try_bvadd_cancel bop.neq (peval t1) (peval t2) with
+          match try_lin_cancel bop.neq (peval t1) (peval t2) with
           | Some d => d
           | None => simplify_relopb bop.neq (peval t1) (peval t2)
           end
@@ -3680,6 +3912,179 @@ Module Type GenericSolverOn
         symmetry. apply relval_bvadd_cancel_val.
     Qed.
 
+    Lemma try_lin_cancel_spec {w : World} {σ} (op : RelOp σ) (t1 t2 : STerm σ w) (d : DList w) :
+      try_lin_cancel op t1 t2 = Some d -> instpred d ⊣⊢ instpred (formula_relop op t1 t2).
+    Proof.
+      unfold try_lin_cancel. destruct (lin_decide op t1 t2) as [d'|] eqn:H.
+      - intros [= <-]. now apply lin_decide_spec in H.
+      - apply try_bvadd_cancel_spec.
+    Qed.
+
+    Definition try_lin_propeq {w : World} {σ} (t1 t2 : STerm σ w) : option (DList w) :=
+      match lin_decide_propeq t1 t2 with
+      | Some d => Some d
+      | None => try_bvadd_cancel_propeq t1 t2
+      end.
+    Lemma try_lin_propeq_spec {w : World} {σ} (t1 t2 : STerm σ w) (d : DList w) :
+      try_lin_propeq t1 t2 = Some d -> instpred d ⊣⊢ instpred (formula_propeq t1 t2).
+    Proof.
+      unfold try_lin_propeq. destruct (lin_decide_propeq t1 t2) as [d'|] eqn:H.
+      - intros [= <-]. now apply lin_decide_propeq_spec in H.
+      - apply try_bvadd_cancel_propeq_spec.
+    Qed.
+
+    (* ---- PLAN-bv-arith-solver S2: solve a bv propeq for its INNERMOST unit variable ----
+       Same linear view of `t1 - t2`.  Among the atoms that are a bare variable
+       with coefficient +-1 and occur in no other atom, pick the innermost
+       (smallest ctx.in_at) and emit `x = -k * rest`, so unification eliminates
+       that variable whatever the equation's orientation -- try_isolate_inner
+       needs the `x + s = y` shape.  UNGUARDED (D2): propeq is pair equality and
+       the rewrite is an equivalence in both runs, secret or not. *)
+Section Iso.
+  Context {Σ : LCtx} {n : nat}.
+  Local Notation T := (Term Σ (ty.bvec n)).
+  Add Ring LinTR3 : (Term_bv_ring_theory Σ n) (setoid (@term_equivalence Σ (ty.bvec n)) (Term_bv_ring_eq_ext Σ n)).
+  Local Notation "a ⊕ b" := (term_binop bop.bvadd a b) (at level 50, left associativity).
+  Local Notation "a ⊗ b" := (term_binop bop.bvmul a b) (at level 40, left associativity).
+
+  Fixpoint lin_splits (l : list (Z * T)) : list ((Z * T) * list (Z * T)) :=
+    match l with
+    | nil => nil
+    | cons p l' => cons (p, l') (List.map (fun '(q, r) => (q, cons p r)) (lin_splits l'))
+    end.
+  Lemma lin_splits_sound c l k a r : List.In ((k, a), r) (lin_splits l) ->
+    lin_eval c l ≡ tvZ k ⊗ a ⊕ lin_eval c r.
+  Proof.
+    revert r; induction l as [|[k' a'] l IH]; intros r; cbn [lin_splits List.In]; [easy|].
+    intros [[= <- <- <-]|Hin]; [now rewrite lin_eval_cons|].
+    apply List.in_map_iff in Hin as [[[k2 a2] r2] [Heq Hin]]. injection Heq as <- <- <-.
+    rewrite !lin_eval_cons (IH _ Hin). ring.
+  Qed.
+  Definition var_free_in {τ} (a : T) (b : Term Σ τ) : bool :=
+    match a with
+    | @term_var _ x _ xIn => option.isSome (occurs_check xIn b)
+    | _ => false
+    end.
+  Definition is_unit (k : Z) : bool :=
+    orb (bv.eqb (@bv.of_Z n k) bv.one) (bv.eqb (@bv.of_Z n k) (bv.of_Z (-1))).
+  Definition lin_cands (l : list (Z * T)) : list (nat * ((Z * T) * list (Z * T))) :=
+    List.flat_map (fun '((k, a), r) =>
+      match term_var_at a with
+      | Some i => if andb (is_unit k) (List.forallb (fun '(_, b) => var_free_in a b) r)
+                  then cons (i, ((k, a), r)) nil else nil
+      | None => nil
+      end) (lin_splits l).
+  Fixpoint pick_min {X} (l : list (nat * X)) : option (nat * X) :=
+    match l with
+    | nil => None
+    | cons p l' => match pick_min l' with
+                   | Some q => if Nat.ltb (fst q) (fst p) then Some q else Some p
+                   | None => Some p
+                   end
+    end.
+  Lemma pick_min_in {X} (l : list (nat * X)) p : pick_min l = Some p -> List.In p l.
+  Proof.
+    induction l as [|p' l IH]; cbn [pick_min List.In]; [discriminate|].
+    destruct (pick_min l) as [q|]; [destruct (Nat.ltb (fst q) (fst p'))|]; intros [= <-]; auto.
+  Qed.
+  Lemma lin_cands_in l i k a r : List.In (i, ((k, a), r)) (lin_cands l) ->
+    List.In ((k, a), r) (lin_splits l) /\ is_unit k = true.
+  Proof.
+    unfold lin_cands. intros Hin. apply List.in_flat_map in Hin as [[[k' a'] r'] [Hs Hin]].
+    destruct (term_var_at a'); [|destruct Hin].
+    destruct (andb (is_unit k') _) eqn:Hu; [|destruct Hin].
+    destruct Hin as [[= <- <- <- <-]|[]]. apply andb_prop in Hu as [Hu _]. auto.
+  Qed.
+  Lemma is_unit_sq k : is_unit k = true -> tvZ k ⊗ tvZ k ≡ (tvZ 1 : T).
+  Proof.
+    unfold is_unit. intros [Hk|Hk]%orb_prop.
+    - destruct (bv.eqb_spec (@bv.of_Z n k) bv.one) as [E|]; [|discriminate].
+      unfold tvZ at 1 2. rewrite E tvZ_one. ring.
+    - destruct (bv.eqb_spec (@bv.of_Z n k) (bv.of_Z (-1))) as [E|]; [|discriminate].
+      unfold tvZ at 1 2. rewrite E. change (tvZ (-1) ⊗ tvZ (-1) ≡ (tvZ 1 : T)).
+      rewrite tvZ_m1 tvZ_one. ring.
+  Qed.
+  Lemma inst_diff_zero (u v : T) ι : inst u ι = inst v ι ->
+    inst (u ⊕ tvZ (-1) ⊗ v) ι = inst (tvZ 0 : T) ι.
+  Proof.
+    intros H. assert (E : v ⊕ tvZ (-1) ⊗ v ≡ (tvZ 0 : T)) by (rewrite tvZ_m1 tvZ_zero; ring).
+    specialize (E ι). cbn in E |- *. rewrite H. exact E.
+  Qed.
+  Lemma inst_of_diff (u v w kk : T) ι : u ≡ v ⊕ kk ⊗ w ->
+    inst w ι = inst (tvZ 0 : T) ι -> inst u ι = inst v ι.
+  Proof.
+    intros E Hw. assert (E0 : v ⊕ kk ⊗ tvZ 0 ≡ v) by (rewrite tvZ_zero; ring).
+    rewrite (E ι). specialize (E0 ι). cbn in E0, Hw |- *. rewrite Hw. exact E0.
+  Qed.
+  Definition lin_iso (t1 t2 : T) : option (T * T) :=
+    let '(c, ms) := lin_view qfuel (lin_diff t1 t2) in
+    match pick_min (lin_cands (lin_prune ms)) with
+    | Some (_, ((k, a), r)) => Some (a, canon_term (tvZ (-1) ⊗ tvZ k ⊗ lin_eval c r))
+    | None => None
+    end.
+  Lemma lin_iso_inst t1 t2 a b : lin_iso t1 t2 = Some (a, b) ->
+    forall ι, inst t1 ι = inst t2 ι <-> inst a ι = inst b ι.
+  Proof.
+    unfold lin_iso.
+    pose proof (lin_view_sound qfuel (lin_diff t1 t2)) as Hs.
+    destruct (lin_view qfuel (lin_diff t1 t2)) as [c ms].
+    pose proof (lin_eval_prune c ms) as Hp.
+    destruct (pick_min (lin_cands (lin_prune ms))) as [[i [[k a'] r]]|] eqn:Hm; [|discriminate].
+    intros [= <- <-] ι.
+    apply pick_min_in, lin_cands_in in Hm as [Hsp Hu].
+    pose proof (lin_splits_sound c _ _ _ _ Hsp) as Hsplit.
+    pose proof (is_unit_sq _ Hu) as Hkk.
+    rewrite lin_diff_equiv in Hs.
+    assert (HD : t1 ⊕ tvZ (-1) ⊗ t2 ≡ tvZ k ⊗ a' ⊕ lin_eval c r)
+      by (now rewrite <- Hs, <- Hp, Hsplit).
+    set (R := lin_eval c r) in *.
+    pose proof (canon_term_equiv (tvZ (-1) ⊗ tvZ k ⊗ R)) as Hb.
+    set (b := canon_term _) in *.
+    split; intros H.
+    - apply (inst_of_diff (w := t1 ⊕ tvZ (-1) ⊗ t2) (kk := tvZ k)); [|now apply inst_diff_zero].
+      rewrite Hb HD.
+      transitivity ((tvZ k ⊗ tvZ k) ⊗ a' ⊕ tvZ (-1) ⊗ tvZ k ⊗ R ⊕ tvZ k ⊗ R); [|ring].
+      rewrite Hkk tvZ_one tvZ_m1. ring.
+    - apply (inst_of_diff (w := a' ⊕ tvZ (-1) ⊗ b) (kk := tvZ k)); [|now apply inst_diff_zero].
+      rewrite Hb.
+      transitivity (t2 ⊕ (t1 ⊕ tvZ (-1) ⊗ t2)); [rewrite tvZ_m1; ring|].
+      rewrite HD.
+      transitivity (t2 ⊕ tvZ k ⊗ a' ⊕ (tvZ k ⊗ tvZ k) ⊗ R); [|rewrite tvZ_m1; ring].
+      rewrite Hkk tvZ_one. ring.
+  Qed.
+End Iso.
+
+    Definition lin_isolate {w : World} {σ} (t1 t2 : STerm σ w) : option (DList w) :=
+      match σ return STerm σ w -> STerm σ w -> option (DList w) with
+      | ty.bvec n => fun t1 t2 =>
+          match lin_iso t1 t2 with
+          | Some (a, b) => Some (dlist_propeq a b)
+          | None => None end
+      | _ => fun _ _ => None
+      end t1 t2.
+    Lemma lin_isolate_spec {w : World} {σ} (t1 t2 : STerm σ w) (d : DList w) :
+      lin_isolate t1 t2 = Some d -> instpred d ⊣⊢ instpred (formula_propeq t1 t2).
+    Proof.
+      unfold lin_isolate. intros Hc.
+      destruct σ; cbn in Hc; try discriminate.
+      destruct (lin_iso t1 t2) as [[a b]|] eqn:Hl; try discriminate. injection Hc as <-.
+      rewrite instpred_dlist_singleton. rewrite !instpred_formula_propeqₚ.
+      constructor; intros ι Hwco; cbn. symmetry. exact (lin_iso_inst _ _ Hl ι).
+    Qed.
+
+    Definition try_lin_isolate {w : World} {σ} (t1 t2 : STerm σ w) : option (DList w) :=
+      match lin_isolate t1 t2 with
+      | Some d => Some d
+      | None => try_isolate_inner t1 t2
+      end.
+    Lemma try_lin_isolate_spec {w : World} {σ} (t1 t2 : STerm σ w) (d : DList w) :
+      try_lin_isolate t1 t2 = Some d -> instpred d ⊣⊢ instpred (formula_propeq t1 t2).
+    Proof.
+      unfold try_lin_isolate. destruct (lin_isolate t1 t2) as [d'|] eqn:H.
+      - intros [= <-]. now apply lin_isolate_spec in H.
+      - apply try_isolate_inner_spec.
+    Qed.
+
     (* ---- soundness of the fetch-bound discharge --------------------------
        Everything below stays at the `instprop` (plain Prop) level and is
        lifted to `Pred w` exactly once, in `try_fetch_bound_spec`.  That is
@@ -3846,10 +4251,10 @@ Module Type GenericSolverOn
          Eight branches, one per RelOp constructor, so a miscount is a loud
          error rather than a silent fallthrough. *)
       destruct op;
-      [ destruct (try_bvadd_cancel bop.eq (peval t1) (peval t2)) as [d|] eqn:Hc;
-        [ apply try_bvadd_cancel_spec in Hc; rewrite Hc | ]
-      | destruct (try_bvadd_cancel bop.neq (peval t1) (peval t2)) as [d|] eqn:Hc;
-        [ apply try_bvadd_cancel_spec in Hc; rewrite Hc | ]
+      [ destruct (try_lin_cancel bop.eq (peval t1) (peval t2)) as [d|] eqn:Hc;
+        [ apply try_lin_cancel_spec in Hc; rewrite Hc | ]
+      | destruct (try_lin_cancel bop.neq (peval t1) (peval t2)) as [d|] eqn:Hc;
+        [ apply try_lin_cancel_spec in Hc; rewrite Hc | ]
       (* le now dispatches through try_fetch_bound as well -- same shape as the
          eq/neq arms above.  Five idtacs follow, not six: RelOp has 8
          constructors (eq neq le lt bvsle bvslt bvule bvult) and le is 3rd. *)
@@ -3943,14 +4348,14 @@ Module Type GenericSolverOn
       | formula_propeq t1 t2   =>
           let t1 := peval t1 in
           let t2 := peval t2 in
-          match try_bvadd_cancel_propeq t1 t2 with
+          match try_lin_propeq t1 t2 with
           | Some d => d
           | None =>
           (* ...then `x + s = y` (also under a shared literal) with x the
              INNERMOST variable is solved for x, so unification eliminates x
              and not y: see `try_isolate_inner` above.  BEFORE the weakening
              below, whose output unify would act on in the same pass. *)
-          match try_isolate_inner t1 t2 with
+          match try_lin_isolate t1 t2 with
           | Some d => d
           | None =>
               (* ...and if the shared summand is the LITERAL rather than the
@@ -4033,14 +4438,14 @@ Module Type GenericSolverOn
            just above: the cancellation ran on the PEVAL'd terms, and
            [peval_sound] is stated PER-VALUATION, so it cannot be rewritten
            under a still-unapplied [⊣⊢] -- ι must be introduced first. *)
-        + apply try_bvadd_cancel_propeq_spec in Hc; rewrite Hc.
+        + apply try_lin_propeq_spec in Hc; rewrite Hc.
           constructor; intros ι Hwco; cbn; unfold instpred_formula_propeq.
           now rewrite !peval_sound.
         + match goal with
           | |- instpred (match ?scrut with | Some _ => _ | None => _ end) ⊣⊢ _ =>
               destruct scrut as [d|] eqn:Hv
           end.
-          * apply try_isolate_inner_spec in Hv; rewrite Hv.
+          * apply try_lin_isolate_spec in Hv; rewrite Hv.
             constructor; intros ι Hwco; cbn; unfold instpred_formula_propeq.
             now rewrite !peval_sound.
           * match goal with

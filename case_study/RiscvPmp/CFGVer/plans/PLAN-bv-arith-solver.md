@@ -569,8 +569,69 @@ Consequence for the plan: no change to S1–S4. Two notes for O1: (i) the
 shift identity) are outside D1 (decide-only) by design and remain closer
 work; they are the cases D1's "write rewrites back" alternative would buy.
 
+### O1 RESULT (2026-11-05)
+
+All three cores proved, no admits, in untracked probes on issue/rsa-montymul
+(`CFGVer/ZZO1Core.v`: S1+S2; `ZZO1Rng.v`, `ZZO1Rng2.v`, `ZZO1Dec.v`: S3).
+
+- **S1** `lin_const t1 t2`: the linear view of `canon_term (t1 + (-1)·t2)`,
+  0-coefficient monomials pruned (O0 finding 2); `Some v` iff the difference
+  is the constant `v`. `lin_decide` (eq/neq relop) and `lin_decide_propeq`
+  answer `empty`/`error`. No publicness guard: both runs differ by the same
+  constant.
+- **S2** `lin_iso`: candidates are atoms that are a bare variable with
+  coefficient ±1 and occur in no other atom; the smallest `ctx.in_at` wins;
+  output `x = canon_term (-k · rest)`. Unguarded (D2).
+- **S3** `rng fuel C t`: an interval per term from path-condition seeds
+  (`bvult/bvule/eq/neq` against a literal), interval arithmetic over the
+  linear view, `wrapf` exact only when the unreduced range meets no multiple
+  of `2^n`. `rng_decide`/`rng_decide_propeq` decide eq/neq/bvult/bvule.
+- Self-tests (vm_compute), as the O0 table predicts:
+  - S1 positive: P1 `q = 0x180 + q` refuted, `x+4 <> x` / commuted / `2x+3 = x+x+3` / `c-c+x` vs `x+5` decided;
+  - S1 negative: D0, mmq, `T+c` vs `1+T` fall through;
+  - S2: `k = T - c` and its reverse isolate `k`; `2k = T` isolates `T`; D0 gives `c = 1` (consistent, no refutation); `2k = 4x` and `k = k·x + 1` fall through;
+  - S3: P0 dead beq and dead bltu refuted, RsaCcopyGate decided; D0 and a wrapping control undecided.
+
+Wiring decision for O2 (Emiel, "Yes, go ahead"): combined wrappers
+`try_lin_cancel` / `try_lin_propeq` / `try_lin_isolate` (new rule first,
+the old one as fallback, D3), so the existing spec proofs change by name
+only. S3's propagation through `>>`/`&` by a constant and `zext`/`sext` is
+deferred.
+
+### O2 RESULT (2026-11-05)
+
+S1 + S2 hooked into `theories/Symbolic/Solver.v` (Section Lin / Section Iso,
+above `simplify_relop`) through the combined wrappers: `try_lin_cancel` in
+`simplify_relop`'s eq/neq arms, `try_lin_propeq` and `try_lin_isolate` in
+`simplify_formula`'s propeq arm. The existing spec proofs changed by name only.
+Regression rows: `CFGVer/Example/SolverLin.v` (O0 table + a bvsub group),
+compiled `-vok`, all green, negatives `Open`.
+
+**Finding (cost a sentinel round): `lin_view` must read `QSub`/`QNeg`.**
+`canon_term`'s ring printer (`Pphi_dev` with `get_signZ`) prints a NEGATIVE
+coefficient as `bvsub x (k·y)`, and negative coefficients appear as soon as
+the input has a bvsub (a SUB instruction's `peval_bvsub`). O1's `lin_view`
+had no `QSub`/`QNeg` arm, so `a -ᵇ 0xffffffff·c` was ONE atom. In RsaCcopy's
+loop-back obligation that atom hid the angelic `a`, so S2 isolated the
+universal `nl` instead (`nl = 0xfffffffc + (a - 0xffffffff·c) + ...`) and
+`∃ a n e vs` survived to the closer: `valid_ccl_loop` failed with "No
+applicable tactic". Fix: `lin_neg`, the two arms, and `tvZ_opp` /
+`lin_eval_neg` / `lin_eval_sub` for `lin_view_sound`. Not a D2 issue: the
+innermost-unit choice is right once the variable is visible. S2's output is
+still bvsub-free (coefficients come from `tvZ`, i.e. non-negative
+`bv.unsigned` literals), which the closers need (`bv_lin` has no bvsub case);
+`SolverLin.v` checks it (`sub_free`).
+
+Phase check (changed files + sentinels + negatives):
+`Solver.vo` 306 s user / 3.6 GB (KR baseline 345 s); `-vos` closure (39 files)
+plus `-vok` of RsaCcopy, MuladdParamLoopI, CheckScalarParamLoop2, Cmovznz4,
+Cmovznz4Result: all green, 956 s user / 1191 s wall, peak 8.3 GB, no
+watchdog kill. Per-VC times: MuladdParamLoopI 18.6 s (was 18.1),
+CheckScalarParamLoop2 7.3 s (was 7.4), RsaCcopy 11.3 s + 4.6 s.
+
 ### Timing
 
 | date | phase | start | end | wall min | CPU min | notes |
 |---|---|---|---|---|---|---|
 | 2026-11-05 | O0 | — | — | 2.3 | 2.3 | ZZMmqShape.v dump (vm_compute+solve_vc 91 s, peak 7.7 GB); preamble checks < 1 s |
+| 2026-11-05 | O2 | — | — | 26 | 21 | Solver.vo 306 s; sentinels 956 s user / 1191 s wall (incl. -vos closure); one earlier failed round (RsaCcopy, lin_view QSub) ~6 min + 5.3 min |
