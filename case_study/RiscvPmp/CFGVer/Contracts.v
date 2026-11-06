@@ -679,6 +679,13 @@ Notation "e1 ',ₜ' e2" := (term_binop bop.pair e1 e2) (at level 100).
       hnf in Ha, Hb. rewrite <- Ha. rewrite <- Hb. split; exact H.
     Qed.
 
+    (* With `_pub` binders (Propositions.fuse_pub) a public variable enters the
+       valuation as `SyncVal l`, so cbn reduces a relop/bool formula over
+       public operands all the way to a literal `P /\ P` -- no projLeftRV /
+       projRightRV left for relprop_sync to match.  Prove P once. *)
+    Lemma and_dup (P : Prop) : P -> P /\ P.
+    Proof. intros H. exact (conj H H). Qed.
+
     Lemma relbool_sync (b : RelVal ty.bool) :
       RiscvPmpSignature.secLeak b -> ty.projLeftRV b = true ->
       ty.projLeftRV b = true /\ ty.projRightRV b = true.
@@ -715,6 +722,7 @@ Notation "e1 ',ₜ' e2" := (term_binop bop.pair e1 e2) (at level 100).
       | |- Erasure.inst_eformula' _ (Erasure.eformula_relop _ _ _) =>
           cbn -[Erasure.inst_symprop];
           lazymatch goal with
+          | |- ?P /\ ?P => apply (@and_dup P)
           | |- ty.projLeftRV (bop.eval_relop_relprop ?op ?a ?b) /\
                ty.projRightRV (bop.eval_relop_relprop ?op ?a ?b) =>
               apply (@relprop_sync _ op a b);
@@ -723,6 +731,7 @@ Notation "e1 ',ₜ' e2" := (term_binop bop.pair e1 e2) (at level 100).
       | |- Erasure.inst_eformula' _ (Erasure.eformula_bool _) =>
           cbn -[Erasure.inst_symprop];
           lazymatch goal with
+          | |- ?P /\ ?P => apply (@and_dup P)
           | |- ty.projLeftRV ?b = true /\ ty.projRightRV ?b = true =>
               apply (@relbool_sync b); [solve [vc_pub_erased] |]
           end

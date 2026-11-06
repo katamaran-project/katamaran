@@ -149,10 +149,6 @@ Qed.
 
 Ltac rv_leaf :=
   cbn -[Erasure.inst_symprop] in *;
-  (* a public RelVal is a pair whose sides agree: substitute that *)
-  repeat match goal with v : RelVal _, H : RiscvPmpSignature.secLeak ?v |- _ =>
-    is_var v; let l := fresh "l" in let r := fresh "r" in
-    destruct v as [l r]; hnf in H; cbn in H; subst r end;
   (* every other RelVal is a pair too (one constructor: no case split), so
      evalRel reduces on it *)
   repeat match goal with v : RelVal _ |- _ =>

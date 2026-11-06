@@ -83,10 +83,6 @@ Ltac rv_leaf_core :=
   (* valToRelVal is the eta-reduced SyncVal: cbn leaves it folded *)
   try unfold ty.valToRelVal in *;
   cbn -[Erasure.inst_symprop] in *;
-  (* a public RelVal is a pair whose sides agree: substitute that *)
-  repeat match goal with v : RelVal _, H : RiscvPmpSignature.secLeak ?v |- _ =>
-    is_var v; let l := fresh "l" in let r := fresh "r" in
-    destruct v as [l r]; hnf in H; cbn in H; subst r end;
   cbn -[Erasure.inst_symprop bv.add bv.mul bv.sub bv.negate bv.shiftl bv.shiftr bv.land bv.sext
         bv.unsigned bv.of_N bv.ult bv.ule] in *;
   (* a relop/bool hypothesis is pointwise, `P_l /\ P_r` *)
