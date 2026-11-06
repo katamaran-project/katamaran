@@ -178,7 +178,20 @@ Module Type SymPropOn
     (*     (rhs : forall (pc : PatternCase pat), *)
     (*         SymProp (ctx.remove (ctx.in_cat_left (PatternCaseCtx pc) xIn))) *)
     | debug
-        (b : AMessage Σ) (k : SymProp Σ).
+        (b : AMessage Σ) (k : SymProp Σ)
+    (* PUBLIC binders (PLAN-pub-binders): the quantifier ranges over plain
+       values [l : Val (type b)] and binds [ty.SyncVal l], so publicness is
+       carried by the binder instead of a separate [secLeak] assume/assert.
+
+         safe (demonicv_pub b k) ι := forall l, safe k (ι ► b ↦ ty.SyncVal l)
+         safe (angelicv_pub b k) ι := exists l, safe k (ι ► b ↦ ty.SyncVal l)
+
+       Produced only by [fuse_pub] (Erasure) out of
+       [demonicv b (.. assumek (secLeak b) ..)] and
+       [angelicv b (.. assertk (secLeak b) ..)]. Kept LAST so the bullets of
+       existing inductions over 𝕊 keep their order. *)
+    | angelicv_pub b (k : SymProp (Σ ▻ b))
+    | demonicv_pub b (k : SymProp (Σ ▻ b)).
     Notation 𝕊 := SymProp.
 
     Global Arguments error {_} _.
@@ -190,6 +203,8 @@ Module Type SymPropOn
     Global Arguments assert_vareq {_} x {_ _} t msg k.
     Global Arguments assume_vareq {_} x {_ _} t k.
     Global Arguments dropk {_} x {_ _} k.
+    Global Arguments angelicv_pub {_} _ _.
+    Global Arguments demonicv_pub {_} _ _.
     (* Global Arguments pattern_match_var {_} x {σ xIn} _ _. *)
 
     Definition angelic_close0 {Σ0 : LCtx} :
@@ -380,6 +395,8 @@ Module Type SymPropOn
         (*     | None => False *)
         (*     end *)
         | debug d k => safe k ι
+        | angelicv_pub b k => exists l, safe k (env.snoc ι b (ty.SyncVal l))
+        | demonicv_pub b k => forall l, safe k (env.snoc ι b (ty.SyncVal l))
         end%type.
     Global Arguments safe {Σ} p ι.
 
@@ -422,6 +439,8 @@ Module Type SymPropOn
         (*     | None => False *)
         (*     end *)
         | debug d k => Debug d (safe_debug k ι)
+        | angelicv_pub b k => exists l, safe_debug k (env.snoc ι b (ty.SyncVal l))
+        | demonicv_pub b k => forall l, safe_debug k (env.snoc ι b (ty.SyncVal l))
         end%type.
     Global Arguments safe_debug {Σ} p ι.
 
@@ -473,6 +492,8 @@ Module Type SymPropOn
         (*     | None => False *)
         (*     end *)
         | debug d k => Debug d (wsafe k ι)
+        | angelicv_pub b k => exists l, @wsafe (wsnoc w b) k (env.snoc ι b (ty.SyncVal l))
+        | demonicv_pub b k => forall l, @wsafe (wsnoc w b) k (env.snoc ι b (ty.SyncVal l))
         end%type.
     #[global] Arguments wsafe {w} p ι.
 
@@ -513,6 +534,8 @@ Module Type SymPropOn
       (*   + tauto. *)
       - eauto.
       - rewrite !debug_equiv; auto.
+      - apply ex_iff_morphism; intros v; eauto.
+      - apply all_iff_morphism; intros v; eauto.
     Qed.
 
     Lemma safe_debug_safe {Σ : LCtx} (p : 𝕊 Σ) (ι : Valuation Σ) :
@@ -538,6 +561,8 @@ Module Type SymPropOn
       (*   + tauto. *)
       - eauto.
       - rewrite debug_equiv; auto.
+      - apply ex_iff_morphism; intros v; eauto.
+      - apply all_iff_morphism; intros v; eauto.
     Qed.
 
     Lemma safe_assume_pathcondition_without_solver {w0 : World}
@@ -819,6 +844,21 @@ Module Type SymPropOn
     #[export] Instance proper_demonicv {Σ b} : Proper (sequiv (Σ ▻ b) ==> sequiv Σ) (demonicv b).
     Proof. unfold sequiv. intros p q pq ι. cbn. now apply all_iff_morphism. Qed.
 
+    #[export] Instance proper_demonicv_impl {Σ b} : Proper (simpl (Σ ▻ b) ==> simpl Σ) (demonicv b).
+    Proof. unfold simpl. intros p q pq ι H v. now apply pq. Qed.
+
+    #[export] Instance proper_angelicv_pub {Σ b} : Proper (sequiv (Σ ▻ b) ==> sequiv Σ) (angelicv_pub b).
+    Proof. unfold sequiv. intros p q pq ι. cbn. now apply ex_iff_morphism. Qed.
+
+    #[export] Instance proper_angelicv_pub_impl {Σ b} : Proper (simpl (Σ ▻ b) ==> simpl Σ) (angelicv_pub b).
+    Proof. unfold simpl. intros p q pq ι [v H]. exists v. now apply pq. Qed.
+
+    #[export] Instance proper_demonicv_pub {Σ b} : Proper (sequiv (Σ ▻ b) ==> sequiv Σ) (demonicv_pub b).
+    Proof. unfold sequiv. intros p q pq ι. cbn. now apply all_iff_morphism. Qed.
+
+    #[export] Instance proper_demonicv_pub_impl {Σ b} : Proper (simpl (Σ ▻ b) ==> simpl Σ) (demonicv_pub b).
+    Proof. unfold simpl. intros p q pq ι H v. now apply pq. Qed.
+
     (* #[export] Instance proper_pattern_match {Σ σ} (s : Term Σ σ) (pat : Pattern σ) : *)
     (*   Proper *)
     (*     (forall_relation (fun pc => sequiv (Σ ▻▻ PatternCaseCtx pc)) ==> sequiv Σ) *)
@@ -1038,6 +1078,8 @@ Module Type SymPropOn
       Notation "F → P" := (@SymProp.assumek _ F P) (only printing).
       Notation "'∃' x '∷' σ , P" := (SymProp.angelicv (x ∷ σ) P) (at level 10, P at level 200, only printing, format "'[  ' '[  ' '∃'  x '∷' σ ']' ,  '/' P ']'").
       Notation "'∀' x '∷' σ , P" := (SymProp.demonicv (x ∷ σ) P) (at level 10, P at level 200, only printing, format "'[  ' '[  ' '∀'  x '∷' σ ']' ,  '/' P ']'").
+      Notation "'∃ₚ' x '∷' σ , P" := (SymProp.angelicv_pub (x ∷ σ) P) (at level 10, P at level 200, only printing, format "'[  ' '[  ' '∃ₚ'  x '∷' σ ']' ,  '/' P ']'").
+      Notation "'∀ₚ' x '∷' σ , P" := (SymProp.demonicv_pub (x ∷ σ) P) (at level 10, P at level 200, only printing, format "'[  ' '[  ' '∀ₚ'  x '∷' σ ']' ,  '/' P ']'").
       Notation "⊤" := (@SymProp.block _).
       Notation "x ↦ t ∧ k" := (@SymProp.assert_vareq _ x _ _ t _ k) (at level 99, right associativity, only printing).
       Notation "x ↦ t → k" := (@SymProp.assume_vareq _ x _ _ t k) (at level 99, right associativity, only printing).
@@ -1074,6 +1116,8 @@ Module Type SymPropOn
         (*       (fun pc => N.add (size (rhs pc))) 1%N *)
         (*       (finite.enum (PatternCase pat)) *)
         | SymProp.debug b k => 1 + size k
+        | SymProp.angelicv_pub b k => 1 + size k
+        | SymProp.demonicv_pub b k => 1 + size k
         end.
 
       Record Count : Set :=
@@ -1114,6 +1158,8 @@ Module Type SymPropOn
         | SymProp.assert_vareq _ _ _ s => count_nodes s c
         | SymProp.assume_vareq _ _ s   => count_nodes s c
         | SymProp.dropk _ s            => count_nodes s c
+        | SymProp.angelicv_pub _ s     => count_nodes s c
+        | SymProp.demonicv_pub _ s     => count_nodes s c
         | SymProp.angelic_binary s1 s2 => count_nodes s2 (count_nodes s1 c)
         | SymProp.demonic_binary s1 s2 => count_nodes s2 (count_nodes s1 c)
         (* | SymProp.pattern_match _ pat rhs  => *)
@@ -1215,6 +1261,18 @@ Module Type SymPropOn
       | _     => demonicv b p
       end.
 
+    Definition angelicv_pub_prune {Σ} b (p : 𝕊 (Σ ▻ b)) : 𝕊 Σ :=
+      match p with
+      | error (amsg.mk msg) => error (amsg.mk (amsg.there msg))
+      | _         => angelicv_pub b p
+      end.
+
+    Definition demonicv_pub_prune {Σ} b (p : 𝕊 (Σ ▻ b)) : 𝕊 Σ :=
+      match p with
+      | block => block
+      | _     => demonicv_pub b p
+      end.
+
     Definition assume_vareq_prune {Σ} {x σ} {xIn : x∷σ ∈ Σ}
       (t : Term (Σ - x∷σ) σ) (k : 𝕊 (Σ - x∷σ)) : 𝕊 Σ :=
       match k with
@@ -1266,6 +1324,10 @@ Module Type SymPropOn
       (*   pattern_match_var x pat (fun pc => prune (rhs pc)) *)
       | debug d k =>
         debug d (prune k)
+      | angelicv_pub b o =>
+        angelicv_pub_prune (prune o)
+      | demonicv_pub b o =>
+        demonicv_pub_prune (prune o)
       end.
 
     Lemma prune_angelic_binary_sound {Σ} (p1 p2 : 𝕊 Σ) (ι : Valuation Σ) :
@@ -1284,6 +1346,8 @@ Module Type SymPropOn
       - destruct p2; cbn; auto; intuition.
       - destruct p2; cbn; auto;
           rewrite ?obligation_equiv; intuition.
+      - destruct p2; cbn; auto; intuition.
+      - destruct p2; cbn; auto; intuition.
       - destruct p2; cbn; auto; intuition.
       - destruct p2; cbn; auto; intuition.
       - destruct p2; cbn; auto; intuition.
@@ -1309,6 +1373,8 @@ Module Type SymPropOn
       - destruct p2; cbn; auto; intuition.
       - destruct p2; cbn; auto; intuition.
       - destruct p2; cbn; auto; intuition.
+      - destruct p2; cbn; auto; intuition.
+      - destruct p2; cbn; auto; intuition.
       (* - destruct p2; cbn; auto; intuition. *)
       (* - destruct p2; cbn; auto; intuition. *)
     Qed.
@@ -1329,6 +1395,16 @@ Module Type SymPropOn
 
     Lemma prune_demonicv_sound {Σ b} (p : 𝕊 (Σ ▻ b)) (ι : Valuation Σ) :
       safe (demonicv_prune p) ι <-> safe (demonicv b p) ι.
+    Proof. destruct p; cbn; auto; intuition. Qed.
+
+    Lemma prune_angelicv_pub_sound {Σ b} (p : 𝕊 (Σ ▻ b)) (ι : Valuation Σ) :
+      safe (angelicv_pub_prune p) ι <-> safe (angelicv_pub b p) ι.
+    Proof. destruct p; cbn; auto.
+           destruct msg; cbn. firstorder.
+    Qed.
+
+    Lemma prune_demonicv_pub_sound {Σ b} (p : 𝕊 (Σ ▻ b)) (ι : Valuation Σ) :
+      safe (demonicv_pub_prune p) ι <-> safe (demonicv_pub b p) ι.
     Proof. destruct p; cbn; auto; intuition. Qed.
 
     Lemma prune_assert_vareq_sound {Σ x σ} {xIn : x∷σ ∈ Σ}
@@ -1379,6 +1455,12 @@ Module Type SymPropOn
       (*   + destruct m. cbn; auto. *)
       (*   + tauto. *)
       - now rewrite ?debug_equiv.
+      - rewrite prune_angelicv_pub_sound; cbn.
+        apply ex_iff_morphism; intros v.
+        now rewrite IHp.
+      - rewrite prune_demonicv_pub_sound; cbn.
+        apply all_iff_morphism; intros v.
+        now rewrite IHp.
     Qed.
 
     Module SolveEvars.
@@ -1454,6 +1536,8 @@ Module Type SymPropOn
         (* | pattern_match_var x pat rhs => *)
         (*     plug ec (pattern_match_var x pat (fun pc => push ectx_refl (rhs pc))) *)
         | debug b p              => plug ec (debug b (push ectx_refl p))
+        | angelicv_pub b p       => plug ec (angelicv_pub b (push ectx_refl p))
+        | demonicv_pub b p       => plug ec (demonicv_pub b (push ectx_refl p))
         end.
 
       #[export] Instance proper_assert_msgs_formulas {Σ} (mfs : Ctx (Pair AMessage Formula Σ)) :
@@ -1570,6 +1654,8 @@ Module Type SymPropOn
         (* - apply proper_plug.  (* rewrite angelic_pattern_match_var_correct. *) *)
         (*   apply proper_pattern_match_var. intros pc. now rewrite H. *)
         - apply proper_plug, proper_debug, IHp.
+        - apply proper_plug, proper_angelicv_pub, IHp.
+        - apply proper_plug, proper_demonicv_pub, IHp.
       Qed.
 
     End SolveEvars.
@@ -1661,6 +1747,8 @@ Module Type SymPropOn
         (* | pattern_match_var x pat rhs => *)
         (*     plug ec (pattern_match_var x pat (fun pc => push uctx_refl (rhs pc))) *)
         | debug b p              => plug ec (debug b (push uctx_refl p))
+        | angelicv_pub b p       => plug ec (angelicv_pub b (push uctx_refl p))
+        | demonicv_pub b p       => plug ec (demonicv_pub b (push uctx_refl p))
         end.
 
       #[export] Instance proper_assume_pathcondition {Σ} (mfs : PathCondition Σ) :
@@ -1783,6 +1871,8 @@ Module Type SymPropOn
         (* - apply proper_plug_impl. (* rewrite demonic_pattern_match_var_correct. *) *)
         (*   apply proper_pattern_match_var_impl. intros pc. now rewrite H. *)
         - apply proper_plug_impl, proper_debug_impl, IHp.
+        - apply proper_plug_impl, proper_angelicv_pub_impl, IHp.
+        - apply proper_plug_impl, proper_demonicv_pub_impl, IHp.
       Qed.
 
     End SolveUvars.
@@ -1911,6 +2001,8 @@ Module Type SymPropOn
           let ζ' : WeakensTo (Σ1 - (x∷σ)%ctx) (Σ2 - (x::σ)%ctx) := weakenRemovePres ζ xIn in
           dropk x (weaken_symprop P ζ')
       | debug msg P => debug (substSU (T := AMessage) msg ζ) (weaken_symprop P ζ)
+      | angelicv_pub b P => angelicv_pub b (weaken_symprop P (upSU ζ))
+      | demonicv_pub b P => demonicv_pub b (weaken_symprop P (upSU ζ))
       end.
     #[export] Instance SubstSU_SymProp : SubstSU WeakensTo 𝕊 :=
       (fun _ _ P σ => weaken_symprop P σ).
@@ -1969,6 +2061,31 @@ Module Type SymPropOn
         (fun _ => demonicv b) kP.
     Admit Obligations.
 
+    (* The public binders, copied from uq_angelicv / uq_demonicv. *)
+    Program Definition uq_angelicv_pub {Σ} b
+      (kP : UQSymProp (Σ ▻ b)) : UQSymProp Σ :=
+      elimWeakenedVarZero
+        (fun Σ kP' => match ty.inhabit (type b) with
+                        Some _ => kP'
+                      | None =>
+                          angelicv_pub (Σ := Σ) b (substSU kP' (wkRemove ctx.in_zero))
+                      end)
+        _
+        (fun _ => angelicv_pub b) kP.
+    Admit Obligations.
+
+    Program Definition uq_demonicv_pub {Σ} b
+      (kP : UQSymProp (Σ ▻ b)) : UQSymProp Σ :=
+      elimWeakenedVarZero
+        (fun Σ kP' => match ty.inhabit (type b) with
+                        Some _ => kP'
+                      | None =>
+                          demonicv_pub (Σ := Σ) b (substSU kP' (wkRemove ctx.in_zero))
+                      end)
+        _
+        (fun _ => demonicv_pub b) kP.
+    Admit Obligations.
+
     Definition uq_assert_vareq x {σ Σ} {xIn : ((x::σ)%ctx ∈ Σ)%katamaran} (t : Term (Σ - (x::σ)%ctx) σ)
       (msg : AMessage (Σ - (x::σ)%ctx)) (P : UQSymProp (Σ - (x::σ)%ctx)) : UQSymProp Σ :=
       elimWeakenedVar (T1 := Pair (STerm σ) 𝕊)
@@ -2010,6 +2127,8 @@ Module Type SymPropOn
       | assume_vareq x t P => uq_assume_vareq x t (to_uqSymProp P)
       | dropk x P => uq_dropk x (to_uqSymProp P)
       | debug msg P => uq_debug msg (to_uqSymProp P)
+      | angelicv_pub b P => uq_angelicv_pub (to_uqSymProp P)
+      | demonicv_pub b P => uq_demonicv_pub (to_uqSymProp P)
       end.
 
     Definition unquantify {Σ} (P : 𝕊 Σ) : 𝕊 Σ :=
@@ -2082,7 +2201,10 @@ Module Type SymPropOn
     | epattern_match_var (x : LVar) σ (n : nat) (pat : Pattern (N:=LVar) σ)
         (rhs : PatternCase pat -> ESymProp)
     | edebug {Σ}
-        (b : AMessage Σ) (k : ESymProp).
+        (b : AMessage Σ) (k : ESymProp)
+    (* Public binders: range over SyncVal only (see SymProp.angelicv_pub). *)
+    | eangelicv_pub (b : LVar∷Ty) (k : ESymProp)
+    | edemonicv_pub (b : LVar∷Ty) (k : ESymProp).
 
     Definition erase_term {Σ} : forall {σ} (t : Term Σ σ), ETerm σ :=
       fix erase {σ} t :=
@@ -2132,6 +2254,8 @@ Module Type SymPropOn
           epattern_match_var x xIn pat
             (fun pc => erase_EErrors (rhs pc))
       | edebug b k => edebug b (erase_EErrors k)
+      | eangelicv_pub b k => eangelicv_pub b (erase_EErrors k)
+      | edemonicv_pub b k => edemonicv_pub b (erase_EErrors k)
       end.
 
     Fixpoint erase_symprop' {Σ} (p : SymProp Σ) : ESymProp :=
@@ -2154,9 +2278,215 @@ Module Type SymPropOn
       (*     epattern_match_var x (ctx.in_at xIn) pat *)
       (*       (fun pc => erase_symprop' (rhs pc)) *)
       | debug b k => edebug b (erase_symprop' k)
+      | angelicv_pub b k => eangelicv_pub b (erase_symprop' k)
+      | demonicv_pub b k => edemonicv_pub b (erase_symprop' k)
       end.
 
-    Definition erase_symprop {Σ} (p : SymProp Σ) : ESymProp := erase_EErrors (erase_symprop' p).
+    (* Publicness fusion (PLAN-pub-binders). A binder whose every path starts
+       by assuming (demonic) / asserting (angelic) [secLeak] of exactly that
+       variable ranges over public values only. [fuse_pub] removes that
+       formula and marks the binder public ([demonicv_pub]/[angelicv_pub]),
+       so the publicness is carried by the binder's type instead of being
+       re-derived per leaf by the closing tactics. *)
+
+    Definition is_leak_of {Σ b} (bIn : ctx.In b Σ) (fml : Formula Σ) : bool :=
+      match fml with
+      | formula_secLeak (@term_var _ _ _ xIn) => ctx.In_eqb bIn xIn
+      | _ => false
+      end.
+
+    Lemma is_leak_of_spec {Σ b} (bIn : ctx.In b Σ) (fml : Formula Σ) (ι : Valuation Σ) :
+      is_leak_of bIn fml = true -> instprop fml ι <-> secLeak (env.lookup ι bIn).
+    Proof.
+      destruct fml; try discriminate; cbn.
+      destruct t; try discriminate; cbn.
+      intros H. apply (Bool.reflect_iff _ _ (ctx.In_eqb_spec bIn lIn)) in H.
+      dependent elimination H. reflexivity.
+    Qed.
+
+    (* Remove [assumek (secLeak bIn)] from every path of [p], passing only
+       through demonic structure; [None] if some path does not assume it. *)
+    Fixpoint pub_assume {Σ b} (bIn : ctx.In b Σ) (p : 𝕊 Σ) {struct p} : option (𝕊 Σ) :=
+      match p with
+      | assumek fml k =>
+          if is_leak_of bIn fml then Some k
+          else option_map (assumek fml) (pub_assume bIn k)
+      | demonicv c k => option_map (demonicv c) (pub_assume (ctx.in_succ bIn) k)
+      | demonicv_pub c k => option_map (demonicv_pub c) (pub_assume (ctx.in_succ bIn) k)
+      | demonic_binary p1 p2 =>
+          match pub_assume bIn p1, pub_assume bIn p2 with
+          | Some p1', Some p2' => Some (demonic_binary p1' p2')
+          | _ , _ => None
+          end
+      | debug msg k => option_map (debug msg) (pub_assume bIn k)
+      | block => Some block
+      | _ => None
+      end.
+
+    (* Dually: remove [assertk (secLeak bIn)] from every path, passing only
+       through angelic structure and binary nodes. *)
+    Fixpoint pub_assert {Σ b} (bIn : ctx.In b Σ) (p : 𝕊 Σ) {struct p} : option (𝕊 Σ) :=
+      match p with
+      | assertk fml msg k =>
+          if is_leak_of bIn fml then Some k
+          else option_map (assertk fml msg) (pub_assert bIn k)
+      | angelicv c k => option_map (angelicv c) (pub_assert (ctx.in_succ bIn) k)
+      | angelicv_pub c k => option_map (angelicv_pub c) (pub_assert (ctx.in_succ bIn) k)
+      | demonic_binary p1 p2 =>
+          match pub_assert bIn p1, pub_assert bIn p2 with
+          | Some p1', Some p2' => Some (demonic_binary p1' p2')
+          | _ , _ => None
+          end
+      | angelic_binary p1 p2 =>
+          match pub_assert bIn p1, pub_assert bIn p2 with
+          | Some p1', Some p2' => Some (angelic_binary p1' p2')
+          | _ , _ => None
+          end
+      | debug msg k => option_map (debug msg) (pub_assert bIn k)
+      | error msg => Some (error msg)
+      | _ => None
+      end.
+
+    Lemma pub_assume_sound {Σ x} (xIn : ctx.In x Σ) (p p' : 𝕊 Σ) :
+      pub_assume xIn p = Some p' ->
+      forall ι, safe p ι <-> (secLeak (env.lookup ι xIn) -> safe p' ι).
+    Proof.
+      revert x xIn p'; induction p; intros xx xxIn p' Hp ι; cbn in Hp |- *; try discriminate.
+      - destruct (pub_assume xxIn p1) eqn:E1; try discriminate;
+          destruct (pub_assume xxIn p2) eqn:E2; try discriminate.
+        inversion Hp; subst; cbn. rewrite (IHp1 _ _ _ E1 ι), (IHp2 _ _ _ E2 ι). intuition.
+      - inversion Hp; subst; cbn. intuition.
+      - destruct (is_leak_of xxIn fml) eqn:E.
+        + inversion Hp; subst. now rewrite (is_leak_of_spec xxIn fml ι E).
+        + destruct (pub_assume xxIn p) eqn:E1; try discriminate. inversion Hp; subst; cbn.
+          rewrite (IHp _ _ _ E1 ι). intuition.
+      - match type of Hp with context [pub_assume ?i ?q] => destruct (pub_assume i q) eqn:E1 end;
+          try discriminate.
+        inversion Hp; subst; cbn. split.
+        + intros H Hs v. apply (IHp _ _ _ E1 (env.snoc ι b v)); auto.
+        + intros H v. apply (IHp _ _ _ E1 (env.snoc ι b v)). intros Hs. now apply H.
+      - destruct (pub_assume xxIn p) eqn:E1; try discriminate. inversion Hp; subst; cbn.
+        now rewrite (IHp _ _ _ E1 ι).
+      - match type of Hp with context [pub_assume ?i ?q] => destruct (pub_assume i q) eqn:E1 end;
+          try discriminate.
+        inversion Hp; subst; cbn. split.
+        + intros H Hs l. apply (IHp _ _ _ E1 (env.snoc ι b (ty.SyncVal l))); auto.
+        + intros H l. apply (IHp _ _ _ E1 (env.snoc ι b (ty.SyncVal l))). intros Hs. now apply H.
+    Qed.
+
+    Lemma pub_assert_sound {Σ x} (xIn : ctx.In x Σ) (p p' : 𝕊 Σ) :
+      pub_assert xIn p = Some p' ->
+      forall ι, safe p ι <-> (secLeak (env.lookup ι xIn) /\ safe p' ι).
+    Proof.
+      revert x xIn p'; induction p; intros xx xxIn p' Hp ι; cbn in Hp |- *; try discriminate.
+      - destruct (pub_assert xxIn p1) eqn:E1; try discriminate;
+          destruct (pub_assert xxIn p2) eqn:E2; try discriminate.
+        inversion Hp; subst; cbn. rewrite (IHp1 _ _ _ E1 ι), (IHp2 _ _ _ E2 ι). intuition.
+      - destruct (pub_assert xxIn p1) eqn:E1; try discriminate;
+          destruct (pub_assert xxIn p2) eqn:E2; try discriminate.
+        inversion Hp; subst; cbn. rewrite (IHp1 _ _ _ E1 ι), (IHp2 _ _ _ E2 ι). intuition.
+      - inversion Hp; subst; cbn. intuition.
+      - destruct (is_leak_of xxIn fml) eqn:E.
+        + inversion Hp; subst. now rewrite (is_leak_of_spec xxIn fml ι E).
+        + destruct (pub_assert xxIn p) eqn:E1; try discriminate. inversion Hp; subst; cbn.
+          rewrite (IHp _ _ _ E1 ι). intuition.
+      - match type of Hp with context [pub_assert ?i ?q] => destruct (pub_assert i q) eqn:E1 end;
+          try discriminate.
+        inversion Hp; subst; cbn. split.
+        + intros [v Hv]. apply (IHp _ _ _ E1 (env.snoc ι b v)) in Hv as [Hs Hv].
+          split; [exact Hs|now exists v].
+        + intros [Hs [v Hv]]. exists v. now apply (IHp _ _ _ E1 (env.snoc ι b v)).
+      - destruct (pub_assert xxIn p) eqn:E1; try discriminate. inversion Hp; subst; cbn.
+        now rewrite (IHp _ _ _ E1 ι).
+      - match type of Hp with context [pub_assert ?i ?q] => destruct (pub_assert i q) eqn:E1 end;
+          try discriminate.
+        inversion Hp; subst; cbn. split.
+        + intros [l Hv]. apply (IHp _ _ _ E1 (env.snoc ι b (ty.SyncVal l))) in Hv as [Hs Hv].
+          split; [exact Hs|now exists l].
+        + intros [Hs [l Hv]]. exists l. now apply (IHp _ _ _ E1 (env.snoc ι b (ty.SyncVal l))).
+    Qed.
+
+    Lemma fuse_demonic_core {Σ b} (k k' : 𝕊 (Σ ▻ b)) (ι : Valuation Σ) :
+      pub_assume ctx.in_zero k = Some k' ->
+      (forall v, safe k (env.snoc ι b v)) <->
+      (forall l : Val (type b), safe k' (env.snoc ι b (ty.SyncVal l))).
+    Proof.
+      intros H. split.
+      - intros Hk l. apply (proj1 (@pub_assume_sound _ _ _ _ _ H _) (Hk _)). reflexivity.
+      - intros Hk v. apply (@pub_assume_sound _ _ _ _ _ H). cbn. intros Hs.
+        apply secLeakOtherDef in Hs. rewrite Hs. apply Hk.
+    Qed.
+
+    Lemma fuse_angelic_core {Σ b} (k k' : 𝕊 (Σ ▻ b)) (ι : Valuation Σ) :
+      pub_assert ctx.in_zero k = Some k' ->
+      (exists v, safe k (env.snoc ι b v)) <->
+      (exists l : Val (type b), safe k' (env.snoc ι b (ty.SyncVal l))).
+    Proof.
+      intros H. split.
+      - intros [v Hk]. apply (@pub_assert_sound _ _ _ _ _ H) in Hk as [Hs Hk]. cbn in Hs.
+        apply secLeakOtherDef in Hs. rewrite Hs in Hk. now exists (ty.projLeft v).
+      - intros [l Hk]. exists (ty.SyncVal l). apply (@pub_assert_sound _ _ _ _ _ H).
+        split; [reflexivity|exact Hk].
+    Qed.
+
+    (* Bottom-up: fuse the continuation first, then try the binder itself. *)
+    Fixpoint fuse_pub {Σ} (p : 𝕊 Σ) {struct p} : 𝕊 Σ :=
+      match p with
+      | angelic_binary p1 p2 => angelic_binary (fuse_pub p1) (fuse_pub p2)
+      | demonic_binary p1 p2 => demonic_binary (fuse_pub p1) (fuse_pub p2)
+      | error msg => error msg
+      | block => block
+      | assertk fml msg k => assertk fml msg (fuse_pub k)
+      | assumek fml k => assumek fml (fuse_pub k)
+      | angelicv b k =>
+          let k' := fuse_pub k in
+          match pub_assert ctx.in_zero k' with
+          | Some k'' => angelicv_pub b k''
+          | None => angelicv b k'
+          end
+      | demonicv b k =>
+          let k' := fuse_pub k in
+          match pub_assume ctx.in_zero k' with
+          | Some k'' => demonicv_pub b k''
+          | None => demonicv b k'
+          end
+      | @assert_vareq _ x σ xIn t msg k => @assert_vareq _ x σ xIn t msg (fuse_pub k)
+      | @assume_vareq _ x σ xIn t k => @assume_vareq _ x σ xIn t (fuse_pub k)
+      | @dropk _ x σ xIn k => @dropk _ x σ xIn (fuse_pub k)
+      | debug b k => debug b (fuse_pub k)
+      | angelicv_pub b k => angelicv_pub b (fuse_pub k)
+      | demonicv_pub b k => demonicv_pub b (fuse_pub k)
+      end.
+
+    Lemma fuse_pub_sound {Σ} (p : 𝕊 Σ) :
+      forall ι, safe (fuse_pub p) ι <-> safe p ι.
+    Proof.
+      induction p; intros ι; cbn.
+      - now rewrite IHp1, IHp2.
+      - now rewrite IHp1, IHp2.
+      - reflexivity.
+      - reflexivity.
+      - now rewrite IHp.
+      - now rewrite IHp.
+      - destruct (pub_assert ctx.in_zero (fuse_pub p)) eqn:E; cbn.
+        + rewrite <- (@fuse_angelic_core _ _ _ _ ι E).
+          apply ex_iff_morphism; intros v. apply IHp.
+        + apply ex_iff_morphism; intros v. apply IHp.
+      - destruct (pub_assume ctx.in_zero (fuse_pub p)) eqn:E; cbn.
+        + rewrite <- (@fuse_demonic_core _ _ _ _ ι E).
+          apply all_iff_morphism; intros v. apply IHp.
+        + apply all_iff_morphism; intros v. apply IHp.
+      - now rewrite IHp.
+      - now rewrite IHp.
+      - apply IHp.
+      - apply IHp.
+      - apply ex_iff_morphism; intros v. apply IHp.
+      - apply all_iff_morphism; intros v. apply IHp.
+    Qed.
+
+    Definition erase_symprop_raw {Σ} (p : SymProp Σ) : ESymProp := erase_EErrors (erase_symprop' p).
+
+    Definition erase_symprop {Σ} (p : SymProp Σ) : ESymProp := erase_symprop_raw (fuse_pub p).
 
     Fixpoint erase_valuation {Σ} (ι : Valuation Σ) : list { σ : Ty & RelVal σ} :=
       match ι with
@@ -2318,6 +2648,10 @@ Module Type SymPropOn
           | None   => False
           end
       | edebug _ k => inst_symprop ι k
+      | eangelicv_pub b k =>
+          exists v : Val (type b), inst_symprop (cons (existT (type b) (ty.SyncVal v)) ι) k
+      | edemonicv_pub b k =>
+          forall v : Val (type b), inst_symprop (cons (existT (type b) (ty.SyncVal v)) ι) k
       end.
 
     Lemma erase_valuation_remove {Σ b} (bIn : b ∈ Σ) (ι : Valuation Σ) :
@@ -2383,11 +2717,11 @@ Module Type SymPropOn
            try match goal with H: ?x = Some _ |- context[?x] => rewrite H end); auto.
     Qed.
 
-    Lemma erase_safe {Σ} (p : 𝕊 Σ) (ι : Valuation Σ) :
-      inst_symprop (erase_valuation ι) (erase_symprop p) <->
+    Lemma erase_raw_safe {Σ} (p : 𝕊 Σ) (ι : Valuation Σ) :
+      inst_symprop (erase_valuation ι) (erase_symprop_raw p) <->
       safe p ι.
     Proof.
-      induction p; cbn [inst_symprop erase_symprop erase_symprop' erase_EErrors safe]; unfold inst_eformula'.
+      induction p; cbn [inst_symprop erase_symprop_raw erase_symprop' erase_EErrors safe]; unfold inst_eformula'.
       - apply Morphisms_Prop.or_iff_morphism. auto. auto.
       - apply Morphisms_Prop.and_iff_morphism. auto. auto.
       - reflexivity.
@@ -2420,7 +2754,14 @@ Module Type SymPropOn
       (*     now rewrite env.cat_remove_left, erase_valuation_eq_rect. *)
       (*   + tauto. *)
       - apply IHp.
+      - apply ex_iff_morphism. intros v. apply (IHp (env.snoc ι b (ty.SyncVal v))).
+      - apply all_iff_morphism. intros v. apply (IHp (env.snoc ι b (ty.SyncVal v))).
     Qed.
+
+    Lemma erase_safe {Σ} (p : 𝕊 Σ) (ι : Valuation Σ) :
+      inst_symprop (erase_valuation ι) (erase_symprop p) <->
+      safe p ι.
+    Proof. unfold erase_symprop. now rewrite erase_raw_safe, fuse_pub_sound. Qed.
 
     Lemma erase_safe' {Σ} (p : 𝕊 Σ) (ι : Valuation Σ) :
       inst_symprop (erase_valuation ι) (erase_symprop p) ->
@@ -2442,6 +2783,8 @@ Module Type SymPropOn
       Notation "F → P" := (eassumek F P) (only printing, format "'[v' F  → '/ ' P ']'").
       Notation "'∃' x '∷' σ , P" := (eangelicv (x ∷ σ) P) (at level 10, P at level 200, only printing, format "'[  ' '[  ' '∃'  x '∷' σ ']' ,  '/' P ']'").
       Notation "'∀' x '∷' σ , P" := (edemonicv (x ∷ σ) P) (at level 10, P at level 200, only printing, format "'[  ' '[  ' '∀'  x '∷' σ ']' ,  '/' P ']'").
+      Notation "'∃ₚ' x '∷' σ , P" := (eangelicv_pub (x ∷ σ) P) (at level 10, P at level 200, only printing, format "'[  ' '[  ' '∃ₚ'  x '∷' σ ']' ,  '/' P ']'").
+      Notation "'∀ₚ' x '∷' σ , P" := (edemonicv_pub (x ∷ σ) P) (at level 10, P at level 200, only printing, format "'[  ' '[  ' '∀ₚ'  x '∷' σ ']' ,  '/' P ']'").
       Notation "x ↦ t ∧ k" := (eassert_vareq x _ t k) (at level 99, right associativity, only printing).
       Notation "x ↦ t → k" := (eassume_vareq x _ t k) (at level 99, right associativity, only printing).
       Notation "P ∧ Q" := (edemonic_binary P Q) (at level 80, right associativity, only printing).
@@ -2531,13 +2874,18 @@ Module Type LogSymPropOn
        (*       let ω : w ⊒ wmv := acc_matchvar_right pc in *)
        (*       assuming ω (@psafe wmv (rhs pc)) *)
         | debug d k => DebugPred _ d (psafe k)
+        (* Public binders are produced only by [Erasure.fuse_pub], after
+           every refinement-carrying pass, so no lemma below ever needs their
+           world-level structure; their predicate is just [safe]. *)
+        | angelicv_pub b k => (safe (angelicv_pub b k) : Pred w)
+        | demonicv_pub b k => (safe (demonicv_pub b k) : Pred w)
         end)%I.
     #[global] Arguments psafe {w} p ι.
 
     (* TODO: Two false goals admitted, this can be solved either by making safe output True instead of false for failed pattern matching or by somehow leveraging the secLeak check in wmatch *)
     Lemma psafe_safe {w p} : psafe (w := w) p ⊣⊢ safe p.
     Proof.
-      refine (SymProp_ind (fun Σ p => forall (w : World) (eq : Σ = w), (psafe (w := w) (eq_rect Σ 𝕊 p w eq) : Pred w) ⊣⊢ safe (eq_rect Σ 𝕊 p w eq)) _ _ _ _ _ _ _ _ _ _ _ _ (* _ _ *) p w eq_refl);
+      refine (SymProp_ind (fun Σ p => forall (w : World) (eq : Σ = w), (psafe (w := w) (eq_rect Σ 𝕊 p w eq) : Pred w) ⊣⊢ safe (eq_rect Σ 𝕊 p w eq)) _ _ _ _ _ _ _ _ _ _ _ _ _ _ (* _ _ *) p w eq_refl);
         clear; intros; subst; cbn.
       5, 6:  specialize (H (wformula w fml) eq_refl); cbn in H.
       7, 8:  specialize (H (wsnoc w b) eq_refl); cbn in H.
@@ -2554,6 +2902,8 @@ Module Type LogSymPropOn
             cbn in Hfwd. setoid_rewrite inst_sub_shift in Hfwd.
             crushPredEntails3.
             all: rewrite ?inst_sub_shift in H1 |- *; apply H; assumption. }
+      (* angelicv_pub / demonicv_pub: psafe is safe by definition. *)
+      12, 13: reflexivity.
       (* 11: constructor; intros ι; *)
       (*   destruct (pattern_match_relval pat (inst s ι)) as [m|] eqn:Hpmv. *)
       (* 11: destruct m as [c ι__pat]; *)

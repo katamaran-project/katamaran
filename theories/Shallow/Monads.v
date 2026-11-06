@@ -485,6 +485,14 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
         (*     error *)
         | SymProp.debug b k =>
             debug (replay k ι)
+        | SymProp.angelicv_pub b k =>
+            v <- angelic _ ;;
+            assert_formula (secLeak v) ;;
+            replay k (env.snoc ι b v)
+        | SymProp.demonicv_pub b k =>
+            v <- demonic _ ;;
+            assume_formula (secLeak v) ;;
+            replay k (env.snoc ι b v)
         end.
 
     Definition replay [Σ] (P : 𝕊 Σ) (ι : Valuation Σ) :Prop :=
@@ -1000,6 +1008,9 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
       (* - inversion 1. *)
       (* - inversion 1. *)
       - unfold debug. apply IHs.
+      - intros [v [Hs Hk]]. apply secLeakOtherDef in Hs. rewrite Hs in Hk.
+        exists (ty.projLeft v). now apply IHs.
+      - intros H l. apply IHs, H. reflexivity.
     Qed.
 
     Section WithBI.
