@@ -319,7 +319,7 @@ Section FemtoKernel.
   Example femtokernel_handler_secret_write_asm' (data_addr : N) : list ASM :=
     [ UTYPE bv.zero ra RISCV_AUIPC
     ; Λ x, LOAD (bv.of_N (data_addr - (x - 4))) ra ra false WORD
-    ; AnnotLemmaInvocation (close_mmio_write (bv.of_N mmio_write_addr) WORD) [nenv exp_val ty_xlenbits bv.zero; exp_val ty_regno t0]%env 
+    ; AnnotLemmaInvocation (close_mmio_write (bv.of_N mmio_write_addr) WORD) [nenv exp_val ty_xlenbits bv.zero; exp_val ty_regno ra]%env
     ; STORE (bv.of_N mmio_write_addr) ra zero WORD (* works because mmio_write_adv fits into 12 bits. *)
     ; ADD ra zero zero (* We need to clear ra, as it contains the secret *)
     ].

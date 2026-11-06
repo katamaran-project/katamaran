@@ -623,11 +623,13 @@ Module RiscvPmpBlockVerifSpec.
     {| lemma_logic_variables := ["paddr" :: ty_xlenbits; "r" :: ty_regno; "w" :: ty_word];
        lemma_patterns        := [term_var "paddr"; term_var "r"];
        lemma_precondition    :=
-        (term_val ty_xlenbits write_addr) = (term_var "paddr" +ᵇ term_sext (term_val (ty.bvec 12) immm)) ∨
+        asn_reg_ptsto (term_var "r") (term_var "w") ∗
+        ((term_val ty_xlenbits write_addr) = (term_var "paddr" +ᵇ term_sext (term_val (ty.bvec 12) immm)) ∨
           ((term_val ty_xlenbits write_addr_adv) = (term_var "paddr" +ᵇ term_sext (term_val (ty.bvec 12) immm)) ∗
           (term_var "w") = (term_val ty_xlenbits (bv.of_nat 42))) ∨
-          (term_val ty_xlenbits mmioShutdownAddr) = (term_var "paddr" +ᵇ term_sext (term_val (ty.bvec 12) immm));
+          (term_val ty_xlenbits mmioShutdownAddr) = (term_var "paddr" +ᵇ term_sext (term_val (ty.bvec 12) immm)));
        lemma_postcondition   :=
+        asn_reg_ptsto (term_var "r") (term_var "w") ∗
         asn_mmio_checked_write (map_wordwidth widthh) (term_var "paddr" +ᵇ term_sext (term_val (ty.bvec 12) immm)) (term_truncate (map_wordwidth widthh * byte) (term_var "w"));
     |}.
 
@@ -1140,7 +1142,7 @@ Module Type RiscvPmpIrisInstanceWithContracts
   Proof.
     intros ι; destruct_syminstance ι; cbn.
     unfold interp_mmio_checked_write.
-    iIntros "[[<- _] | [([<- _] & [-> _]) | [<- _]]]"; iPureIntro; intuition.
+    iIntros "[$ [[<- _] | [([<- _] & [-> _]) | [<- _]]]]"; iPureIntro; intuition.
     right. left.
     split; auto.
     destruct width; now compute.
