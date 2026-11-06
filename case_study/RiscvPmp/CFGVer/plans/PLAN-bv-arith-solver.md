@@ -1,6 +1,14 @@
 # PLAN: bitvector arithmetic in the solver (ranges + linear normal forms)
 
-Status: PROPOSED 2026-09-29, not started. Emiel chose this ("try b first")
+Status (2026-11-05): REVIVED as PLAN-rsa O5(a), branch `issue/solver-o5`
+(worktree `../katamaran-relval-rsa`). DRAFT, awaiting Emiel's review of the
+revision at the END of this file ("REVISION 2026-11-05"), which supersedes
+every "Phases" section above. History: the ring canonical forms in peval
+(U1-U5 below) landed, then were re-done on the RelVal pair model (relval-pair
+R1, f0d4080d); the solver-level DECISIONS and the RANGE layer were never
+started.
+
+Original status: PROPOSED 2026-09-29. Emiel chose this ("try b first")
 over a post-hoc lowering lemma (a) for the ZZMbClose closer.
 
 ## Why
@@ -362,3 +370,351 @@ noise (one run said 395 s user and did not reproduce).
 Still open: D0 fails on `SyncVal (v3 + v2) = SyncVal (1 + v3)` with only
 `v2 <> 0` known -- its exact-count invariant, pre-existing, not the port -- and
 blocks Sym4 / Sym6 (the whole-program caller), which import it.
+
+## REVISION 2026-11-05: O5(a) -- solver decisions, isolation, ranges + closer hardening (DRAFT)
+
+Supersedes every "Phases" section above. Driven by PLAN-rsa O5 (see its §5
+rows of 2026-11-05 for the measurements).
+
+### Why now
+
+- **Elimination.** In montymul's 4-unrolled loop, `mm_bounds` with
+  `k = T + (-1)·c` eliminates the wrong existential. `try_isolate_inner` is
+  guarded by `secLeakT s`, and c's publicness fact (`c = R`) is produced after
+  `mm_bounds`, so the bare parameter T is substituted instead. Stopgap in use:
+  orient the equation `T = k + c` by hand (cfgver-contracts STOPGAP rule).
+- **Dead branches reach the closer.** With the reoriented contract,
+  `valid_mmq_loop` went from 361 s to more than 1800 s.
+  - The wrong branch's first leaf is the block-exit pc equation
+    `q = 0x180 + q`, which is false from its syntax alone.
+  - The solver does not decide it: `bvadd_cancel_pair` needs a `bvadd` on
+    both sides.
+  - The closer refutes it with `bv_lin` over the whole context: 430
+    hypotheses, 58 quotient/remainder variables, and lia over 60 s.
+  - A TRUE leaf also spends about 17 s of its 17.2 s translating irrelevant
+    hypotheses.
+- **Emiel 2026-11-05.** Do the whole plan (decisions plus ranges) and harden
+  the closer: a precheck, then a relevance filter with fallback. The solver
+  work goes off KatamaranRel, the closer work on the RSA branch. "Cover our
+  bases": fix the general mechanism, not the montymul instance.
+
+### What the pair model changed (makes the earlier sections simpler)
+
+- **Equations reduce to a difference.** RelVal is a pair, and terms are a ring
+  modulo ≡ again (main's `TermRing`, `canon_term` proved,
+  `PartialEvaluation.v:521`). So `l = r` (propeq) holds iff
+  `l + (-1)·r ≡ 0`, per projection. No SyncVal-ness side condition, no padding,
+  no leaf certificate. The note above "RelVal equality is NOT both
+  projections" is OBSOLETE.
+- **Ranges need no publicness.** `formula_relop` is pointwise (relval-pair
+  D3): `a <u b` means it holds in both projections. A range fact from `wco`
+  therefore holds per projection, for public and secret atoms alike, and no
+  decision needs publicness.
+- **The isolation guard is only a cost filter.** relval-pair-baseline/AUDIT.md
+  says so for `try_isolate_inner`'s `secLeakT` guard: `relval_isolate` is a
+  pointwise equivalence.
+
+### Components
+
+S = solver (`issue/solver-o5`, `theories/`). C = closer (`issue/rsa-montymul`,
+`Example/Muladd/MuladdParamClose.v`).
+
+- **S1 linear decision.**
+  - `lin_diff t1 t2 := canon_term (t1 + (-1)·t2)` reuses peval's canonical
+    form; there is no second normal form.
+  - It is hooked in FIRST in the `formula_propeq` arm of `simplify_formula`
+    and in `simplify_relop`'s bvec `eq`/`neq` arms (Solver.v ~3140, ~3946).
+  - A constant 0 discharges (eq) or refutes (neq), a nonzero constant does the
+    opposite, anything else falls through unchanged.
+  - Decides `q = 0x180 + q`, `x + 4 <> x`, and the P0 row `v0 = v0 + (M<<2)`
+    up to the nonzero part (that row needs S3).
+- **S2 isolation (a1 + a2).** Replaces `try_isolate_aux`'s pattern.
+  - From `lin_diff t1 t2 = c + Σ kᵢ·aᵢ`, pick the INNERMOST variable atom x
+    whose coefficient is ±1 and which occurs in no other atom.
+  - Emit `x = ∓(c + Σ_{other})`.
+  - No `secLeakT` guard (AUDIT). With no such x, fall through.
+  - Must stay BEFORE `try_bvadd_cancel_val_propeq` (the 2026-10-22 ordering
+    note at Solver.v ~3596).
+  - Covers the caller's instantiation `T = u + cx`, not only a bare
+    parameter.
+- **S3 ranges.** `range (wco w) t : option (Z * Z)` gives unsigned bounds per
+  projection.
+  - Seeds: `wco` relops of an atom against a constant (`<u`, `<=u`, both
+    sides), `a <> 0`, `a = c`.
+  - Propagation through structure:
+    - constants;
+    - `c + Σ kᵢ·aᵢ` when no wrap is possible;
+    - `>>` and `&` by a constant;
+    - `zext`, and `sext` at equal width.
+  - Decisions:
+    - `bvult`/`bvule` and their negated forms: discharge or refute on ordered
+      or disjoint intervals;
+    - eq/neq/propeq: refute or discharge when the range of `lin_diff`
+      excludes 0. Examples: `4·M <> 0` from `1 <= M <= 2048`, RsaCcopyGate's
+      six `k + 4·ml <> 0` leaves, the Tail census's four dead branches.
+  - The old step-3 conditional rewrites (`land` mask = t, the `shiftr` split)
+    are used only INSIDE a decision, never written back into terms (D1).
+  - Cost: a scan of `wco`, O(|wco|), run only when S1 fell through on a bvec
+    formula.
+- **S4 closer hardening (C).** In `rv_leaf` / `bv_lin`:
+  - **Precheck.** Before any bv_lin alternative, if the NEGATED goal follows
+    from an empty Prop context (bv variables and their bounds kept), fail the
+    leaf at once. This catches every ground-decidable false leaf the solver
+    never saw, for example one created when the closer itself instantiated an
+    evar.
+  - **Relevance filter.** Run `bv_lin` first on the hypotheses transitively
+    connected to the goal through shared variables. Fall back to the full
+    context only if that fails.
+
+### Phases and gates
+
+- **O0 shapes** (ZZ/preamble, cheap). Re-dump the solver-input forms under the
+  current peval for:
+  - the P0 table rows (muladd Tail, D0);
+  - `q = 0x180 + q`;
+  - mmq's `k = T + (-1)·c` against the caller's `T = u + cx`;
+  - RsaCcopyGate's `k + 4·ml <> 0`.
+
+  Gate: the table restated in solver-input form, each row tagged S1/S2/S3.
+- **O1 core in preamble.** `lin_diff` decision, isolation chooser, `range`:
+  Z lemmas plus the pair lift. vm_compute self-tests, POSITIVE and NEGATIVE:
+  a satisfiable formula is never refuted, a non-entailed one never
+  discharged. Gate: no admits; self-tests pass.
+- **O2 hook S1 + S2** (one `Solver.vo` build, ~6 min). Specs go through
+  `simplify_relop_spec` and the propeq-arm spec. Gate:
+  - phase-check sentinel set + negative controls;
+  - a regression file with the O0 rows, positive and negative.
+- **O3 hook S3.** Same gate as O2.
+- **O4 full closure on `issue/solver-o5`.** Ask Emiel first: about 70 min at
+  -j1.
+  - Per-file comparison against `relval-pair-baseline/rsa-final-per-file.tsv`;
+    fix any fallout.
+  - Then `git merge --no-ff` into KatamaranRel. The gate is disabled, so run
+    the hole scan and the axiom probe by hand.
+- **O5 on `issue/rsa-montymul`.**
+  - Merge KatamaranRel and rebuild the RSA chain.
+  - Revert the stopgaps: `mm_bounds` back to `k = T + (-1)·c`; the
+    `param_eliminated` lint kept as a lint; the cfgver-contracts STOPGAP
+    rule.
+  - Add S4.
+  - Measure `valid_mmq_loop` (baseline 361 s) and re-run the leaf-pin census.
+
+  Gate: mmq at or below baseline; `q = 0x180 + q` no longer reaches the
+  closer.
+- **O6 cleanup and docs.**
+  - Retire pattern rules S1/S2 subsume (`try_bvadd_cancel_propeq`, the old
+    isolation) once a census shows they never fire first.
+  - Update core-executor-internals' rule list, the AUDIT.md guard row, the
+    PLAN-rsa O5 RESULT, and cfgver-contracts (drop the STOPGAP).
+
+### Open decisions (DEFAULTS chosen; Emiel to confirm or redirect)
+
+- **D1** Ranges DECIDE only; no range-conditional rewrite of terms. peval's
+  spelling and every closer pattern stay as they are.
+- **D2** Isolation picks the innermost ±1-coefficient variable, unguarded,
+  and falls through otherwise.
+- **D3** The old pattern rules stay until O6 (cheap to keep, removed on
+  evidence).
+- **D4** The O4 full closure runs only with Emiel's go-ahead.
+
+### Risks
+
+- **Fallout.** S2 fires on far more equations than today's pattern, so path
+  conditions change shape. Closers matching old shapes may break (cf. R3/U5's
+  `bv.mul` fallout). That is the O4 fallout budget.
+- **Cost.** `canon_term` runs once more per bvec propeq/relop. Measure on
+  MuladdParamVC (largest, 298 s).
+- **Soundness of a wrong decision is silent** (theories/CLAUDE.md fact 4).
+  The negative self-tests in O1 and the negative controls in O2 are the
+  defence, plus the axiom probe at O4.
+
+### O0 RESULT (2026-11-05)
+
+Method: the mmq exit leaf was dumped from the real VC (probe
+`Example/Rsa/ZZMmqShape.v`, untracked, on issue/rsa-montymul, `Set Printing
+Depth 200` at the first top-level disjunction). The other rows were
+re-normalised in a preamble (`Example.Prelude`): `peval (l + (-1)·r)` over a
+one-world context with the row's atoms as variables. The P0 rows' formulas
+come from the 2026-09-29 table (`Example/ZZBvA0.v`), with
+`M = ((31 + b) >> 5)`.
+
+**Finding 1: the mmq leaf is ground.** The wrong branch's first conjunct is
+`eformula_propeq (eterm_var "q") (bvadd (val 0x180) (eterm_var "q"))`. Both
+`q`s are the contract's base parameter (the last entry of the env), not an
+existential. So the solver saw it at VC time and S1 refutes it there; the
+S4 precheck is NOT needed for this leaf (it stays as a guard for leaves the
+closer creates by instantiating evars).
+
+**Finding 2: `canon_term` keeps zero-coefficient monomials.**
+`peval (q + (-1)·(0x180 + q)) = 0xfffffe80 + 0·q`, not `0xfffffe80`;
+`(4+q) - (q+4)` gives `0·q`, not `0`. So S1's test is "constant after
+dropping 0-coefficient monomials", and S2's "occurs in no other atom" must
+skip 0-coefficient atoms. The pruning goes inside `lin_diff`'s decision only:
+peval's output, and with it every read spelling, stays as it is.
+
+| row | source | `lin_diff` under current peval | true? | covered by |
+|---|---|---|---|---|
+| mmq exit pc `q = 0x180 + q` | VC dump | `-0x180 + 0·q` | false | **S1** (refute) |
+| `x + 4 <> x` | — | `4 + 0·x` (shape as above) | true | **S1** (discharge) |
+| P0 dead beq `x = (M<<2) + x` | 09-29 table | `0·x + (-4)·M` | false | S1 normalises, **S3** refutes (`1 <= M <= 2048`) |
+| P0 dead bltu `63 + b <u 64` | 09-29 table | relop, not a difference | false | **S3** |
+| P0 masked count `x + (M<<2) = 4 + (x + (((-1+M) & 0x3fffffff) << 2))` | 09-29 table | `-4 + 0·x + (-4)·((-1+M) & 0x3fffffff) + 4·M` | true | **none of S1–S3**: needs the mask identity as a TERM equality; interval arithmetic loses the correlation between `M` and `(M-1) & mask`. Stays with the closer (`bv_lin` reads ones-masks since 4463953f) |
+| P0 `(b+63)>>5` (shift identity) | 09-29 table | — | true | **none** (closer), as above |
+| mmq `k = T + (-1)·c` (k existential) | preamble | `k + c + (-1)·T` | — | **S2** isolates `k` (innermost, coeff +1, sole occurrence) → `k = T + (-1)·c`; with the caller's `T = u + cx` the same: all three atoms have coefficient ±1, `k` innermost |
+| RsaCcopyGate `k + 4·ml <> 0` | preamble | `k + 4·ml` | true under ranges | **S3** (needs a lower bound ≥ 1 on `k` or `ml` in `wco`, no wrap) |
+| D0 `T + c = 1 + T`, only `c <> 0` known | 09-30 rows | `-1 + c + 0·T` | NOT entailed | **negative control**: S1 must fall through, S3 must not discharge (range of `c` is `[1, 2^32)`, contains `1`) |
+
+Consequence for the plan: no change to S1–S4. Two notes for O1: (i) the
+0-coefficient pruning above; (ii) the two true P0 identities (masked count,
+shift identity) are outside D1 (decide-only) by design and remain closer
+work; they are the cases D1's "write rewrites back" alternative would buy.
+
+### O1 RESULT (2026-11-05)
+
+All three cores proved, no admits, in untracked probes on issue/rsa-montymul
+(`CFGVer/ZZO1Core.v`: S1+S2; `ZZO1Rng.v`, `ZZO1Rng2.v`, `ZZO1Dec.v`: S3).
+
+- **S1** `lin_const t1 t2`: the linear view of `canon_term (t1 + (-1)·t2)`,
+  0-coefficient monomials pruned (O0 finding 2); `Some v` iff the difference
+  is the constant `v`. `lin_decide` (eq/neq relop) and `lin_decide_propeq`
+  answer `empty`/`error`. No publicness guard: both runs differ by the same
+  constant.
+- **S2** `lin_iso`: candidates are atoms that are a bare variable with
+  coefficient ±1 and occur in no other atom; the smallest `ctx.in_at` wins;
+  output `x = canon_term (-k · rest)`. Unguarded (D2).
+- **S3** `rng fuel C t`: an interval per term from path-condition seeds
+  (`bvult/bvule/eq/neq` against a literal), interval arithmetic over the
+  linear view, `wrapf` exact only when the unreduced range meets no multiple
+  of `2^n`. `rng_decide`/`rng_decide_propeq` decide eq/neq/bvult/bvule.
+- Self-tests (vm_compute), as the O0 table predicts:
+  - S1 positive: P1 `q = 0x180 + q` refuted, `x+4 <> x` / commuted / `2x+3 = x+x+3` / `c-c+x` vs `x+5` decided;
+  - S1 negative: D0, mmq, `T+c` vs `1+T` fall through;
+  - S2: `k = T - c` and its reverse isolate `k`; `2k = T` isolates `T`; D0 gives `c = 1` (consistent, no refutation); `2k = 4x` and `k = k·x + 1` fall through;
+  - S3: P0 dead beq and dead bltu refuted, RsaCcopyGate decided; D0 and a wrapping control undecided.
+
+Wiring decision for O2 (Emiel, "Yes, go ahead"): combined wrappers
+`try_lin_cancel` / `try_lin_propeq` / `try_lin_isolate` (new rule first,
+the old one as fallback, D3), so the existing spec proofs change by name
+only. S3's propagation through `>>`/`&` by a constant and `zext`/`sext` is
+deferred.
+
+### O2 RESULT (2026-11-05)
+
+S1 + S2 hooked into `theories/Symbolic/Solver.v` (Section Lin / Section Iso,
+above `simplify_relop`) through the combined wrappers: `try_lin_cancel` in
+`simplify_relop`'s eq/neq arms, `try_lin_propeq` and `try_lin_isolate` in
+`simplify_formula`'s propeq arm. The existing spec proofs changed by name only.
+Regression rows: `CFGVer/Example/SolverLin.v` (O0 table + a bvsub group),
+compiled `-vok`, all green, negatives `Open`.
+
+**Finding (cost a sentinel round): `lin_view` must read `QSub`/`QNeg`.**
+`canon_term`'s ring printer (`Pphi_dev` with `get_signZ`) prints a NEGATIVE
+coefficient as `bvsub x (k·y)`, and negative coefficients appear as soon as
+the input has a bvsub (a SUB instruction's `peval_bvsub`). O1's `lin_view`
+had no `QSub`/`QNeg` arm, so `a -ᵇ 0xffffffff·c` was ONE atom. In RsaCcopy's
+loop-back obligation that atom hid the angelic `a`, so S2 isolated the
+universal `nl` instead (`nl = 0xfffffffc + (a - 0xffffffff·c) + ...`) and
+`∃ a n e vs` survived to the closer: `valid_ccl_loop` failed with "No
+applicable tactic". Fix: `lin_neg`, the two arms, and `tvZ_opp` /
+`lin_eval_neg` / `lin_eval_sub` for `lin_view_sound`. Not a D2 issue: the
+innermost-unit choice is right once the variable is visible. S2's output is
+still bvsub-free (coefficients come from `tvZ`, i.e. non-negative
+`bv.unsigned` literals), which the closers need (`bv_lin` has no bvsub case);
+`SolverLin.v` checks it (`sub_free`).
+
+Phase check (changed files + sentinels + negatives):
+`Solver.vo` 306 s user / 3.6 GB (KR baseline 345 s); `-vos` closure (39 files)
+plus `-vok` of RsaCcopy, MuladdParamLoopI, CheckScalarParamLoop2, Cmovznz4,
+Cmovznz4Result: all green, 956 s user / 1191 s wall, peak 8.3 GB, no
+watchdog kill. Per-VC times: MuladdParamLoopI 18.6 s (was 18.1),
+CheckScalarParamLoop2 7.3 s (was 7.4), RsaCcopy 11.3 s + 4.6 s.
+
+### O3 RESULT (2026-11-05)
+
+S3 hooked into `theories/Symbolic/Solver.v`:
+- Placement: Sections RngA/RngB/RngDec plus the world-level `rng_decide` /
+  `rng_decide_propeq`, just above `try_lin_cancel`. They reuse Section Lin's
+  `lin_diff`.
+- Dispatch: S1 → S3 → the old rule, in `try_lin_cancel` (eq/neq) and
+  `try_lin_propeq` (propeq).
+- `simplify_relop` gains explicit `bvule`/`bvult` arms that try `rng_decide`
+  before `simplify_relopb`. `bvsle`/`bvslt` stay in the catch-all.
+
+The S3 code was verified in preamble before the port. `Solver.vo` compiled on
+the first try.
+
+**Gotcha (found in preamble, so no build was lost):** in
+`simplify_relop_spec`, the `eqn:Hr` hypothesis `rng_decide bop.bvule .. = None`
+must be CLEARED before `arw`. Its head matches on `op`, which is now a
+constructor, so `arw`'s `cbn in *` reduces it into `canon_term` on open terms
+and times out. `try_lin_cancel` hypotheses do not trigger this, because their
+head does not reduce. Both branches `clear Hr`.
+
+Regression rows in `SolverLin.v`, all green:
+- `s3_raw`: ZZO1Dec's o1 rows on the raw deciders.
+- `s3_tests`: the same verdicts through `simplify_formula`, covering propeq,
+  relop eq, the bvult/bvule arms and neq.
+- `s3_neg`: controls that must stay Open: the wrap case `k + 4c = 0` with c
+  unbounded, and `x <u 10` against 5 and 3.
+
+`SolverLin.v` is now in `_CoqProject`.
+
+Phase check (changed files + sentinels + negatives):
+- `Solver.vo`: 305.8 s user / 3.64 GB (O2: 306 s).
+- `-vos` closure (39 files) plus `-vok` of SolverLin, RsaCcopy,
+  MuladdParamLoopI, CheckScalarParamLoop2, Cmovznz4 and Cmovznz4Result: all
+  green, 946 s user / 1183 s wall, peak 8.3 GB (O2: 956 / 1191 / 8.3), no
+  watchdog kill.
+- Per-VC times (single runs):
+
+  | VC | O3 | O2 |
+  |---|---|---|
+  | MuladdParamLoopI | 16.0 s | 18.6 s |
+  | CheckScalarParamLoop2 | 6.2 s | 7.3 s |
+  | RsaCcopy | 7.9 s + 4.2 s | 11.3 s + 4.6 s |
+
+The per-atom `wco` scan therefore costs nothing measurable on the sentinels.
+
+### O4 RESULT (2026-11-05)
+
+Full closure, Emiel's go-ahead: every `_CoqProject` file, forced
+(`make -B -j1 TIMED=1 TIMING=1`), under the watchdog (kill past
+max(1.5×, +10 s) of the baseline).
+- **Green:** exit 0, no errors, no watchdog kill. 161 files built, the 160
+  baseline files plus `SolverLin.v`. That includes the RSA files outside
+  `Results.vo`'s closure.
+- **Cost:** 3466 s user / 555 s sys / 4027 s wall (67 min), peak 9.95 GB.
+- **Against the baseline** (`theories/plans/relval-pair-baseline/rsa-final-per-file.tsv`,
+  the relval-rsa end state, on user CPU): **0.960×** in total (3457 s against
+  3603 s). Per-file table: `plans/bv-arith-solver-o4-per-file.tsv`.
+
+  | file | O4 | baseline | ratio |
+  |---|---|---|---|
+  | MuladdParamVC | 303.4 s | 298.3 s | 1.02× |
+  | Solver.vo | 294.1 s | 297.9 s | 0.99× |
+  | MuladdParamTailVC | 139.6 s | 177.5 s | 0.79× |
+  | InvMixColumns | 46.3 s | 40.5 s | 1.14× |
+  | BearSSLCheckScalarLoop1 | 27.8 s | 24.1 s | 1.16× |
+  | RsaCcopy | 29.7 s | 56.1 s | 0.53× |
+  | RsaCcopyGate | 33.1 s | 52.4 s | 0.63× |
+  | SolverLin (new) | 7.1 s | — | — |
+
+  BearSSLCheckScalarLoop1 is the only file above 1.15× and +3 s, at +3.7 s on
+  a single run. InvMixColumns is just under that bar. Neither was
+  investigated. The other RSA files (Memcpy/Memset/Memmove/SpikeSb/SpikeArrv)
+  sit at 0.88–0.99×.
+- **Hole scan:** gate.sh's pattern over CFGVer plus `Solver.v`, ZZ excluded.
+  Clean.
+- **Axiom probe:** NOT run. It is ~332 s / 10.4 GB and needs Emiel's go-ahead
+  (memory: merge gate disabled). Every lemma O1–O3 added is closed by `Qed`
+  with no new `Axiom`/`Parameter`, so the probe can only fail on something
+  that predates this plan.
+
+### Timing
+
+| date | phase | start | end | wall min | CPU min | notes |
+|---|---|---|---|---|---|---|
+| 2026-11-05 | O0 | — | — | 2.3 | 2.3 | ZZMmqShape.v dump (vm_compute+solve_vc 91 s, peak 7.7 GB); preamble checks < 1 s |
+| 2026-11-05 | O2 | — | — | 26 | 21 | Solver.vo 306 s; sentinels 956 s user / 1191 s wall (incl. -vos closure); one earlier failed round (RsaCcopy, lin_view QSub) ~6 min + 5.3 min |
+| 2026-11-05 | O3 | — | — | 26 | 21 | Solver.vo 306 s (first try); sentinels + SolverLin 946 s user / 1183 s wall (incl. -vos closure); preamble port checks ~10 s |
+| 2026-11-05 | O4 | — | — | 67 | 58 | full closure forced -j1 TIMED: 3466 s user / 4027 s wall, peak 9.95 GB; 0.960× the relval-rsa baseline; no kills |
