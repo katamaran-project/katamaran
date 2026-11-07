@@ -170,16 +170,10 @@ Ltac rv_leaf :=
   repeat match goal with x : bv _ |- _ => clear x end;
   (* relops and bool formulas hold pointwise: one leaf per projection *)
   repeat match goal with |- _ /\ _ => split end;
+  (* no evar arm: an angelic variable's publicness is stated after the chunk
+     that pins it, so postprocess has substituted it before any leaf sees it
+     (the `_pub` binders, 2026-11-07: dead on every sampled VC) *)
   first [ exact I
-        (* an evar constrained only by publicness: any public value (the
-           final Unshelve gives SyncVal 0 too).  f_equal; bv_lin found it in
-           ~26 s per leaf on the parametric muladd tail (2026-10-01) *)
-        | lazymatch goal with
-          | |- RiscvPmpSignature.secLeak ?v =>
-              is_evar v; unify v (ty.SyncVal (@bv.zero xlenbits)); reflexivity
-          | |- ty.projLeftRV ?v = ty.projRightRV ?v =>
-              is_evar v; unify v (ty.SyncVal (@bv.zero xlenbits)); reflexivity
-          end
         | assumption | reflexivity
         (* both sides public (equal components, checked SYNTACTICALLY so a
            secret side fails fast): one bv equation, not two (2026-10-30) *)
