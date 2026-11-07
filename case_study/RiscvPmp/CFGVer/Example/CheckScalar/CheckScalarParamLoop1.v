@@ -62,7 +62,11 @@ Definition l1_inv : Assertion (l1Ctx ▻ "a"∷ty_xlenbits) :=
             (term_binop bop.bvadd (term_var "d") (term_var "n"))
             (term_val ty_xlenbits (bv.of_N 0x40000000)))
         ∗ asn.formula (formula_propeq (term_var "T")
-            (term_binop bop.bvadd (term_var "d") (term_var "n")))))))
+            (term_binop bop.bvadd (term_var "d") (term_var "n")))
+        (* T public too, AFTER its equation (MuladdParamLoopN.ln_inv): the
+           solver eliminates d := T - n, so without it only the compound
+           secLeak(T - n) survives and T stays a plain RelVal binder *)
+        ∗ secLeakvar "T"))))
     ∗ secLeakvar "e"
     ∗ l1_scratch )%asn.
 
