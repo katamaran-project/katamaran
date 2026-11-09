@@ -439,7 +439,6 @@ Section BlockVerification.
     vm_compute.
     constructor; cbn.
     intuition bv_solve_Ltac.solveBvManual; rewrite ?sext'_zero; auto.
-    all: try (eexists _, _; intuition).
     all: apply bounds_withinMMIO; now compute.
   Qed.
 
@@ -448,7 +447,6 @@ Section BlockVerification.
     vm_compute.
     constructor; cbn.
     intuition bv_solve_Ltac.solveBvManual; rewrite ?sext'_zero; auto.
-    all: try (eexists _, _; intuition).
     all: apply bounds_withinMMIO; now compute.
   Qed.
 
@@ -456,7 +454,7 @@ Section BlockVerification.
   Proof.
     vm_compute.
     constructor; cbn.
-    intuition bv_solve_Ltac.solveBvManual. eexists _, _. intuition.
+    intuition bv_solve_Ltac.solveBvManual.
     all: apply bounds_withinMMIO; now compute.
   Qed.
 
@@ -484,7 +482,6 @@ Section BlockVerification.
     vm_compute.
     constructor; cbn.
     intuition bv_solve_Ltac.solveBvManual; rewrite ?sext'_zero; auto.
-    all: try (eexists _, _; intuition).
     all: apply bounds_withinMMIO; now compute.
   Qed.
 
