@@ -2287,7 +2287,28 @@ Module Type SymPropOn
        variable ranges over public values only. [fuse_pub] removes that
        formula and marks the binder public ([demonicv_pub]/[angelicv_pub]),
        so the publicness is carried by the binder's type instead of being
-       re-derived per leaf by the closing tactics. *)
+       re-derived per leaf by the closing tactics.
+
+       Why at ERASURE and not in the executor (2026-11-09):
+       - the decision needs the finished tree: producing [∃ n. chunks ∗
+         secLeakvar n] emits the binder, then the chunks (more binders,
+         equations, branches), and the [secLeak] only after them; in the CPS
+         monad the continuation does not exist yet when [demonic] runs.
+       - the solver reads publicness as a FORMULA in [wco]
+         ([assumption_formula], [secLeakT], [ResimpSecLeak], the branch
+         refutations); a public binder during execution would need the world
+         to record it and every such rule (and its refinement proof) to read
+         it there.
+       - [cfg_postprocess] still reshapes the tree: [solve_evars] substitutes
+         variables away (why no angelic [_pub] binder survives in practice),
+         and [replay] re-runs it through the monad on formulas, un-fusing any
+         [_pub] binder (Monads.v [replay_aux]).
+       - soundness here is one iff on [safe] ([fuse_pub_sound]) plus the two
+         [_pub] cases of [erase_raw_safe].
+       Nothing is lost by fusing late: the binder's type is consumed only by
+       the closing tactics, which see only the erased VC.  What fusion cannot
+       do is DERIVE publicness ([secLeak T] from [secLeak (T - n)] and
+       [secLeak n]): that would be a solver rule. *)
 
     Definition is_leak_of {Σ b} (bIn : ctx.In b Σ) (fml : Formula Σ) : bool :=
       match fml with
