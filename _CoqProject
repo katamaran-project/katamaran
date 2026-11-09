@@ -22,7 +22,6 @@ case_study/MinimalCaps/Base.v
 case_study/MinimalCaps/Logic.v
 case_study/MinimalCaps/Machine.v
 case_study/MinimalCaps/Sig.v
-case_study/MinimalCaps/Contracts/Notations.v
 case_study/MinimalCaps/Contracts/Definitions.v
 case_study/MinimalCaps/Contracts/Verification.v
 case_study/MinimalCaps/Contracts/Statistics.v
