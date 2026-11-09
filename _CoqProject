@@ -78,6 +78,7 @@ test/LinkedList.v
 test/SumMaxLen.v
 test/Replay.v
 test/Reification.v
+test/ContractNotations.v
 theories/Base.v
 theories/Bitvector.v
 theories/Context.v
@@ -122,6 +123,7 @@ theories/Symbolic/Worlds.v
 theories/Syntax/Assertions.v
 theories/Syntax/BinOps.v
 theories/Syntax/Chunks.v
+theories/Syntax/ContractNotations.v
 theories/Syntax/Expressions.v
 theories/Syntax/Formulas.v
 theories/Syntax/FunDecl.v
