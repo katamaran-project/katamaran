@@ -67,6 +67,12 @@ Import RiscvPmpSignature.
 Import RiscvPmpIrisInstancePredicates.
 
 Ltac destruct_syminstance ι :=
+  (* Contracts written with the contract notations have a logic variable
+     context that is only a list after computation. *)
+  lazymatch type of ι with
+  | Env ?D ?Σ => let Σ' := eval cbn in Σ in change (Env D Σ') in ι
+  | _ => idtac
+  end;
   repeat
     match type of ι with
     | Env _ (ctx.snoc _ (MkB ?s _)) =>
