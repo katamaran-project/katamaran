@@ -121,8 +121,8 @@ Module Import MinCapsSpecification.
           fn update_pc_perm [("p", "b", "e", "a") :: ty.cap] ty.cap
         {{ "result_update_pc_perm",
           asn.exist "p'" ty.perm
-                    (let c : Term _ _  := (term_var "p", term_var "b", term_var "e", term_var "a") in
-                     let c' : Term _ _ := (term_var "p'", term_var "b", term_var "e", term_var "a") in
+                    (let c : Term _ _  := (term_var "p", term_var "b", term_var "e", term_var "a")%term in
+                     let c' : Term _ _ := (term_var "p'", term_var "b", term_var "e", term_var "a")%term in
                      term_var "result_update_pc_perm" = c' ∗
                      term_var "p'" ≠ₚ term_val ty.perm E ∗
                      asn.match_enum permission (term_var "p")
@@ -399,10 +399,10 @@ Module Import MinCapsSpecification.
     End ContractDef.
 
     Section LemDef.
-      Import LemmaNotations.
+      Import ContractNotations.
 
       Definition lemma_correctPC_subperm_R : SepLemma correctPC_subperm_R :=
-        {{ asn_correctPC (term_var "p", term_var "b", term_var "e", term_var "a") }}
+        {{ asn_correctPC (term_var "p", term_var "b", term_var "e", term_var "a")%term }}
           lem correctPC_subperm_R [("p", "b", "e", "a") :: ty.cap]
         {{ term_val ty.perm R <=ₚ term_var "p" }}.
 
@@ -417,7 +417,7 @@ Module Import MinCapsSpecification.
            ∗ term_var "p" = term_val ty.perm E }}
           lem safe_to_execute [("p", "b", "e", "a") :: ty.cap]
         {{ let p : Term _ (type (_ :: _)) := term_val ty.perm R in
-           asn_expr (p, term_var "b", term_var "e", term_var "a") }}.
+           asn_expr (p, term_var "b", term_var "e", term_var "a")%term }}.
 
       Definition lemma_open_gprs : SepLemma open_gprs :=
         {{ asn_gprs }} lem open_gprs [] {{ asn_regs_ptsto_safe }}.
@@ -471,7 +471,7 @@ Module Import MinCapsSpecification.
     End LemDef.
 
     Section ForeignDef.
-      Import ForeignNotations.
+      Import ContractNotations.
 
       Definition sep_contract_rM : SepContractFunX rM :=
         {{ asn_csafe_angelic (term_record capability
