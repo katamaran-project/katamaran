@@ -39,8 +39,7 @@ From Equations Require Import
 From Katamaran Require Import
      MinimalCaps.Logic
      MinimalCaps.Machine
-     MinimalCaps.Sig
-     MinimalCaps.Contracts.Notations.
+     MinimalCaps.Sig.
 
 Set Implicit Arguments.
 Import ctx.notations.
@@ -54,6 +53,35 @@ Module Import MinCapsSpecification.
   Import MinCapsSignature.
   Import MinCapsProgramLogic.
   Import MinCapsContractNotations.
+
+  Module Notations.
+    Import MinCapsSignature.ContractNotations.
+    Import MinCapsContractNotations.
+
+    (* Destructure a capability argument into its fields, which become logic
+       variables of the contract. *)
+    Notation "'(' p ',' b ',' e ',' a ')' '::' 'ty.cap'" :=
+      (arg_pat ty.cap [p∷ty.perm; b∷ty.addr; e∷ty.addr; a∷ty.addr]
+         (term_record capability [term_var p; term_var b; term_var e; term_var a]))
+      : arg_scope.
+
+    (* 𝒱 should only be used with terms of type word or cap, otherwise it just
+       returns bottom *)
+    Definition 𝒱 {Σ τ} : Term Σ τ -> Assertion Σ :=
+      match τ with
+      | ty.word => fun w => asn_safe w
+      | ty.cap  => fun w => asn_csafe w
+      | ty.int  => fun w => asn_safe (term_inl w)
+      | _       => fun _ => ⊥
+      end.
+
+    Notation "'(' tp ',' tb ',' te ',' ta ')'" :=
+      (term_record capability [tp%term; tb%term; te%term; ta%term]) : term_scope.
+    Notation "'𝒱' '(' tp ',' tb ',' te ',' ta ')'" :=
+      (𝒱 (term_record capability [tp%term; tb%term; te%term; ta%term])) : asn_scope.
+    Notation "'𝒱' '(' t ')'" :=
+      (𝒱 t) : asn_scope.
+  End Notations.
   Import Notations.
 
   Section ContractDefKit.
