@@ -101,6 +101,12 @@ Section Template.
           (term_val ty_xlenbits (bv.of_N 0x40000000)))
       ∗ asn.formula (formula_propeq (term_var "T")
           (term_binop bop.bvadd (term_var "k") (term_var "n")))
+      (* the total is public too (it follows from k, n public and T = k + n,
+         but the solver eliminates k := T - n and keeps only the compound
+         secLeak(T - n)): stated, T becomes a `_pub` binder (fuse_pub) and a
+         relop over k = T - n reduces to `P /\ P`.  AFTER the equation, so a
+         caller's angelic T is pinned to k + n when this is asserted. *)
+      ∗ secLeakvar "T"
       ∗ scratch _ )))))))%asn.
 
   Definition ln_post : Assertion (lnCtx ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits) :=

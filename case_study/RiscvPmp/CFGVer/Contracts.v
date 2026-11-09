@@ -662,70 +662,23 @@ Notation "e1 ',ₜ' e2" := (term_binop bop.pair e1 e2) (at level 100).
         apply Hc. apply bv.add_cancel_r in Hx. now subst c1.
     Qed.
 
-    (* A relop or bool formula over pairs means `P_l /\ P_r`, so `repeat split`
-       made TWO obligations of each.  When every argument is public the two are
-       the same obligation (immediates are pairs of equal sides; a public
-       variable's sides are equal by its secLeak): prove the left one only.
-       LoopI 8 -> 5 leaves, the pre-pair count (TODOS.txt, 2026-10-30). *)
-    Lemma relprop_sync {σ} (op : bop.RelOp σ) (a b : RelVal σ) :
-      RiscvPmpSignature.secLeak a -> RiscvPmpSignature.secLeak b ->
-      bop.eval_relop_prop op (ty.projLeft a) (ty.projLeft b) ->
-      ty.projLeftRV (bop.eval_relop_relprop op a b) /\
-      ty.projRightRV (bop.eval_relop_relprop op a b).
-    Proof.
-      intros Ha Hb H.
-      rewrite bop.comProjLeftRVEval_relop_relprop.
-      rewrite bop.comProjRightRVEval_relop_relprop.
-      hnf in Ha, Hb. rewrite <- Ha. rewrite <- Hb. split; exact H.
-    Qed.
+    (* A relop or bool formula over pairs means `P_l /\ P_r`.  With `_pub`
+       binders (Propositions.fuse_pub) a public variable enters the valuation as
+       `SyncVal l`, so cbn reduces a relop/bool formula over public operands all
+       the way to a literal `P /\ P`: prove P once.  Any other shape (an
+       operand that is not a public binder or literal, e.g. the compound
+       secLeak(T - n) of MuladdParamLoopI) fails here and solve_vc splits it. *)
+    Lemma and_dup (P : Prop) : P -> P /\ P.
+    Proof. intros H. exact (conj H H). Qed.
 
-    Lemma relbool_sync (b : RelVal ty.bool) :
-      RiscvPmpSignature.secLeak b -> ty.projLeftRV b = true ->
-      ty.projLeftRV b = true /\ ty.projRightRV b = true.
-    Proof.
-      intros Hb H. hnf in Hb. split; [exact H|].
-      change (ty.projRight b = true). rewrite <- Hb. exact H.
-    Qed.
-
-    (* `secLeak t` for t built from literals and variables with a secLeak
-       hypothesis: substitute those variables' sides (a side goal, so the
-       destructs touch nothing else), then both sides compute alike *)
-    Ltac vc_pub :=
-      repeat match goal with v : RelVal _, H : RiscvPmpSignature.secLeak ?v |- _ =>
-        is_var v; let l := fresh "l" in let r := fresh "r" in
-        destruct v as [l r]; hnf in H; cbn in H; subst r end;
-      (* SYNTACTIC: on a non-public argument a plain `reflexivity` tries to
-         convert two different bv terms and blew pet past 7.6 GB *)
-      hnf; cbn; lazymatch goal with |- ?x = ?x => reflexivity end.
-
-    (* The goal arrives ERASED (`Erasure.inst_eformula' ι (eformula_relop ..)`,
-       which `split` would unfold and cut); so do the hypotheses, hence vc_pub
-       first reduces the erased secLeak ones -- in its own side goal only.
-       `@`: Set Implicit Arguments makes op/a/b implicit, and a bare
-       `relprop_sync op a b` fails silently into `split`. *)
-    Ltac vc_pub_erased :=
-      repeat match goal with H : Erasure.inst_eformula' _ (Erasure.eformula_secLeak _) |- _ =>
-        cbn -[Erasure.inst_symprop] in H end;
-      (* every other erased hypothesis carries the whole valuation, so each
-         `destruct v` in vc_pub would rewrite all of them: drop them first *)
-      repeat match goal with H : Erasure.inst_eformula' _ _ |- _ => clear H end;
-      vc_pub.
     Ltac vc_relop_once :=
       lazymatch goal with
       | |- Erasure.inst_eformula' _ (Erasure.eformula_relop _ _ _) =>
           cbn -[Erasure.inst_symprop];
-          lazymatch goal with
-          | |- ty.projLeftRV (bop.eval_relop_relprop ?op ?a ?b) /\
-               ty.projRightRV (bop.eval_relop_relprop ?op ?a ?b) =>
-              apply (@relprop_sync _ op a b);
-              [solve [vc_pub_erased] | solve [vc_pub_erased] |]
-          end
+          lazymatch goal with |- ?P /\ ?P => apply (@and_dup P) end
       | |- Erasure.inst_eformula' _ (Erasure.eformula_bool _) =>
           cbn -[Erasure.inst_symprop];
-          lazymatch goal with
-          | |- ty.projLeftRV ?b = true /\ ty.projRightRV ?b = true =>
-              apply (@relbool_sync b); [solve [vc_pub_erased] |]
-          end
+          lazymatch goal with |- ?P /\ ?P => apply (@and_dup P) end
       end.
 
     Ltac solve_vc_closers :=

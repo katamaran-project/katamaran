@@ -83,10 +83,6 @@ Ltac rv_leaf_core :=
   (* valToRelVal is the eta-reduced SyncVal: cbn leaves it folded *)
   try unfold ty.valToRelVal in *;
   cbn -[Erasure.inst_symprop] in *;
-  (* a public RelVal is a pair whose sides agree: substitute that *)
-  repeat match goal with v : RelVal _, H : RiscvPmpSignature.secLeak ?v |- _ =>
-    is_var v; let l := fresh "l" in let r := fresh "r" in
-    destruct v as [l r]; hnf in H; cbn in H; subst r end;
   cbn -[Erasure.inst_symprop bv.add bv.mul bv.sub bv.negate bv.shiftl bv.shiftr bv.land bv.sext
         bv.unsigned bv.of_N bv.ult bv.ule] in *;
   (* a relop/bool hypothesis is pointwise, `P_l /\ P_r` *)
@@ -101,12 +97,6 @@ Ltac rv_leaf_core :=
   (* and so is a relop/bool goal: one leaf per projection *)
   repeat match goal with |- _ /\ _ => split end;
   first [ exact I
-        | lazymatch goal with
-          | |- RiscvPmpSignature.secLeak ?v =>
-              is_evar v; unify v (ty.SyncVal (@bv.zero xlenbits)); reflexivity
-          | |- ty.projLeftRV ?v = ty.projRightRV ?v =>
-              is_evar v; unify v (ty.SyncVal (@bv.zero xlenbits)); reflexivity
-          end
         | assumption | reflexivity | (f_equal; bv_lin_cc) | bv_lin_cc
         | (exfalso; bv_lin_cc) ].
 
@@ -149,10 +139,6 @@ Ltac mb_search_cc :=
   | |- _ => solve [ rv_leaf_cc ]
   end.
 
-(* evars no leaf constrains: any value *)
-Ltac fill_evar :=
-  first [ exact (ty.SyncVal bv.zero) | exact (ty.SyncVal nil) | exact (ty.SyncVal true) ].
-
 Ltac solve_cc_vc :=
   intros; vm_compute; solve_vc;
   try solve_symbase_fetch;
@@ -163,12 +149,12 @@ Ltac solve_cc_vc :=
 (* the whole discharge: an angelic step leaves `∃ (_ : P), Q`, and eexists
    SHELVES the obligation P (for the function VC: everything from the loop
    block's entry on) -- bring the shelf back and close it the same way; all
-   inside `solve` so that a negative control really fails *)
+   inside `solve` so that a negative control really fails.  No value evar is
+   left to fill: the `_pub` binders keep plain-value witnesses out (2026-11-07) *)
 Ltac solve_cc_all :=
   solve [ unshelve solve_cc_vc;
-          try fill_evar;
           try (cbn [Erasure.inst_symprop]; cbn -[Erasure.inst_symprop] in * |- ;
-               unshelve mb_search_cc; try fill_evar) ].
+               unshelve mb_search_cc) ].
 
 Definition ccf_instrs : list AST :=
   [ RISCV_JAL (bv.of_Z 8) X1   (* jal	L_8	# 0x0: jal 0x8 <br_ccopy> *)

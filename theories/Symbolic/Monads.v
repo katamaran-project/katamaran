@@ -819,6 +819,16 @@ Module Type SymbolicMonadsOn (Import B : Base) (Import P : PredicateKit B)
         (*              |}) *)
         | SymProp.debug msg k =>
             debug (subst msg δ) (replay k δ)
+        (* Public binders: un-fuse, i.e. replay as the plain binder followed
+           by the secLeak assertion / assumption that fuse_pub removed. *)
+        | SymProp.angelicv_pub b k =>
+            ⟨ θ ⟩ t <- angelic (Some (name b)) (type b) ;;
+            ⟨ θ2 ⟩ _ <- assert_formula amsg.empty (formula_secLeak t) ;;
+            replay k (persist (env.snoc (persist δ θ) b t) θ2)
+        | SymProp.demonicv_pub b k =>
+            ⟨ θ ⟩ t <- demonic (Some (name b)) (type b) ;;
+            ⟨ θ2 ⟩ _ <- assume_formula (formula_secLeak t) ;;
+            replay k (persist (env.snoc (persist δ θ) b t) θ2)
         end.
 
     Definition replay : ⊢ 𝕊 -> 𝕊 :=

@@ -1257,6 +1257,13 @@ Module Type RefinementMonadsOn
         iApply (repₚ_cong (T1 := Sub Σ) (T2 := Sub (Σ - (x∷σ))) (fun vs => env.remove (x∷σ) vs xIn) (fun vs => env.remove (x∷σ) vs xIn) with "Hι").
         intros. now rewrite <- inst_sub_shift, <- inst_subst, sub_comp_shift.
       - now iApply "IH".
+      (* angelicv_pub / demonicv_pub: binder, then assert/assume secLeak, so
+         one extra world hop ω1 between the binder and the continuation;
+         rsolve leaves Hι under forgetting (acc_trans ω0 ω1). *)
+      - iApply "IH"; rsolve.
+        rewrite (forgetting_trans (ω12 := ω0) (ω23 := ω1)); iModIntro; rsolve.
+      - iApply "IH"; rsolve.
+        rewrite (forgetting_trans (ω12 := ω0) (ω23 := ω1)); iModIntro; rsolve.
     Qed.
 
     Lemma refine_replay_aux2 {Σ} (s : 𝕊 Σ) {w} :

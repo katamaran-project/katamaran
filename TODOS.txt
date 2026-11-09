@@ -303,6 +303,8 @@ Would it make sense to have an invariant like the leakage invariant for the pc?
 - relval-pair (2026-10-30, Emiel): prove a relop/bool VC leaf ONCE when both sides are the same goal.
 	STATUS 2026-10-30: done in solve_vc, not in the closer (the split happens in solve_vc's `repeat split`, on the
 	ERASED goal). Contracts.v: relprop_sync/relbool_sync + vc_relop_once. LoopI 8 -> 5 leaves (KatamaranRel's count);
+	[2026-11-06, issue/pub-binders: relprop_sync/relbool_sync/vc_pub REPLACED by `and_dup : P -> P /\ P` -- with
+	_pub binders the goal is already a literal `P /\ P`; a sample of 6 files needed nothing else]
 	same-session census: closer stage 10.03 -> 6.80 s, file 33.83 -> 29.77 s; MuladdParamLoopI.vo 34.96 -> 32.28 s
 	user (KatamaranRel 28.67). ONLY LoopI's closure rebuilt: every other example and MuladdParamVC still to check.
 	The rest was the SAME doubling for EQUATION leaves, in the closer: f_equal / RV_ext proved a pair equation per
