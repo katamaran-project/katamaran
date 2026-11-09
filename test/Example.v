@@ -450,100 +450,77 @@ Module Import ExampleSpecification.
   Section ContractDefKit.
 
     Import asn.notations.
+    Import ExampleSig.ContractNotations.
     Abbreviation asn_prop Σ P := (asn.formula (@formula_prop Σ Σ (sub_id Σ) P)).
 
     Definition sep_contract_abs : SepContract [ "x" ∷ ty.int ] ty.int :=
-      {| sep_contract_logic_variables := ["x" ∷ ty.int];
-         sep_contract_localstore      := [term_var "x"];
-         sep_contract_precondition    := ⊤;
-         sep_contract_result          := "result";
-         sep_contract_postcondition   :=
-           asn_prop
-             ["x" ∷ ty.int; "result" ∷ ty.int]
-             (fun x result => result = Z.abs x)%type
-      |}.
+      {{ ⊤ }}
+        fn abs ["x" :: ty.int] ty.int
+      {{ "result",
+         asn_prop
+           ["x" ∷ ty.int; "result" ∷ ty.int]
+           (fun x result => result = Z.abs x)%type }}.
 
     Definition sep_contract_cmp : SepContract ["x" ∷ ty.int; "y" ∷ ty.int] (ty.enum ordering)  :=
-       {| sep_contract_logic_variables := ["x" ∷ ty.int; "y" ∷ ty.int];
-          sep_contract_localstore      := [term_var "x"; term_var "y"];
-          sep_contract_precondition    := ⊤;
-          sep_contract_result          := "result";
-          sep_contract_postcondition   :=
-            asn.match_enum
-              ordering (term_var "result")
-              (fun result =>
-                 match result with
-                 | LT => term_var "x" < term_var "y"
-                 | EQ => term_var "x" = term_var "y"
-                 | GT => term_var "x" > term_var "y"
-                 end)
-       |}.
+      {{ ⊤ }}
+        fn cmp ["x" :: ty.int; "y" :: ty.int] (ty.enum ordering)
+      {{ "result",
+         asn.match_enum
+           ordering (term_var "result")
+           (fun result =>
+              match result with
+              | LT => term_var "x" < term_var "y"
+              | EQ => term_var "x" = term_var "y"
+              | GT => term_var "x" > term_var "y"
+              end) }}.
 
     Definition sep_contract_gcd : SepContract [ "x" ∷ ty.int; "y" ∷ ty.int ] ty.int :=
-      {| sep_contract_logic_variables := ["x" ∷ ty.int; "y" ∷ ty.int];
-         sep_contract_localstore      := [term_var "x"; term_var "y"];
-         sep_contract_precondition    := ⊤;
-         sep_contract_result          := "result";
-         sep_contract_postcondition   :=
-           asn_prop
-             ["x" ∷ ty.int; "y" ∷ ty.int; "result" ∷ ty.int]
-             (fun x y result => result = Z.gcd x y)%type
-      |}.
+      {{ ⊤ }}
+        fn gcd ["x" :: ty.int; "y" :: ty.int] ty.int
+      {{ "result",
+         asn_prop
+           ["x" ∷ ty.int; "y" ∷ ty.int; "result" ∷ ty.int]
+           (fun x y result => result = Z.gcd x y)%type }}.
 
     Definition sep_contract_gcdloop : SepContract [ "x" ∷ ty.int; "y" ∷ ty.int ] ty.int :=
-      {| sep_contract_logic_variables := ["x" ∷ ty.int; "y" ∷ ty.int];
-         sep_contract_localstore      := [term_var "x"; term_var "y"];
-         sep_contract_precondition    :=
-           term_val ty.int 0 <= term_var "x" ∗
-           term_val ty.int 0 <= term_var "y";
-         sep_contract_result          := "result";
-         sep_contract_postcondition   :=
-           asn_prop
-             ["x" ∷ ty.int; "y" ∷ ty.int; "result" ∷ ty.int]
-             (fun x y result => result = Z.gcd x y)%type
-      |}.
+      {{ term_val ty.int 0 <= term_var "x" ∗
+         term_val ty.int 0 <= term_var "y" }}
+        fn gcdloop ["x" :: ty.int; "y" :: ty.int] ty.int
+      {{ "result",
+         asn_prop
+           ["x" ∷ ty.int; "y" ∷ ty.int; "result" ∷ ty.int]
+           (fun x y result => result = Z.gcd x y)%type }}.
 
     Definition length_post {σ} (xs : list (Val σ)) (result : Val ty.int) :=
       (result = Z.of_nat (@Datatypes.length (Val σ) xs))%type.
     Definition sep_contract_length {σ} : SepContract [ "xs" ∷ ty.list σ ] ty.int :=
-      {| sep_contract_logic_variables := ["xs" ∷ ty.list σ ];
-         sep_contract_localstore      := [term_var "xs"];
-         sep_contract_precondition    := ⊤;
-         sep_contract_result          := "result";
-         sep_contract_postcondition   := asn_prop ["xs"∷ty.list σ; "result"∷ty.int] length_post
-      |}.
+      {{ ⊤ }}
+        fn (@length σ) ["xs" :: ty.list σ] ty.int
+      {{ "result", asn_prop ["xs"∷ty.list σ; "result"∷ty.int] length_post }}.
 
     Definition sep_contract_bvtest : SepContract [ "sign" ∷ ty.bvec 42 ] (ty.bvec 42) :=
-      {| sep_contract_logic_variables := ["sign" ∷ ty.bvec 42 ];
-         sep_contract_localstore      := [term_var "sign"];
-         sep_contract_precondition    := ⊤;
-         sep_contract_result          := "result";
-         sep_contract_postcondition   := asn.formula (formula_relop bop.eq (term_var "result") (term_var "sign"))
-      |}.
+      {{ ⊤ }}
+        fn bvtest ["sign" :: ty.bvec 42] (ty.bvec 42)
+      {{ "result",
+         asn.formula (formula_relop bop.eq (term_var "result") (term_var "sign")) }}.
 
     Definition sep_contract_bvtest2 : SepContract [ "sign" ∷ ty.bvec 42 ] (ty.bvec 42) :=
-      {| sep_contract_logic_variables := ["sign" ∷ ty.bvec 42 ];
-        sep_contract_localstore      := [term_var "sign"];
-        sep_contract_precondition    := ⊤;
-        sep_contract_result          := "result";
-        sep_contract_postcondition   := asn.formula (formula_relop bop.eq (term_var "result") (term_var "sign"))
-      |}.
+      {{ ⊤ }}
+        fn bvtest2 ["sign" :: ty.bvec 42] (ty.bvec 42)
+      {{ "result",
+         asn.formula (formula_relop bop.eq (term_var "result") (term_var "sign")) }}.
 
     Definition sep_contract_bvtest3 : SepContract [ "sign" ∷ ty.bvec 42 ] ty.int :=
-      {| sep_contract_logic_variables := ["sign" ∷ ty.bvec 42 ];
-        sep_contract_localstore      := [term_var "sign"];
-        sep_contract_precondition    := ⊤;
-        sep_contract_result          := "result";
-        sep_contract_postcondition   := asn.formula (formula_relop bop.eq (term_var "result") (term_val ty.int 0%Z))
-      |}.
+      {{ ⊤ }}
+        fn bvtest3 ["sign" :: ty.bvec 42] ty.int
+      {{ "result",
+         asn.formula
+           (formula_relop bop.eq (term_var "result") (term_val ty.int 0%Z)) }}.
 
     Definition sep_contract_pevaltest1 : SepContract [ "sign" ∷ ty.bvec 42 ; "y" ∷ ty.int ] ty.int :=
-      {| sep_contract_logic_variables := ["sign" ∷ ty.bvec 42 ; "y" ∷ ty.int ];
-        sep_contract_localstore      := [term_var "sign"; term_var "y" ];
-        sep_contract_precondition    := ⊤;
-        sep_contract_result          := "result";
-        sep_contract_postcondition   := term_var "result" = term_val ty.int 0%Z
-      |}.
+      {{ ⊤ }}
+        fn pevaltest1 ["sign" :: ty.bvec 42; "y" :: ty.int] ty.int
+      {{ "result", term_var "result" = term_val ty.int 0%Z }}.
 
     Definition contract_environment : SepContractEnv :=
       fun Δ τ f =>

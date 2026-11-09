@@ -421,14 +421,12 @@ Module Import ReplaySpecification.
     Abbreviation asn_prop Σ P := (asn.formula (@formula_prop Σ Σ (sub_id Σ) P)).
     Abbreviation asn_P xs := (asn.chunk (chunk_user P [xs])).
     Abbreviation asn_Q xs := (asn.formula (formula_user Q [xs])).
+    Import ReplaySig.ContractNotations.
 
     Definition sep_contract_main : SepContract ["xs" :: ty_X] ty.unit :=
-      {| sep_contract_logic_variables := ["xs" :: ty_X];
-         sep_contract_localstore      := [term_var "xs"];
-         sep_contract_precondition    := asn_Q (term_var "xs") ∗ asn_P (term_var "xs");
-         sep_contract_result          := "_";
-         sep_contract_postcondition   := term_val ty.int 1%Z = term_val ty.int 7%Z;
-      |}.
+      {{ asn_Q (term_var "xs") ∗ asn_P (term_var "xs") }}
+        fn main ["xs" :: ty_X] ty.unit
+      {{ "_", term_val ty.int 1%Z = term_val ty.int 7%Z }}.
 
     Definition contract_environment : SepContractEnv :=
       fun Δ τ f =>
@@ -442,11 +440,10 @@ Module Import ReplaySpecification.
         match f with end.
 
     Definition lemma_open_list : SepLemma open_list :=
-      {| lemma_logic_variables := ["l" :: ty_X];
-         lemma_patterns        := env.nil;
-         lemma_precondition    := asn_P (term_var "l");
-         lemma_postcondition   := term_var "l" = term_list [term_val ty.int 0%Z];
-      |}.
+      {{ asn_P (term_var "l") }}
+        lem open_list []
+      {{ term_var "l" = term_list [term_val ty.int 0%Z] }}
+      with ["l" :: ty_X].
 
     Definition lemma_environment : LemmaEnv :=
       fun Δ l =>
@@ -509,6 +506,7 @@ Section ReplayExamples.
   #[local] Abbreviation P := (interp_Pₐ).
   #[local] Abbreviation Q := (interp_Qₐ).
   #[local] Notation "a <= b" := ((term_binop (bop.relop bop.le) a b = term_val ty.bool true)).
+  Import ReplaySig.ContractNotations.
 
   Definition ValidContractWithoutReplay {Δ τ} (c : SepContract Δ τ)
     (s : Stm Δ τ) : Prop :=
@@ -519,39 +517,23 @@ Section ReplayExamples.
   Section ArithExample.
 
     Definition arith_contract1 : SepContract ["x" :: ty.int] ty.int :=
-      {|
-        sep_contract_logic_variables := ["x"∷ty.int];
-        sep_contract_localstore := [term_var "x"];
-        sep_contract_precondition :=
-          asn.formula (formula_user Pₐ [term_var "x"]);
-        sep_contract_result := "r";
-        sep_contract_postcondition :=
-          asn.formula (formula_user Qₐ [term_var "r"])
-      |}.
+      {{ asn.formula (formula_user Pₐ [term_var "x"]) }}
+        fn arith_example ["x" :: ty.int] ty.int
+      {{ "r", asn.formula (formula_user Qₐ [term_var "r"]) }}.
 
     Definition arith_contract2 : SepContract ["x" :: ty.int] ty.int :=
-      {|
-        sep_contract_logic_variables := ["x"∷ty.int;"b"∷ty.bool];
-        sep_contract_localstore := [term_var "x"];
-        sep_contract_precondition :=
-          asn.formula (formula_user Aₐ [term_var "b"])
-            ∗ asn.formula (formula_user Bₐ [term_var "x"; term_var "b"]);
-        sep_contract_result := "r";
-        sep_contract_postcondition :=
-          asn.formula (formula_user Qₐ [term_var "r"])
-      |}.
+      {{ asn.formula (formula_user Aₐ [term_var "b"])
+           ∗ asn.formula (formula_user Bₐ [term_var "x"; term_var "b"]) }}
+        fn arith_example ["x" :: ty.int] ty.int
+      {{ "r", asn.formula (formula_user Qₐ [term_var "r"]) }}
+      with ["b" :: ty.bool].
 
     Definition arith_contract_debug : SepContract ["x" :: ty.int] ty.int :=
-      {|
-        sep_contract_logic_variables := ["x"∷ty.int;"b"∷ty.bool];
-        sep_contract_localstore := [term_var "x"];
-        sep_contract_precondition :=
-          asn.formula (formula_user Aₐ [term_var "b"])
-            ∗ asn.formula (formula_user Bₐ [term_val ty.int 5; term_var "b"]);
-        sep_contract_result := "r";
-        sep_contract_postcondition :=
-          asn.formula (formula_user Qₐ [term_var "r"])
-      |}.
+      {{ asn.formula (formula_user Aₐ [term_var "b"])
+           ∗ asn.formula (formula_user Bₐ [term_val ty.int 5; term_var "b"]) }}
+        fn arith_example ["x" :: ty.int] ty.int
+      {{ "r", asn.formula (formula_user Qₐ [term_var "r"]) }}
+      with ["b" :: ty.bool].
 
     Lemma valid_arith_contract1_no_replay : ValidContractWithoutReplay arith_contract1 (FunDef arith_example).
     Proof.
@@ -602,53 +584,33 @@ Section ReplayExamples.
   Section UnitExample.
 
     Definition unit_contract1 : SepContract ε ty.unit :=
-      {|
-        sep_contract_logic_variables := ["b" :: ty.bool];
-        sep_contract_localstore := []%env;
-        sep_contract_precondition :=
-          asn.formula (formula_user Aᵤ [term_var "b"])
-          ∗ asn.formula (formula_user Bᵤ [term_var "b"]);
-        sep_contract_result := "r";
-        sep_contract_postcondition :=
-          asn.formula (formula_user Cᵤ [])
-      |}.
+      {{ asn.formula (formula_user Aᵤ [term_var "b"])
+           ∗ asn.formula (formula_user Bᵤ [term_var "b"]) }}
+        fn unit_example [] ty.unit
+      {{ "r", asn.formula (formula_user Cᵤ []) }}
+      with ["b" :: ty.bool].
 
     Definition unit_contract2 : SepContract ε ty.unit :=
-      {|
-        sep_contract_logic_variables := ["b" :: ty.bool];
-        sep_contract_localstore := []%env;
-        sep_contract_precondition :=
-          asn.formula (formula_user Bᵤ [term_var "b"])
-          ∗ asn.formula (formula_user Aᵤ [term_var "b"]);
-        sep_contract_result := "r";
-        sep_contract_postcondition :=
-          asn.formula (formula_user Cᵤ [])
-      |}.
+      {{ asn.formula (formula_user Bᵤ [term_var "b"])
+           ∗ asn.formula (formula_user Aᵤ [term_var "b"]) }}
+        fn unit_example [] ty.unit
+      {{ "r", asn.formula (formula_user Cᵤ []) }}
+      with ["b" :: ty.bool].
 
     (* This contract remove B and just assumes that b = true directly *)
     Definition unit_contract3 : SepContract ε ty.unit :=
-      {|
-        sep_contract_logic_variables := ["b" :: ty.bool];
-        sep_contract_localstore := []%env;
-        sep_contract_precondition :=
-          asn.formula (formula_user Aᵤ [term_var "b"])
-          ∗ term_var "b" = term_val ty.bool true;
-        sep_contract_result := "r";
-        sep_contract_postcondition :=
-          asn.formula (formula_user Cᵤ [])
-      |}.
+      {{ asn.formula (formula_user Aᵤ [term_var "b"])
+           ∗ term_var "b" = term_val ty.bool true }}
+        fn unit_example [] ty.unit
+      {{ "r", asn.formula (formula_user Cᵤ []) }}
+      with ["b" :: ty.bool].
 
     Definition unit_contract_int : SepContract ε ty.unit :=
-      {|
-        sep_contract_logic_variables := ["a" :: ty.int; "b" :: ty.int];
-        sep_contract_localstore := []%env;
-        sep_contract_precondition :=
-          term_var "a" + term_var "b" = term_val ty.int 5
-          ∗ term_var "b" = term_val ty.int 0;
-        sep_contract_result := "_";
-        sep_contract_postcondition :=
-          (term_var "a") <= (term_val ty.int 5);
-      |}.
+      {{ term_var "a" + term_var "b" = term_val ty.int 5
+           ∗ term_var "b" = term_val ty.int 0 }}
+        fn unit_example [] ty.unit
+      {{ "_", (term_var "a") <= (term_val ty.int 5) }}
+      with ["a" :: ty.int; "b" :: ty.int].
 
     Lemma valid_unit_contract1_no_replay : ValidContractWithoutReplay unit_contract1 (FunDef unit_example).
     Proof.

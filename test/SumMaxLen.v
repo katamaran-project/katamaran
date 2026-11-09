@@ -199,20 +199,18 @@ Module Import ExampleSpecification.
 
   Import ctx.resolution.
   Import asn.notations.
+  Import ExampleSig.ContractNotations.
 
   Definition sep_contract_summaxlen : SepContract [ "xs" ∷ ty.list ty.int ] (ty.prod (ty.prod ty.int ty.int) ty.int) :=
-    {| sep_contract_logic_variables := ["xs" ∷ ty.list ty.int ];
-       sep_contract_localstore      := [term_var "xs"];
-       sep_contract_precondition    := ⊤;
-       sep_contract_result          := "result";
-       sep_contract_postcondition   :=
-         asn.match_prod
-           (term_var "result") "sm" "l"
-           (asn.match_prod
-              (term_var "sm") "s" "m"
-              (term_var "s" <= term_binop bop.times (term_var "m") (term_var "l") ∗
-               term_val ty.int 0 <= term_var "l"));
-    |}.
+    {{ ⊤ }}
+      fn summaxlen ["xs" :: ty.list ty.int] (ty.prod (ty.prod ty.int ty.int) ty.int)
+    {{ "result",
+       asn.match_prod
+         (term_var "result") "sm" "l"
+         (asn.match_prod
+            (term_var "sm") "s" "m"
+            (term_var "s" <= term_binop bop.times (term_var "m") (term_var "l") ∗
+             term_val ty.int 0 <= term_var "l")) }}.
 
   Definition contract_environment : SepContractEnv :=
     fun Δ τ f =>

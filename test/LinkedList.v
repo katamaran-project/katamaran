@@ -540,6 +540,7 @@ Module Import ExampleSpecification.
 
     Import ctx.resolution.
     Import asn.notations.
+    Import ExampleSignature.ContractNotations.
 
     (* We define notations for more convenience. *)
     Local Notation "p '↦l' xs" := (asn.chunk (chunk_user ptstolist (env.nil ► (llist ↦ p) ► (ty.list ty.int ↦ xs)))) (at level 70).
@@ -551,154 +552,126 @@ Module Import ExampleSpecification.
       term_binop bop.append xs ys = zs.
 
     Definition sep_contract_append : SepContract [ "p" ∷ llist; "q" ∷ llist ] llist :=
-      {| sep_contract_logic_variables := ["p" ∷ llist; "q" ∷ llist; "xs" ∷ ty.list ty.int; "ys" ∷ ty.list ty.int];
-         sep_contract_localstore      := [term_var "p"; term_var "q"];
-         sep_contract_precondition    := term_var "p" ↦l term_var "xs" ∗ term_var "q" ↦l term_var "ys";
-         sep_contract_result          := "result";
-         sep_contract_postcondition   :=
-           asn.exist "zs" (ty.list ty.int)
-             (term_var "result" ↦l term_var "zs" ∗
-              asn_append (term_var "xs") (term_var "ys") (term_var "zs"));
-      |}.
+      {{ term_var "p" ↦l term_var "xs" ∗ term_var "q" ↦l term_var "ys" }}
+        fn append ["p" :: llist; "q" :: llist] llist
+      {{ "result",
+         asn.exist "zs" (ty.list ty.int)
+           (term_var "result" ↦l term_var "zs" ∗
+            asn_append (term_var "xs") (term_var "ys") (term_var "zs")) }}
+      with ["xs" :: ty.list ty.int; "ys" :: ty.list ty.int].
 
     Definition sep_contract_appendloop : SepContract [ "p" ∷ ptr; "q" ∷ llist ] ty.unit :=
-      {| sep_contract_logic_variables := ["p" ∷ ptr; "q" ∷ llist; "xs" ∷ ty.list ty.int; "ys" ∷ ty.list ty.int];
-         sep_contract_localstore      := [term_var "p"; term_var "q"];
-         sep_contract_precondition    := term_inl (term_var "p") ↦l term_var "xs" ∗ term_var "q" ↦l term_var "ys";
-         sep_contract_result          := "result";
-         sep_contract_postcondition   :=
-           term_var "result" = term_val ty.unit tt ∗
-           asn.exist "zs" (ty.list ty.int)
-             (term_inl (term_var "p") ↦l term_var "zs" ∗
-              asn_append (term_var "xs") (term_var "ys") (term_var "zs"));
-      |}.
+      {{ term_inl (term_var "p") ↦l term_var "xs" ∗ term_var "q" ↦l term_var "ys" }}
+        fn appendloop ["p" :: ptr; "q" :: llist] ty.unit
+      {{ "result",
+         term_var "result" = term_val ty.unit tt ∗
+         asn.exist "zs" (ty.list ty.int)
+           (term_inl (term_var "p") ↦l term_var "zs" ∗
+            asn_append (term_var "xs") (term_var "ys") (term_var "zs")) }}
+      with ["xs" :: ty.list ty.int; "ys" :: ty.list ty.int].
 
     Definition sep_contract_length : SepContract [ "p" ∷ llist ] ty.int :=
-      {| sep_contract_logic_variables := ["p" ∷ llist; "xs" ∷ ty.list ty.int];
-         sep_contract_localstore      := [term_var "p"];
-         sep_contract_precondition    := term_var "p" ↦l term_var "xs";
-         sep_contract_result          := "result";
-         sep_contract_postcondition   :=
-           asn.formula (formula_user plength [term_var "xs"; term_var "result"]) ∗
-           term_var "p" ↦l term_var "xs"
-      |}.
+      {{ term_var "p" ↦l term_var "xs" }}
+        fn length ["p" :: llist] ty.int
+      {{ "result",
+         asn.formula (formula_user plength [term_var "xs"; term_var "result"]) ∗
+         term_var "p" ↦l term_var "xs" }}
+      with ["xs" :: ty.list ty.int].
 
     Definition sep_contract_copy : SepContract [ "p" ∷ llist ] llist :=
-      {| sep_contract_logic_variables := ["p" ∷ llist; "xs" ∷ ty.list ty.int];
-         sep_contract_localstore      := [term_var "p"];
-         sep_contract_precondition    := term_var "p" ↦l term_var "xs";
-         sep_contract_result          := "result";
-         sep_contract_postcondition   :=
-           term_var "p" ↦l term_var "xs" ∗
-           term_var "result" ↦l term_var "xs"
-      |}.
+      {{ term_var "p" ↦l term_var "xs" }}
+        fn copy ["p" :: llist] llist
+      {{ "result",
+         term_var "p" ↦l term_var "xs" ∗
+         term_var "result" ↦l term_var "xs" }}
+      with ["xs" :: ty.list ty.int].
 
     Definition sep_contract_reverse : SepContract [ "p" ∷ llist ] llist :=
-      {| sep_contract_logic_variables := ["p" ∷ llist; "xs" ∷ ty.list ty.int];
-         sep_contract_localstore      := [term_var "p"];
-         sep_contract_precondition    := term_var "p" ↦l term_var "xs";
-         sep_contract_result          := "r";
-         sep_contract_postcondition   :=
-           asn.exist "zs" (ty.list ty.int)
-             (term_var "r" ↦l term_var "zs" ∗
-              asn.formula (formula_user preverse [term_var "xs"; term_var "zs"]));
-      |}.
+      {{ term_var "p" ↦l term_var "xs" }}
+        fn reverse ["p" :: llist] llist
+      {{ "r",
+         asn.exist "zs" (ty.list ty.int)
+           (term_var "r" ↦l term_var "zs" ∗
+            asn.formula (formula_user preverse [term_var "xs"; term_var "zs"])) }}
+      with ["xs" :: ty.list ty.int].
 
     Definition sep_contract_reverseloop : SepContract [ "p" ∷ llist; "q" ∷ llist ] llist :=
-      {| sep_contract_logic_variables := ["p" ∷ llist; "q" ∷ llist; "xs" ∷ ty.list ty.int; "ys" ∷ ty.list ty.int];
-         sep_contract_localstore      := [term_var "p"; term_var "q"];
-         sep_contract_precondition    := term_var "p" ↦l term_var "xs" ∗ term_var "q" ↦l term_var "ys";
-         sep_contract_result          := "r";
-         sep_contract_postcondition   :=
-           asn.exist "zs" (ty.list ty.int)
-             (term_var "r" ↦l term_var "zs" ∗
-              asn.formula (formula_user preverseappend [term_var "xs"; term_var "ys"; term_var "zs"]));
-      |}.
+      {{ term_var "p" ↦l term_var "xs" ∗ term_var "q" ↦l term_var "ys" }}
+        fn reverseloop ["p" :: llist; "q" :: llist] llist
+      {{ "r",
+         asn.exist "zs" (ty.list ty.int)
+           (term_var "r" ↦l term_var "zs" ∗
+            asn.formula
+              (formula_user preverseappend
+                 [term_var "xs"; term_var "ys"; term_var "zs"])) }}
+      with ["xs" :: ty.list ty.int; "ys" :: ty.list ty.int].
 
     Definition sep_contract_mkcons : SepContract [ "x" ∷ ty.int; "xs" ∷ llist ] ptr :=
-      {| sep_contract_logic_variables := ["x" ∷ ty.int; "xs" ∷ llist];
-         sep_contract_localstore      := [term_var "x"; term_var "xs"];
-         sep_contract_precondition    := ⊤;
-         sep_contract_result          := "p";
-         sep_contract_postcondition   := term_var "p" ↦p ( term_var "x" , term_var "xs" );
-      |}.
+      {{ ⊤ }}
+        fn mkcons ["x" :: ty.int; "xs" :: llist] ptr
+      {{ "p", term_var "p" ↦p ( term_var "x" , term_var "xs" ) }}.
 
     Definition sep_contract_fst : SepContract [ "p" ∷ ptr ] ty.int :=
-      {| sep_contract_logic_variables := ["p" ∷ ty.int; "x" ∷ ty.int; "xs" ∷ llist];
-         sep_contract_localstore      := [term_var "p"];
-         sep_contract_precondition    := term_var "p" ↦p ( term_var "x" , term_var "xs" );
-         sep_contract_result          := "result";
-         sep_contract_postcondition   :=
-           term_var "result" = term_var "x" ∗
-           term_var "p" ↦p ( term_var "x" , term_var "xs" );
-      |}.
+      {{ term_var "p" ↦p ( term_var "x" , term_var "xs" ) }}
+        fn fst ["p" :: ptr] ty.int
+      {{ "result",
+         term_var "result" = term_var "x" ∗
+         term_var "p" ↦p ( term_var "x" , term_var "xs" ) }}
+      with ["x" :: ty.int; "xs" :: llist].
 
     Definition sep_contract_snd : SepContract [ "p" ∷ ptr ] llist :=
-      {| sep_contract_logic_variables := ["p" ∷ ty.int; "x" ∷ ty.int; "xs" ∷ llist];
-         sep_contract_localstore      := [term_var "p"];
-         sep_contract_precondition    := term_var "p" ↦p ( term_var "x" , term_var "xs" );
-         sep_contract_result          := "result";
-         sep_contract_postcondition   :=
-           term_var "result" = term_var "xs" ∗
-           term_var "p" ↦p ( term_var "x" , term_var "xs" );
-      |}.
+      {{ term_var "p" ↦p ( term_var "x" , term_var "xs" ) }}
+        fn snd ["p" :: ptr] llist
+      {{ "result",
+         term_var "result" = term_var "xs" ∗
+         term_var "p" ↦p ( term_var "x" , term_var "xs" ) }}
+      with ["x" :: ty.int; "xs" :: llist].
 
     Definition sep_contract_setfst : SepContract [ "p" ∷ ptr; "x" ∷ ty.int ] ty.unit :=
-      {| sep_contract_logic_variables := ["p" ∷ ty.int; "x" ∷ ty.int; "xs" ∷ llist];
-         sep_contract_localstore      := [term_var "p"; term_var "x"];
-         sep_contract_precondition    := asn.exist "y" ty.int (term_var "p" ↦p ( term_var "y" , term_var "xs"));
-         sep_contract_result          := "result";
-         sep_contract_postcondition   :=
+      {{ asn.exist "y" ty.int (term_var "p" ↦p ( term_var "y" , term_var "xs")) }}
+        fn setfst ["p" :: ptr; "x" :: ty.int] ty.unit
+      {{ "result",
          term_var "result" = term_val ty.unit tt ∗
-         term_var "p" ↦p ( term_var "x" , term_var "xs");
-      |}.
+         term_var "p" ↦p ( term_var "x" , term_var "xs") }}
+      with ["xs" :: llist].
 
     Definition sep_contract_setsnd : SepContract [ "p" ∷ ptr; "xs" ∷ llist ] ty.unit :=
-      {| sep_contract_logic_variables := ["p" ∷ ty.int; "x" ∷ ty.int; "xs" ∷ llist];
-         sep_contract_localstore      := [term_var "p"; term_var "xs"];
-         sep_contract_precondition    := asn.exist "ys" llist (term_var "p" ↦p ( term_var "x" , term_var "ys"));
-         sep_contract_result          := "result";
-         sep_contract_postcondition   :=
+      {{ asn.exist "ys" llist (term_var "p" ↦p ( term_var "x" , term_var "ys")) }}
+        fn setsnd ["p" :: ptr; "xs" :: llist] ty.unit
+      {{ "result",
          term_var "result" = term_val ty.unit tt ∗
-         term_var "p" ↦p ( term_var "x" , term_var "xs");
-      |}.
+         term_var "p" ↦p ( term_var "x" , term_var "xs") }}
+      with ["x" :: ty.int].
 
     Definition sep_lemma_open_nil : Lemma [ ] :=
-      {| lemma_logic_variables := [];
-         lemma_patterns        := [];
-         lemma_precondition    := ⊤;
-         lemma_postcondition   := term_val llist (inr tt) ↦l term_val (ty.list ty.int) nil;
-      |}.
+      {{ ⊤ }}
+        lem open_nil []
+      {{ term_val llist (inr tt) ↦l term_val (ty.list ty.int) nil }}.
 
     Definition sep_lemma_open_cons : Lemma [ "p" ∷ ptr ] :=
-      {| lemma_logic_variables := ["p" ∷ ty.int; "xs" ∷ ty.list ty.int];
-         lemma_patterns        := [term_var "p"];
-         lemma_precondition    := term_inl (term_var "p") ↦l term_var "xs";
-         lemma_postcondition   :=
-           asn.match_list (term_var "xs")
-             ⊥
-             "y" "ys"
-             (asn.exist "n" llist
-                (term_var "p" ↦p (term_var "y", term_var "n") ∗
-                term_var "n" ↦l term_var "ys"))
-      |}.
+      {{ term_inl (term_var "p") ↦l term_var "xs" }}
+        lem open_cons ["p" :: ptr]
+      {{ asn.match_list (term_var "xs")
+           ⊥
+           "y" "ys"
+           (asn.exist "n" llist
+              (term_var "p" ↦p (term_var "y", term_var "n") ∗
+               term_var "n" ↦l term_var "ys")) }}
+      with ["xs" :: ty.list ty.int].
 
     Definition sep_lemma_close_cons : Lemma [ "p" ∷ ptr ] :=
-      {| lemma_logic_variables := ["p" ∷ ptr; "x" ∷ ty.int; "xs" ∷ ty.list ty.int; "n" ∷ llist ];
-         lemma_patterns        := [term_var "p"];
-         lemma_precondition    := term_var "p" ↦p (term_var "x" , term_var "n") ∗
-                                  term_var "n" ↦l term_var "xs";
-         lemma_postcondition   := term_inl (term_var "p") ↦l term_binop bop.cons (term_var "x") (term_var "xs")
-      |}.
+      {{ term_var "p" ↦p (term_var "x" , term_var "n") ∗
+         term_var "n" ↦l term_var "xs" }}
+        lem close_cons ["p" :: ptr]
+      {{ term_inl (term_var "p") ↦l term_binop bop.cons (term_var "x") (term_var "xs") }}
+      with ["x" :: ty.int; "xs" :: ty.list ty.int; "n" :: llist].
 
     Definition sep_lemma_close_nil : Lemma [ "p" ∷ ty.unit ] :=
-      {| lemma_logic_variables := ["p" ∷ ty.unit; "xs" ∷ ty.list ty.int ];
-         lemma_patterns        := [term_var "p"];
-         lemma_precondition    := term_inr (term_var "p") ↦l term_var "xs";
-         lemma_postcondition   :=
-           term_var "p"  = term_val ty.unit tt ∗
-           term_var "xs" = term_val (ty.list ty.int) nil
-      |}.
+      {{ term_inr (term_var "p") ↦l term_var "xs" }}
+        lem close_nil ["p" :: ty.unit]
+      {{ term_var "p"  = term_val ty.unit tt ∗
+         term_var "xs" = term_val (ty.list ty.int) nil }}
+      with ["xs" :: ty.list ty.int].
 
 
 
@@ -1119,8 +1092,8 @@ Module ExampleModel.
         ValidContractForeign sep_contract_setsnd setsnd.
       Proof.
         intros Γ es δ ι Heq.
-        destruct (env.view ι) as [ι vxs].
         destruct (env.view ι) as [ι vx].
+        destruct (env.view ι) as [ι vxs].
         destruct (env.view ι) as [ι vp].
         destruct (env.view ι). cbn.
         iIntros "Hres".
