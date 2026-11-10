@@ -81,7 +81,6 @@ Section FemtoKernel.
   Definition ra : RegIdx := [bv 1].
   Definition t0 : RegIdx := [bv 5].
   Definition mmio_write_arg_reg : RegIdx := [bv 10]. (* x10 = a0 *)
-  Definition mmio_write_val_reg : RegIdx := [bv 11]. (* x11 = a1 *)
   (* The system call number (passed in mmio_write_arg_reg, i.e. a0) with which
      U-mode asks the trap handler to power off the machine. The handler
      interprets a0 as follows:
@@ -198,24 +197,16 @@ Section FemtoKernel.
   Example femtokernel_init' (init_start : N) (handler_start : N) (adv_start : N) : list AnnotInstr :=
     resolve_ASM (femtokernel_init_asm handler_start adv_start) init_start.
 
-  Example femtokernel_handler_asm : list ASM :=
-    [
-      ITYPE (bv.of_N 42) zero t0 RISCV_ADDI
-    ; AnnotLemmaInvocation (close_mmio_write (bv.of_N mmio_write_addr) WORD) [nenv exp_val ty_xlenbits bv.zero;  exp_val ty_regno t0]%env (* TODO: notation to avoid lemma call copying LOAD instruction/internalize immediate as well?*)
-    ; STORE (bv.of_N mmio_write_addr) t0 zero WORD (* works because mmio_write_addr fits into 12 bits. *)
-    ; MRET
-    ].
-  Example femtokernel_handler' (handler_start : N) : list AnnotInstr :=
-    resolve_ASM (femtokernel_handler_asm) handler_start.
-
   (* The trap handler is invoked for writes to MMIO. Only M-mode can access
      the MMIO addresses directly, but we provide (the only) a syscall that
      performs writes for U-mode for certain MMIO addresses. This requires
      some extra blocks, one for the entry, in which we check that the address,
      expected as an argument in `mmio_write_arg_reg` register, is one that
-     can be written to be U-mode. If so, we perform the write with the value
-     from the `mmio_write_val_reg` register. If not, we perform a "secret"
-     write to an MMIO address that is only accessible to M-mode.
+     can be written to be U-mode. If so, we write the fixed value 42 to it,
+     together with a "secret" write of the secret to an MMIO address that is
+     only accessible to M-mode (the order of both writes depends on the
+     secret). If not, we power off the machine if a shutdown is requested,
+     and otherwise only perform the secret write.
      Finally, we return control to the invoker of the syscall. *)
   (* Block structure:
      - femtokernel_handler_entry_asm
