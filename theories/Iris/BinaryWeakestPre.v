@@ -764,17 +764,16 @@ Module IrisBinaryWP
 
     Lemma semWP2_focus {Γ1 Γ2 τ} {s1 : Stm Γ1 τ} {s2 : Stm Γ2 τ} :
       ⊢ ∀ Q1 Q2 Q δ1 δ2,
-          @IBleft.semTWP _ sailGS2_sailGS_left _ _ δ1 s1 Q1 -∗
+          @IBleft.semWP _ sailGS2_sailGS_left _ _ δ1 s1 Q1 -∗
           @IBright.semTWP _ sailGS2_sailGS_right _ _ δ2 s2 Q2 -∗
           (∀ v1 δ1 v2 δ2, Q1 v1 δ1 ∗ Q2 v2 δ2 -∗ Q v1 δ1 v2 δ2) -∗
           semWP2 δ1 δ2 s1 s2 Q.
     Proof.
-      iIntros (Q1 Q2 Q δ1 δ2) "HTWP1 HTWP2 H". rewrite /semWP2.
+      iIntros (Q1 Q2 Q δ1 δ2) "HWP HTWP H". rewrite /semWP2.
       iIntros (γ21 μ21) "Hres". iApply IBleft.semWP_fupd.
-      iPoseProof (IBleft.semTWP_semWP with "HTWP1") as "HWP1".
-      iPoseProof (IBright.semTWP_Steps with "[Hres] HTWP2") as "H2".
+      iPoseProof (IBright.semTWP_Steps with "[Hres] HTWP") as "H2".
       { iDestruct "Hres" as "($ & $)". }
-      iApply (IBleft.semWP_mono with "HWP1"). iIntros (v1 δ1') "HQ1".
+      iApply (IBleft.semWP_mono with "HWP"). iIntros (v1 δ1') "HQ1".
       iMod "H2" as "(%γ22 & %μ22 & %δ2' & %s2' & %v2 & %Hstep & %Hs2' & Hreg & Hmem & HQ2)".
       iModIntro. iExists γ22, μ22, δ2', (of_ival v2), v2. iFrame "Hreg Hmem".
       iDestruct ("H" with "[$HQ1 $HQ2]") as "$". iPureIntro.
@@ -782,7 +781,19 @@ Module IrisBinaryWP
       auto.
     Qed.
 
-    Lemma semWP2_focus_seq {Γ1 Γ2 τ} {s1 : Stm Γ1 τ} {s2 : Stm Γ2 τ} :
+    Lemma semWP2_tfocus {Γ1 Γ2 τ} {s1 : Stm Γ1 τ} {s2 : Stm Γ2 τ} :
+      ⊢ ∀ Q1 Q2 Q δ1 δ2,
+          @IBleft.semTWP _ sailGS2_sailGS_left _ _ δ1 s1 Q1 -∗
+          @IBright.semTWP _ sailGS2_sailGS_right _ _ δ2 s2 Q2 -∗
+          (∀ v1 δ1 v2 δ2, Q1 v1 δ1 ∗ Q2 v2 δ2 -∗ Q v1 δ1 v2 δ2) -∗
+          semWP2 δ1 δ2 s1 s2 Q.
+    Proof.
+      iIntros (Q1 Q2 Q δ1 δ2) "HTWP1 HTWP2 H".
+      iPoseProof (IBleft.semTWP_semWP with "HTWP1") as "HWP1".
+      iApply (semWP2_focus with "HWP1 HTWP2 H").
+    Qed.
+
+    Lemma semWP2_tfocus_seq {Γ1 Γ2 τ} {s1 : Stm Γ1 τ} {s2 : Stm Γ2 τ} :
       ⊢ ∀ Q δ1 δ2,
           @IBleft.semTWP _ sailGS2_sailGS_left _ _ δ1 s1 (λ v1 δ1,
               @IBright.semTWP _ sailGS2_sailGS_right _ _ δ2 s2

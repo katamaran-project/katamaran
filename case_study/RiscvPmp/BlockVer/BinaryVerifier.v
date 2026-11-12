@@ -330,7 +330,7 @@ Module BinaryBlockVerifier
         iIntros "([Hpc1 Hpc2] & [Hinstr1 Hinstr2] & (%npc & Hnpc1 & Hnpc2))".
         iSpecialize ("H1" with "[$Hpc1 $Hinstr1 $Hnpc1]").
         iSpecialize ("H2" with "[$Hpc2 $Hinstr2 $Hnpc2]").
-        iApply (semWP2_focus with "H1 H2").
+        iApply (semWP2_tfocus with "H1 H2").
         iIntros ([v1|] δ1 [v2|] δ2) "(H1 & H2)"; auto.
         destruct v1, v2, (env.view δ1), (env.view δ2).
         repeat iSplitR; auto.

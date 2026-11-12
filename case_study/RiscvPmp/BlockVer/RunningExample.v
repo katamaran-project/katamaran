@@ -279,7 +279,7 @@ Module RunningExample.
           semWP2_n (S n) δ1 δ2 s1 s2 Q.
       Proof.
         simpl. iIntros (Q δ1 δ2) "H".
-        now iApply semWP2_focus_seq.
+        now iApply semWP2_tfocus_seq.
       Qed.
 
       Definition semTriple_n {Σ} `{sailGS2 Σ} {Γ τ} (n : nat) (δ : CStore Γ)
