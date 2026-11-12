@@ -1680,7 +1680,7 @@ Module inv := invariants.
      iPureIntro. now eexists s.
 Qed.
 
-Print Assumptions femtokernel_endToEnd.
+(* Print Assumptions femtokernel_endToEnd. *)
 
 (* Local Variables: *)
 (* proof-omit-proofs-option: t *)
