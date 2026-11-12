@@ -98,30 +98,57 @@ def loc(entries):
 def main():
     latex = "--latex" in sys.argv[1:]
     num = lambda n: f"{n:,}" if n else "--" if latex else "-"
-    if latex:
-        line = lambda l, u="", r="": print(f"{l} & {u} & {r} \\\\")
-        rule = lambda: print("\\midrule")
-        indent = "\\quad "
-        print("\\begin{tabular}{@{}lrr@{}}\n\\toprule")
-    else:
-        line = lambda l, u="", r="": print(f"{l:<52} {u:>8} {r:>11}")
-        rule = lambda: None
-        indent = "  "
 
-    line("", "Unary", "Relational")
+    groups = []
     tu = tr = 0
     for group, rows in TABLE:
         counts = [(label, loc(unary), loc(relational)) for label, unary, relational in rows]
         gu, gr = sum(u for _, u, _ in counts), sum(r for _, _, r in counts)
-        rule()
-        line(f"\\textit{{{group}}}" if latex else group, num(gu), num(gr))
-        for label, u, r in counts:
-            line(indent + label, num(u), num(r))
         tu, tr = tu + gu, tr + gr
-    rule()
-    line("Total", num(tu), num(tr))
+        groups.append((group, gu, gr, counts))
+
     if latex:
-        print("\\bottomrule\n\\end{tabular}")
+        # Two side-by-side tables, sized to their own content so they stay
+        # top-aligned with a minimal gap between them: Framework and the
+        # grand total on the left, the two case studies on the right.
+        def rows_of(group, gu, gr, counts):
+            out = [f"\\textit{{{group}}} & {num(gu)} & {num(gr)} \\\\"]
+            out += [f"\\quad {label} & {num(u)} & {num(r)} \\\\" for label, u, r in counts]
+            return out
+
+        header = [" & Unary & Relational \\\\"]
+        (fw_group, fw_gu, fw_gr, fw_counts), *case_studies = groups
+        boxA = header + ["\\midrule"] + rows_of(fw_group, fw_gu, fw_gr, fw_counts)
+        boxA += ["\\addlinespace[2.5em]", "\\midrule", f"Total & {num(tu)} & {num(tr)} \\\\"]
+        boxB = header + ["\\midrule"]
+        for i, (group, gu, gr, counts) in enumerate(case_studies):
+            if i:
+                boxB.append("\\midrule")
+            boxB += rows_of(group, gu, gr, counts)
+
+        def box(name, rows):
+            print(f"\\sbox{{\\{name}}}{{%\n\\begin{{tabular}}[t]{{@{{}}lrr@{{}}}}\n\\toprule")
+            for row in rows:
+                print(row)
+            print("\\bottomrule\n\\end{tabular}}")
+
+        print("\\begingroup")
+        print("\\setlength{\\tabcolsep}{4pt}")
+        print("\\newsavebox{\\effortboxA}")
+        print("\\newsavebox{\\effortboxB}")
+        box("effortboxA", boxA)
+        box("effortboxB", boxB)
+        print("\\begin{minipage}[t]{\\wd\\effortboxA}\\usebox{\\effortboxA}\\end{minipage}\\hfill")
+        print("\\begin{minipage}[t]{\\wd\\effortboxB}\\usebox{\\effortboxB}\\end{minipage}")
+        print("\\endgroup")
+    else:
+        line = lambda l, u="", r="": print(f"{l:<52} {u:>8} {r:>11}")
+        line("", "Unary", "Relational")
+        for group, gu, gr, counts in groups:
+            line(group, num(gu), num(gr))
+            for label, u, r in counts:
+                line("  " + label, num(u), num(r))
+        line("Total", num(tu), num(tr))
 
     counted = {e if isinstance(e, str) else e[0] for _, rows in TABLE for _, u, r in rows for e in u + r}
     skipped = [f for f in built_files() if f.startswith((f"{IRIS}/", f"{CS}/")) and f not in counted]
