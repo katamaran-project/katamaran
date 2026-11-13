@@ -1067,10 +1067,134 @@ Module Type GenericSolverOn
 
     #[export] Hint Resolve simplify_le_spec simplify_lt_spec : core.
 
+    Definition smart_or {Σ} (F1 F2 : Formula Σ) : Formula Σ :=
+      match F1 , F2 with
+      | formula_false , _ => F2
+      | _ , formula_false => F1
+      | formula_true , _ => formula_true
+      | _ , formula_true => formula_true
+      | _ , _ => formula_or F1 F2
+      end.
+
+    Lemma smart_or_spec {w : World} (F1 F2 : Formula w) :
+      instpred (smart_or F1 F2) ⊣⊢ instpred (formula_or F1 F2).
+    Proof.
+      destruct F1, F2; cbn;
+        now rewrite ?bi.True_or ?bi.or_True ?bi.or_False ?bi.False_or.
+    Qed.
+    #[export] Hint Rewrite @smart_or_spec : uniflogic.
+
+    (* Negation, pushed through ∧ and ∨; None for formulas without one. *)
+    Fixpoint formula_negate {Σ} (F : Formula Σ) : option (Formula Σ) :=
+      match F with
+      | formula_user _ _       => None
+      | formula_bool t         => Some (formula_bool (term_not t))
+      | formula_prop _ _       => None
+      | formula_relop op t1 t2 => Some (formula_relop_neg op t1 t2)
+      | formula_true           => Some formula_false
+      | formula_false          => Some formula_true
+      | formula_and F1 F2      => F1' <- formula_negate F1 ;;
+                                  F2' <- formula_negate F2 ;;
+                                  Some (smart_or F1' F2')
+      | formula_or F1 F2       => F1' <- formula_negate F1 ;;
+                                  F2' <- formula_negate F2 ;;
+                                  Some (formula_and F1' F2')
+      end.
+
+    (* Negation of a conjunction of formulas: the disjunction of their negations. *)
+    Fixpoint pathcondition_negate {Σ} (C : PathCondition Σ) : option (Formula Σ) :=
+      match C with
+      | [ctx] => Some formula_false
+      | C ▻ F => C' <- pathcondition_negate C ;;
+                 F' <- formula_negate F ;;
+                 Some (smart_or C' F')
+      end.
+
+    Lemma instprop_smart_or {Σ} (F1 F2 : Formula Σ) (ι : Valuation Σ) :
+      instprop (smart_or F1 F2) ι <-> instprop F1 ι \/ instprop F2 ι.
+    Proof. destruct F1, F2; cbn; intuition. Qed.
+
+    (* Negatable formulas are decidable, so De Morgan holds constructively. *)
+    Lemma formula_negate_spec {Σ} (F : Formula Σ) :
+      option.wlp
+        (fun F' => forall ι, (instprop F' ι <-> ~ instprop F ι) /\
+                             (instprop F ι \/ instprop F' ι))
+        (formula_negate F).
+    Proof.
+      induction F; cbn; rewrite ?option.wlp_some ?option.wlp_none; auto.
+      1-4: intros ι; cbn.
+      - destruct (inst t ι); cbn; intuition.
+      - rewrite instprop_formula_relop_neg bop.eval_relop_equiv.
+        destruct bop.eval_relop_val; intuition.
+      - intuition.
+      - intuition.
+      - destruct IHF1 as [F1' HF1|]; cbn; [|constructor].
+        destruct IHF2 as [F2' HF2|]; cbn; [|constructor].
+        constructor; intros ι; specialize (HF1 ι); specialize (HF2 ι).
+        rewrite instprop_smart_or; intuition.
+      - destruct IHF1 as [F1' HF1|]; cbn; [|constructor].
+        destruct IHF2 as [F2' HF2|]; cbn; [|constructor].
+        constructor; intros ι; specialize (HF1 ι); specialize (HF2 ι).
+        cbn; intuition.
+    Qed.
+
+    Lemma pathcondition_negate_spec {Σ} (C : PathCondition Σ) :
+      option.wlp
+        (fun F' => forall ι, (instprop F' ι <-> ~ instprop C ι) /\
+                             (instprop C ι \/ instprop F' ι))
+        (pathcondition_negate C).
+    Proof.
+      induction C as [|C IHC F]; cbn.
+      - constructor; cbn; intuition.
+      - destruct IHC as [C' HC|]; cbn; [|constructor].
+        destruct (formula_negate_spec F) as [F' HF|]; cbn; [|constructor].
+        constructor; intros ι; specialize (HC ι); specialize (HF ι).
+        rewrite instprop_smart_or; cbn; intuition.
+    Qed.
+
+    Lemma instpred_pathcondition_negate {w : World} (C : PathCondition w) :
+      option.wlp (fun F => instpred F ⊣⊢ ¬ instpred C) (pathcondition_negate C).
+    Proof.
+      destruct (pathcondition_negate_spec C) as [F HF|]; constructor.
+      constructor; intros ι _; specialize (HF ι); pred_unfold.
+      rewrite !instpred_prop; intuition.
+    Qed.
+
+    Lemma instpred_formula_neq {w : World} {σ} (t1 t2 : STerm σ w) :
+      instpred (formula_neq t1 t2) ⊣⊢ ¬ instpred (formula_eq t1 t2).
+    Proof. now constructor. Qed.
+
+    (* Decide t1 ≠ t2 by negating what simplify_eq makes of t1 = t2. *)
+    Definition simplify_neq {Σ σ} (t1 t2 : STerm σ Σ) : DList Σ :=
+      match run (simplify_eq t1 t2) with
+      | None => empty
+      | Some [ctx] => error
+      | Some C => match pathcondition_negate C with
+                  | Some F => singleton F
+                  | None => singleton (formula_neq t1 t2)
+                  end
+      end.
+
+    Lemma simplify_neq_spec {w : World} {σ} (t1 t2 : STerm σ w) :
+      instpred (simplify_neq t1 t2) ⊣⊢ instpred (formula_neq t1 t2).
+    Proof.
+      unfold simplify_neq. pose proof (simplify_eq_spec t1 t2) as Heq.
+      rewrite <- instpred_run in Heq. rewrite instpred_formula_neq.
+      change (instpred (formula_eq t1 t2)) with (eqₚ t1 t2). rewrite <- Heq.
+      destruct run as [[|C F]|].
+      2: destruct (instpred_pathcondition_negate (C ▻ F)) as [F' HF|].
+      2: now rewrite instpred_dlist_singleton HF.
+      2: now rewrite instpred_dlist_singleton instpred_formula_neq Heq.
+      all: cbn; now rewrite ?bi.True_impl.
+    Qed.
+    #[local] Opaque simplify_neq.
+    #[export] Hint Rewrite @simplify_neq_spec : uniflogic.
+
     Definition simplify_relop {Σ σ} (op : RelOp σ) :
       forall (t1 t2 : STerm σ Σ), DList Σ :=
       match op in RelOp σ return forall (t1 t2 : STerm σ Σ), DList Σ with
       | bop.eq => fun t1 t2 => simplify_eq (peval t1) (peval t2)
+      | bop.neq => fun t1 t2 => simplify_neq (peval t1) (peval t2)
       | bop.le => simplify_le
       | bop.lt => simplify_lt
       | bop.bvule => simplify_bvule
@@ -1408,23 +1532,6 @@ Module Type GenericSolverOn
             constructor; [congruence|easy].
         + now constructor.
     Qed.
-
-    Definition smart_or {Σ} (F1 F2 : Formula Σ) : Formula Σ :=
-      match F1 , F2 with
-      | formula_false , _ => F2
-      | _ , formula_false => F1
-      | formula_true , _ => formula_true
-      | _ , formula_true => formula_true
-      | _ , _ => formula_or F1 F2
-      end.
-
-    Lemma smart_or_spec {w : World} (F1 F2 : Formula w) :
-      instpred (smart_or F1 F2) ⊣⊢ instpred (formula_or F1 F2).
-    Proof.
-      destruct F1, F2; cbn;
-        now rewrite ?bi.True_or ?bi.or_True ?bi.or_False ?bi.False_or.
-    Qed.
-    #[export] Hint Rewrite @smart_or_spec : uniflogic.
 
     Fixpoint formula_simplifies {Σ} (hyp : Formula Σ) (fact : Formula Σ) : option (Formula Σ) :=
       if formula_eqb hyp fact then Some formula_true else
