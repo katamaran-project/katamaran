@@ -54,7 +54,7 @@ From Katamaran Require Import
      RiscvPmp.GVT.Spec
      RiscvPmp.GVT.IrisModel
      RiscvPmp.GVT.IrisInstance
-     RiscvPmp.Machine
+     RiscvPmp.GVT.Machine
      RiscvPmp.GVT.Logic
      RiscvPmp.iostate
      RiscvPmp.GVT.Sig.

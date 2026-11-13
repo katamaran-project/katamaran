@@ -33,9 +33,9 @@ From Katamaran Require Import
      Iris.Instance
      Iris.Base
      Syntax.Predicates
-     RiscvPmp.Base
-     RiscvPmp.PmpCheck
-     RiscvPmp.Machine
+     RiscvPmp.GVT.Base
+     RiscvPmp.GVT.PmpCheck
+     RiscvPmp.GVT.Machine
      RiscvPmp.GVT.Logic
      RiscvPmp.GVT.IrisModel
      RiscvPmp.GVT.trace
@@ -468,11 +468,39 @@ Module RiscvPmpIrisInstancePredicates.
 
     Definition interp_pmp_entries (entries : list PmpEntryCfg) : iProp Σ :=
       match entries with
-      | (cfg0, addr0) :: (cfg1, addr1) :: [] =>
+      | (cfg0, addr0) :: (cfg1, addr1) :: (cfg2, addr2) :: (cfg3, addr3) :: (cfg4, addr4) :: (cfg5, addr5) :: (cfg6, addr6) :: (cfg7, addr7) :: (cfg8, addr8) :: (cfg9, addr9) :: (cfg10, addr10) :: (cfg11, addr11) :: (cfg12, addr12) :: (cfg13, addr13) :: (cfg14, addr14) :: (cfg15, addr15) :: [] =>
           reg_pointsTo pmp0cfg cfg0 ∗
           reg_pointsTo pmpaddr0 addr0 ∗
           reg_pointsTo pmp1cfg cfg1 ∗
-          reg_pointsTo pmpaddr1 addr1
+          reg_pointsTo pmpaddr1 addr1 ∗
+          reg_pointsTo pmp2cfg cfg2 ∗
+          reg_pointsTo pmpaddr2 addr2 ∗
+          reg_pointsTo pmp3cfg cfg3 ∗
+          reg_pointsTo pmpaddr3 addr3 ∗
+          reg_pointsTo pmp4cfg cfg4 ∗
+          reg_pointsTo pmpaddr4 addr4 ∗
+          reg_pointsTo pmp5cfg cfg5 ∗
+          reg_pointsTo pmpaddr5 addr5 ∗
+          reg_pointsTo pmp6cfg cfg6 ∗
+          reg_pointsTo pmpaddr6 addr6 ∗
+          reg_pointsTo pmp7cfg cfg7 ∗
+          reg_pointsTo pmpaddr7 addr7 ∗
+          reg_pointsTo pmp8cfg cfg8 ∗
+          reg_pointsTo pmpaddr8 addr8 ∗
+          reg_pointsTo pmp9cfg cfg9 ∗
+          reg_pointsTo pmpaddr9 addr9 ∗
+          reg_pointsTo pmp10cfg cfg10 ∗
+          reg_pointsTo pmpaddr10 addr10 ∗
+          reg_pointsTo pmp11cfg cfg11 ∗
+          reg_pointsTo pmpaddr11 addr11 ∗
+          reg_pointsTo pmp12cfg cfg12 ∗
+          reg_pointsTo pmpaddr12 addr12 ∗
+          reg_pointsTo pmp13cfg cfg13 ∗
+          reg_pointsTo pmpaddr13 addr13 ∗
+          reg_pointsTo pmp14cfg cfg14 ∗
+          reg_pointsTo pmpaddr14 addr14 ∗
+          reg_pointsTo pmp15cfg cfg15 ∗
+          reg_pointsTo pmpaddr15 addr15
       | _ => False
       end.
   End WithSailGS.
@@ -565,12 +593,12 @@ Module RiscvPmpIrisInstance <:
     Qed.
 
     Lemma pmp_match_entry_reduced_width (bytes w : Xlenbits) :
-      forall paddr cfg hi lo,
+      forall paddr p cfg hi lo,
         (bv.unsigned paddr + bv.unsigned bytes < 2 ^ Z.of_nat xlenbits)%Z ->
         bv.zero <ᵘ w ->
         w <=ᵘ bytes ->
-        pmp_match_entry paddr bytes cfg hi lo = PMP_Success ->
-        pmp_match_entry paddr w cfg hi lo = PMP_Success.
+        pmp_match_entry paddr bytes p cfg hi lo = PMP_Success ->
+        pmp_match_entry paddr w p cfg hi lo = PMP_Success.
     Proof.
       unfold pmp_match_entry.
       intros.
@@ -580,11 +608,11 @@ Module RiscvPmpIrisInstance <:
     Qed.
 
     Lemma pmp_match_entry_reduced_width_continue (bytes w : Xlenbits) :
-      forall paddr cfg hi lo,
+      forall paddr p cfg hi lo,
         (bv.unsigned paddr + bv.unsigned bytes < 2 ^ Z.of_nat xlenbits)%Z ->
         w <=ᵘ bytes ->
-        pmp_match_entry paddr bytes cfg hi lo = PMP_Continue ->
-        pmp_match_entry paddr w cfg hi lo = PMP_Continue.
+        pmp_match_entry paddr bytes p cfg hi lo = PMP_Continue ->
+        pmp_match_entry paddr w p cfg hi lo = PMP_Continue.
     Proof.
       unfold pmp_match_entry.
       intros.
@@ -655,13 +683,13 @@ Module RiscvPmpIrisInstance <:
       - rewrite !pmp_match_addr_match. solve_bv.
     Qed.
 
-    Lemma pmp_match_entry_addr_S_width_pred_success (bytes : nat) : forall paddr cfg lo hi,
+    Lemma pmp_match_entry_addr_S_width_pred_success (bytes : nat) : forall paddr p cfg lo hi,
         (0 < @bv.unsigned xlenbits (bv.of_nat bytes))%Z ->
         (bv.unsigned paddr + Z.of_nat (S bytes) < 2 ^ Z.of_nat xlenbits)%Z ->
-        pmp_match_entry paddr (bv.of_nat (S bytes)) cfg lo hi = PMP_Success ->
-        pmp_match_entry (paddr + bv.one) (bv.of_nat bytes) cfg lo hi = PMP_Success.
+        pmp_match_entry paddr (bv.of_nat (S bytes)) p cfg lo hi = PMP_Success ->
+        pmp_match_entry (paddr + bv.one) (bv.of_nat bytes) p cfg lo hi = PMP_Success.
     Proof.
-      intros paddr cfg lo hi Hb Hrep.
+      intros paddr p cfg lo hi Hb Hrep.
       unfold pmp_match_entry.
       intros H.
       destruct (pmp_match_addr paddr _ _) eqn:E;
@@ -671,13 +699,13 @@ Module RiscvPmpIrisInstance <:
       discriminate H.
     Qed.
 
-    Lemma pmp_match_entry_addr_S_width_pred_continue (bytes : nat) : forall paddr cfg lo hi,
+    Lemma pmp_match_entry_addr_S_width_pred_continue (bytes : nat) : forall paddr p cfg lo hi,
         (0 < @bv.unsigned xlenbits (bv.of_nat bytes))%Z ->
         (bv.unsigned paddr + Z.of_nat (S bytes) < 2 ^ Z.of_nat xlenbits)%Z ->
-        pmp_match_entry paddr (bv.of_nat (S bytes)) cfg lo hi = PMP_Continue ->
-        pmp_match_entry (paddr + bv.one) (bv.of_nat bytes) cfg lo hi = PMP_Continue.
+        pmp_match_entry paddr (bv.of_nat (S bytes)) p cfg lo hi = PMP_Continue ->
+        pmp_match_entry (paddr + bv.one) (bv.of_nat bytes) p cfg lo hi = PMP_Continue.
     Proof.
-      intros paddr cfg lo hi Hb Hrep.
+      intros paddr p cfg lo hi Hb Hrep.
       unfold pmp_match_entry.
       intros H.
       destruct (pmp_match_addr paddr _ _) eqn:E;
@@ -701,7 +729,7 @@ Module RiscvPmpIrisInstance <:
       unfold pmp_check_aux.
       unfold pmp_check_aux in H.
       simpl in *.
-      destruct (pmp_match_entry paddr _ cfg0 _ _) eqn:Ecfg0; auto.
+      destruct (pmp_match_entry paddr _ _ cfg0 _ _) eqn:Ecfg0; auto.
       apply pmp_match_entry_addr_S_width_pred_success in Ecfg0; auto.
       now rewrite Ecfg0.
       apply pmp_match_entry_addr_S_width_pred_continue in Ecfg0; auto.
@@ -729,7 +757,8 @@ Module RiscvPmpIrisInstance <:
       intros Hzero. generalize dependent paddr.
       induction shift; intros paddr Hrep Hacc.
       - rewrite bv.add_zero_r. rewrite Nat.add_0_r in Hacc. auto.
-      - rewrite Nat.add_succ_r in Hacc,Hrep.
+      -
+        rewrite Nat.add_succ_r in Hacc,Hrep.
         rewrite Nat2Z.inj_succ in Hrep.
         apply pmp_access_addr_S_width_pred in Hacc; try solve_bv.
         apply IHshift in Hacc.
@@ -786,17 +815,31 @@ Module RiscvPmpIrisInstance <:
 
     Lemma pmp_entries_ptsto : ∀ (entries : list PmpEntryCfg),
         interp_pmp_entries entries ⊣⊢
-          ∃ (cfg0 : Pmpcfg_ent) (addr0 : Addr) (cfg1 : Pmpcfg_ent) (addr1 : Addr),
-            ⌜entries = [(cfg0, addr0); (cfg1, addr1)]⌝ ∗
+          ∃ (cfg0 : Pmpcfg_ent) (addr0 : Addr) (cfg1 : Pmpcfg_ent) (addr1 : Addr) (cfg2 : Pmpcfg_ent) (addr2 : Addr) (cfg3 : Pmpcfg_ent) (addr3 : Addr) (cfg4 : Pmpcfg_ent) (addr4 : Addr) (cfg5 : Pmpcfg_ent) (addr5 : Addr) (cfg6 : Pmpcfg_ent) (addr6 : Addr) (cfg7 : Pmpcfg_ent) (addr7 : Addr) (cfg8 : Pmpcfg_ent) (addr8 : Addr) (cfg9 : Pmpcfg_ent) (addr9 : Addr) (cfg10 : Pmpcfg_ent) (addr10 : Addr) (cfg11 : Pmpcfg_ent) (addr11 : Addr) (cfg12 : Pmpcfg_ent) (addr12 : Addr) (cfg13 : Pmpcfg_ent) (addr13 : Addr) (cfg14 : Pmpcfg_ent) (addr14 : Addr) (cfg15 : Pmpcfg_ent) (addr15 : Addr),
+            ⌜entries = [(cfg0, addr0); (cfg1, addr1); (cfg2, addr2); (cfg3, addr3); (cfg4, addr4); (cfg5, addr5); (cfg6, addr6); (cfg7, addr7); (cfg8, addr8); (cfg9, addr9); (cfg10, addr10); (cfg11, addr11); (cfg12, addr12); (cfg13, addr13); (cfg14, addr14); (cfg15, addr15)]⌝ ∗
             reg_pointsTo pmp0cfg cfg0 ∗ reg_pointsTo pmpaddr0 addr0 ∗
-            reg_pointsTo pmp1cfg cfg1 ∗ reg_pointsTo pmpaddr1 addr1.
+            reg_pointsTo pmp1cfg cfg1 ∗ reg_pointsTo pmpaddr1 addr1 ∗
+            reg_pointsTo pmp2cfg cfg2 ∗ reg_pointsTo pmpaddr2 addr2 ∗
+            reg_pointsTo pmp3cfg cfg3 ∗ reg_pointsTo pmpaddr3 addr3 ∗
+            reg_pointsTo pmp4cfg cfg4 ∗ reg_pointsTo pmpaddr4 addr4 ∗
+            reg_pointsTo pmp5cfg cfg5 ∗ reg_pointsTo pmpaddr5 addr5 ∗
+            reg_pointsTo pmp6cfg cfg6 ∗ reg_pointsTo pmpaddr6 addr6 ∗
+            reg_pointsTo pmp7cfg cfg7 ∗ reg_pointsTo pmpaddr7 addr7 ∗
+            reg_pointsTo pmp8cfg cfg8 ∗ reg_pointsTo pmpaddr8 addr8 ∗
+            reg_pointsTo pmp9cfg cfg9 ∗ reg_pointsTo pmpaddr9 addr9 ∗
+            reg_pointsTo pmp10cfg cfg10 ∗ reg_pointsTo pmpaddr10 addr10 ∗
+            reg_pointsTo pmp11cfg cfg11 ∗ reg_pointsTo pmpaddr11 addr11 ∗
+            reg_pointsTo pmp12cfg cfg12 ∗ reg_pointsTo pmpaddr12 addr12 ∗
+            reg_pointsTo pmp13cfg cfg13 ∗ reg_pointsTo pmpaddr13 addr13 ∗
+            reg_pointsTo pmp14cfg cfg14 ∗ reg_pointsTo pmpaddr14 addr14 ∗
+            reg_pointsTo pmp15cfg cfg15 ∗ reg_pointsTo pmpaddr15 addr15.
     Proof.
       intros entries; iSplit; iIntros  "H".
       - unfold interp_pmp_entries.
-        destruct entries as [|[cfg0 addr0] [|[cfg1 addr1] [|]]] eqn:?; try done.
+        destruct entries as [|[cfg0 addr0] [|[cfg1 addr1] [|[cfg2 addr2] [|[cfg3 addr3] [|[cfg4 addr4] [|[cfg5 addr5] [|[cfg6 addr6] [|[cfg7 addr7] [|[cfg8 addr8] [|[cfg9 addr9] [|[cfg10 addr10] [|[cfg11 addr11] [|[cfg12 addr12] [|[cfg13 addr13] [|[cfg14 addr14] [|[cfg15 addr15] [|]]]]]]]]]]]]]]]]] eqn:?; try done.
         repeat iExists _.
         now iFrame.
-     -  iDestruct "H" as "(% & % & % & % & -> & ? & ? & ? & ?)"; iFrame.
+     -  iDestruct "H" as "(% & % & % & % & % & % & % & % & % & % & % & % & % & % & % & % & % & % & % & % & % & % & % & % & % & % & % & % & % & % & % & % & -> & ? & ? & ? & ?)"; iFrame.
     Qed.
 
     Lemma interp_ptstomem_exists_intro (bytes : nat) :

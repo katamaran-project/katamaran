@@ -30,7 +30,7 @@ From Katamaran Require Import
      Bitvector
      Environment
      Iris.Base
-     RiscvPmp.Machine
+     RiscvPmp.GVT.Machine
      RiscvPmp.GVT.trace.
 From iris Require Import
      base_logic.lib.gen_heap

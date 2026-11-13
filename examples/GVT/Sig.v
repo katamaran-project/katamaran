@@ -35,8 +35,8 @@ From Katamaran Require Import
      Notations
      Bitvector
      Symbolic.Solver
-     RiscvPmp.Base
-     RiscvPmp.PmpCheck.
+     RiscvPmp.GVT.Base
+     RiscvPmp.GVT.PmpCheck.
 From Equations Require Import
      Equations.
 From iris.proofmode Require Import string_ident proofmode.
@@ -139,7 +139,7 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
 
     Definition ty_iostate                        := (ty.bvec iostate_bits).
     (* Helper definitions for io-protocol state machine transition function. *)
-    Definition mmio_interrupt_addr : Addr := bv.of_N (mmioStartAddr + 4).
+    Definition mmio_interrupt_addr : Addr := bv.of_N (mmioProtoStartAddr + 4).
 
     Definition mmio_interrupt_w2s {width : nat} (w : bv (width * byte)) (s : IOState) : IOState :=
       match (bv.land w (bv.of_N 24)) with
@@ -184,12 +184,61 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
           event_addr e = mmio_interrupt_addr ->
           s = s' ->
           impl_mmio_event_prot e s s'
+      (* devices the protocol is not about (everything below the protocol
+         device, see Target.v): any access is allowed and must not change the
+         state *)
+      | IOdev : forall e s s',
+          (bv.unsigned (event_addr e) + Z.of_nat (event_nbbytes e) <= Z.of_N mmioProtoStartAddr)%Z ->
+          s = s' ->
+          impl_mmio_event_prot e s s'
     .
 
     Definition Mmio_event_prot {width : nat} (a : Addr) (w: bv (width * byte)) (t : EventTy) (s s' :  bv iostate_bits) : Prop :=
       impl_mmio_event_prot {| event_type := t;  event_addr := a;  event_nbbytes := _ ;  event_contents := w |} (bv2s s) (bv2s s').
 
     Definition Mmio_read_valid {width : nat} (a : Addr) (s : bv iostate_bits) : Prop := True.
+
+    Lemma mmio_event_prot_below_dev : forall e s s',
+        (bv.unsigned (event_addr e) + Z.of_nat (event_nbbytes e) <= Z.of_N mmioProtoStartAddr)%Z ->
+        impl_mmio_event_prot e s s' -> s = s'.
+    Proof.
+      intros e s s' Hbelow Hev.
+      inversion Hev; subst; auto.
+      exfalso.
+      rewrite H0 in Hbelow.
+      assert (H__unsigned : bv.unsigned mmio_interrupt_addr = Z.of_N (mmioProtoStartAddr + 4)) by auto.
+      rewrite H__unsigned in Hbelow.
+      unfold mmioProtoStartAddr in Hbelow.
+      lia.
+    Qed.
+
+   (* bv2s is injective only at iostate_bits = 1: the bv_iostate instance
+       maps every nonzero bitvector to SStop, so at any wider width this
+       direction of the roundtrip is false. *)
+    Lemma s2bv_bv2s (b : bv iostate_bits) : s2bv (bv2s b) = b.
+    Proof.
+      destruct b as [bin wf].
+      destruct bin as [|q]; cbn. apply bv.of_N_wf.
+      destruct q; cbn in wf; try contradiction. apply bv.of_N_wf.
+    Qed.
+
+    Lemma bv2s_inj (b b' : bv iostate_bits) : bv2s b = bv2s b' -> b = b'.
+    Proof. intros H. now rewrite <- (s2bv_bv2s b), H, s2bv_bv2s. Qed.
+
+    (* The form the block proofs use: Mmio_event_prot hides the Event record
+       and works on bitvector states, so this keeps bv2s out of them. The
+       nbbytes of the record in Mmio_event_prot is forced to width by
+       event_contents : bv (event_nbbytes * 8). *)
+    Lemma Mmio_event_prot_below_dev {width : nat} (a : Addr) (w : bv (width * byte))
+      (t : EventTy) (s s' : bv iostate_bits) :
+        (bv.unsigned a + Z.of_nat width <= Z.of_N mmioProtoStartAddr)%Z ->
+        Mmio_event_prot a w t s s' -> s = s'.
+    Proof.
+      unfold Mmio_event_prot. intros Hbelow Hev.
+      apply bv2s_inj.
+      apply mmio_event_prot_below_dev with (e := {| event_type := t; event_addr := a; event_nbbytes := width; event_contents := w |}).
+      by apply Hbelow. done.
+    Qed.
 
     Definition 𝑷 := PurePredicate.
 
@@ -300,11 +349,25 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
 
     Definition decide_in_entries (idx : Val ty_pmpcfgidx) (e : Val ty_pmpentry) (es : Val (ty.list ty_pmpentry)) : bool :=
       match es with
-      | cfg0 :: cfg1 :: [] =>
+      | cfg0 :: cfg1 :: cfg2 :: cfg3 :: cfg4 :: cfg5 :: cfg6 :: cfg7 :: cfg8 :: cfg9 :: cfg10 :: cfg11 :: cfg12 :: cfg13 :: cfg14 :: cfg15 :: [] =>
           let (c, a) := e in
           let (c', a') := match idx with
                           | PMP0CFG => cfg0
                           | PMP1CFG => cfg1
+                          | PMP2CFG => cfg2
+                          | PMP3CFG => cfg3
+                          | PMP4CFG => cfg4
+                          | PMP5CFG => cfg5
+                          | PMP6CFG => cfg6
+                          | PMP7CFG => cfg7
+                          | PMP8CFG => cfg8
+                          | PMP9CFG => cfg9
+                          | PMP10CFG => cfg10
+                          | PMP11CFG => cfg11
+                          | PMP12CFG => cfg12
+                          | PMP13CFG => cfg13
+                          | PMP14CFG => cfg14
+                          | PMP15CFG => cfg15
                           end in
           (pmpcfg_ent_eqb c c' && (bv.eqb a a'))%bool
       | _ => false
@@ -315,10 +378,24 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
 
     Definition decide_prev_addr (cfg : Val ty_pmpcfgidx) (entries : Val (ty.list ty_pmpentry)) (prev : Val ty_xlenbits) : bool :=
       match entries with
-      | (c0 , a0) :: (c1 , a1) :: [] =>
+      | (c0 , a0) :: (c1 , a1) :: (c2 , a2) :: (c3 , a3) :: (c4 , a4) :: (c5 , a5) :: (c6 , a6) :: (c7 , a7) :: (c8 , a8) :: (c9 , a9) :: (c10 , a10) :: (c11 , a11) :: (c12 , a12) :: (c13 , a13) :: (c14 , a14) :: (c15 , a15) :: [] =>
           match cfg with
           | PMP0CFG => bv.eqb prev [bv 0]
           | PMP1CFG => bv.eqb prev a0
+          | PMP2CFG => bv.eqb prev a1
+          | PMP3CFG => bv.eqb prev a2
+          | PMP4CFG => bv.eqb prev a3
+          | PMP5CFG => bv.eqb prev a4
+          | PMP6CFG => bv.eqb prev a5
+          | PMP7CFG => bv.eqb prev a6
+          | PMP8CFG => bv.eqb prev a7
+          | PMP9CFG => bv.eqb prev a8
+          | PMP10CFG => bv.eqb prev a9
+          | PMP11CFG => bv.eqb prev a10
+          | PMP12CFG => bv.eqb prev a11
+          | PMP13CFG => bv.eqb prev a12
+          | PMP14CFG => bv.eqb prev a13
+          | PMP15CFG => bv.eqb prev a14
           end
       | _ => false
       end%list.
@@ -337,9 +414,9 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
 
     Definition decide_not_within_cfg (paddr : Val ty_xlenbits) (entries : Val (ty.list ty_pmpentry)) : bool :=
       match entries with
-      | (c0 , a0) :: (c1 , a1) :: [] =>
-          (((PmpAddrMatchType_eqb (A c0) OFF) && (PmpAddrMatchType_eqb (A c1) OFF))
-          || (([bv 0] <=ᵘ? paddr) && (a0 <=ᵘ? paddr) && (a1 <=ᵘ? paddr)))%bool
+      | (c0 , a0) :: (c1 , a1) :: (c2 , a2) :: [] =>
+          (((PmpAddrMatchType_eqb (A c0) OFF) && (PmpAddrMatchType_eqb (A c1) OFF) && (PmpAddrMatchType_eqb (A c2) OFF))
+          || (([bv 0] <=ᵘ? paddr) && (a0 <=ᵘ? paddr) && (a1 <=ᵘ? paddr) && (a2 <=ᵘ? paddr)))%bool
       | _ => false
       end%list.
 
@@ -622,7 +699,7 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
         rewrite Epmp in IHentries;
         cbn in H;
         last done.
-      destruct (pmp_match_entry a width cfg0 prev_pmpaddr pmpaddr) eqn:Hm;
+      destruct (pmp_match_entry a width p cfg0 prev_pmpaddr pmpaddr) eqn:Hm;
         try discriminate.
       + destruct (A cfg0) eqn:HA.
         * left; split.
@@ -632,7 +709,7 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
           now simpl in Hm.
         * rewrite <- HA.
           apply (pmp_addr_range_Some_TOR cfg0 pmpaddr prev_pmpaddr) in HA.
-          apply (pmp_match_entry_PMP_Success _ _ _ _ _ _ _ HA) in Hm.
+          apply (pmp_match_entry_PMP_Success _ _ _ _ _ _ _ _ HA) in Hm.
           apply Pmp_check_perms_Access_pmp_perm in H.
           rewrite cfg_record.
           right; split; repeat split; intuition.
@@ -649,7 +726,7 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
           remember Hrng as HA.
           clear HeqHA.
           apply (pmp_addr_range_Some_TOR cfg0 pmpaddr prev_pmpaddr) in Hrng.
-          apply (pmp_match_entry_PMP_Continue _ _ _ _ _ _ Hrng) in Hm as [?|Hm]; auto.
+          apply (pmp_match_entry_PMP_Continue _ _ _ _ _ _ _ Hrng) in Hm as [?|Hm]; auto.
           destruct Hm as [? (lo' & hi' & [Heq Hm])].
           inversion Heq; subst; auto.
   Qed.
@@ -684,7 +761,7 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
           apply addr_match_type_neq_off_cases in Hrng.
           apply (pmp_addr_range_Some_TOR cfg0 addr0 Vlo) in Hrng.
           subst Vlo.
-          rewrite (pmp_match_entry_cfg_ON_PMP_Continue _ _ _ _ _ _ _ Hrng (conj HA H)).
+          rewrite (pmp_match_entry_cfg_ON_PMP_Continue _ _ _ _ _ _ _ _ Hrng (conj HA H)).
           now apply IHentries.
           rewrite cfg_record in H.
           rewrite Pmp_check_perms_Access_pmp_perm in H.
@@ -695,7 +772,7 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
           apply addr_match_type_neq_off_cases in Hrng.
           apply (pmp_addr_range_Some_TOR cfg0 addr0 Vlo) in Hrng.
           subst Vlo.
-          now rewrite (proj2 (pmp_match_entry_PMP_Success _ _ _ _ _ _ _ Hrng) (conj HA H)).
+          now rewrite (proj2 (pmp_match_entry_PMP_Success _ _ _ _ _ _ _ _ Hrng) (conj HA H)).
         * destruct (A cfg0) eqn:HA.
           unfold pmp_match_entry in H.
           rewrite (proj2 (pmp_addr_range_None _ _ _) HA) in H.
@@ -713,11 +790,11 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
           destruct (pmp_match_entry _ _ _ _ _) eqn:Hpmp;
             try discriminate.
           right; split; auto.
-          apply (pmp_match_entry_PMP_Success _ _ _ _ _ _ _ Hrng) in Hpmp.
+          apply (pmp_match_entry_PMP_Success _ _ _ _ _ _ _ _ Hrng) in Hpmp.
           auto; intuition.
-          apply (pmp_match_entry_PMP_Success _ _ _ _ _ _ _ Hrng) in Hpmp.
+          apply (pmp_match_entry_PMP_Success _ _ _ _ _ _ _ _ Hrng) in Hpmp.
           intuition.
-          apply (pmp_match_entry_PMP_Continue _ _ _ _ _ _ Hrng) in Hpmp as [Hcon|[? (lo' & hi' & [Heq Hpmp])]];
+          apply (pmp_match_entry_PMP_Continue _ _ _ _ _ _ _ Hrng) in Hpmp as [Hcon|[? (lo' & hi' & [Heq Hpmp])]];
             first (rewrite HA in Hcon; discriminate).
           left; split; last by apply IHentries.
           inversion Heq; subst; right; auto.
@@ -766,7 +843,7 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
         rewrite <- H0 in Hc.
         destruct (pmp_match_entry _ _ _ _ _) eqn:Hpmp;
           try discriminate.
-        apply (pmp_match_entry_PMP_Success _ _ _ _ _ _ _ Hrng) in Hpmp.
+        apply (pmp_match_entry_PMP_Success _ _ _ _ _ _ _ _ Hrng) in Hpmp.
         rewrite Pmp_check_perms_Access_pmp_perm; unfold Access_pmp_perm.
         rewrite H0 in Hc.
         right; split; auto.
@@ -782,7 +859,7 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
         rewrite Hs in IHv.
         destruct IHv as (? & IH).
         left; split; last now apply IH in Hc.
-        apply (pmp_match_entry_PMP_Continue _ _ _ _ _ _ Hrng) in Hpmp.
+        apply (pmp_match_entry_PMP_Continue _ _ _ _ _ _ _ Hrng) in Hpmp.
         destruct Hpmp as [HA|(HA & (lo'' & hi'' & (Heq & [|[|]])))];
           first (rewrite H0 in HA; simpl in HA; auto);
           apply addr_match_type_neq_off_cases in HA;
@@ -831,7 +908,7 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
         apply addr_match_type_neq_off_cases in Hrng.
         apply (pmp_addr_range_Some_TOR cfg0 addr0 Vlo) in Hrng.
         subst.
-        rewrite (pmp_match_entry_cfg_ON_PMP_Continue _ _ _ _ _ _ _ Hrng (conj HA H)).
+        rewrite (pmp_match_entry_cfg_ON_PMP_Continue _ _ _ _ _ _ _ _ Hrng (conj HA H)).
         cbn in IHentries; unfold Gen_Pmp_access, pmp_check_aux in IHentries.
         specialize (IHentries (term_val ty_xlenbits addr0) p acc ι).
         now apply IHentries.
@@ -844,7 +921,7 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
         apply addr_match_type_neq_off_cases in Hrng.
         apply (pmp_addr_range_Some_TOR cfg0 addr0 Vlo) in Hrng.
         subst.
-        now rewrite (proj2 (pmp_match_entry_PMP_Success _ _ _ _ _ _ _ Hrng) (conj HA H)).
+        now rewrite (proj2 (pmp_match_entry_PMP_Success _ _ _ _ _ _ _ _ Hrng) (conj HA H)).
       + destruct (A cfg0) eqn:HA.
         * unfold pmp_match_entry in H.
           rewrite (pmp_addr_range_None_2 _ _ _ HA) in H.
@@ -862,12 +939,12 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
           rewrite Pmp_check_perms_Access_pmp_perm.
           destruct (pmp_match_entry _ _ _ _ _) eqn:Hpmp;
             try discriminate.
-          apply (pmp_match_entry_PMP_Success _ _ _ _ _ _ _ HA) in Hpmp.
+          apply (pmp_match_entry_PMP_Success _ _ _ _ _ _ _ _ HA) in Hpmp.
           right; split; auto.
           intuition.
           destruct Hpmp as (? & Hpmp).
           auto.
-          apply (pmp_match_entry_PMP_Continue _ _ _ _ _ _ HA) in Hpmp as [Ha|Ha].
+          apply (pmp_match_entry_PMP_Continue _ _ _ _ _ _ _ HA) in Hpmp as [Ha|Ha].
           left; split.
           left; auto.
           now apply IHentries.
@@ -1124,7 +1201,21 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
     Definition term_pmp_entries {Σ} : Term Σ (ty.list (ty.prod ty_pmpcfgidx ty_pmpaddridx)) :=
       term_list
         (cons (term_val ty_pmpcfgidx PMP0CFG ,ₜ term_val ty_pmpaddridx PMPADDR0)
-              (cons (term_val ty_pmpcfgidx PMP1CFG ,ₜ term_val ty_pmpaddridx PMPADDR1) nil)).
+        (cons (term_val ty_pmpcfgidx PMP1CFG ,ₜ term_val ty_pmpaddridx PMPADDR1)
+        (cons (term_val ty_pmpcfgidx PMP2CFG ,ₜ term_val ty_pmpaddridx PMPADDR2)
+        (cons (term_val ty_pmpcfgidx PMP3CFG ,ₜ term_val ty_pmpaddridx PMPADDR3)
+        (cons (term_val ty_pmpcfgidx PMP4CFG ,ₜ term_val ty_pmpaddridx PMPADDR4)
+        (cons (term_val ty_pmpcfgidx PMP5CFG ,ₜ term_val ty_pmpaddridx PMPADDR5)
+        (cons (term_val ty_pmpcfgidx PMP6CFG ,ₜ term_val ty_pmpaddridx PMPADDR6)
+        (cons (term_val ty_pmpcfgidx PMP7CFG ,ₜ term_val ty_pmpaddridx PMPADDR7)
+        (cons (term_val ty_pmpcfgidx PMP8CFG ,ₜ term_val ty_pmpaddridx PMPADDR8)
+        (cons (term_val ty_pmpcfgidx PMP9CFG ,ₜ term_val ty_pmpaddridx PMPADDR9)
+        (cons (term_val ty_pmpcfgidx PMP10CFG ,ₜ term_val ty_pmpaddridx PMPADDR10)
+        (cons (term_val ty_pmpcfgidx PMP11CFG ,ₜ term_val ty_pmpaddridx PMPADDR11)
+        (cons (term_val ty_pmpcfgidx PMP12CFG ,ₜ term_val ty_pmpaddridx PMPADDR12)
+        (cons (term_val ty_pmpcfgidx PMP13CFG ,ₜ term_val ty_pmpaddridx PMPADDR13)
+        (cons (term_val ty_pmpcfgidx PMP14CFG ,ₜ term_val ty_pmpaddridx PMPADDR14)
+        (cons (term_val ty_pmpcfgidx PMP15CFG ,ₜ term_val ty_pmpaddridx PMPADDR15) nil)))))))))))))))).
 
   End ContractDefKit.
 

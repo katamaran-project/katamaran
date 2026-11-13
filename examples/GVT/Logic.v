@@ -27,7 +27,7 @@
 (******************************************************************************)
 
 From Katamaran Require Import
-     RiscvPmp.Machine
+     RiscvPmp.GVT.Machine
      RiscvPmp.GVT.Sig
      Sep.Hoare
      MicroSail.ShallowExecutor

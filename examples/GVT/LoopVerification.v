@@ -40,7 +40,7 @@ From Katamaran Require Import
      MicroSail.ShallowSoundness
      MicroSail.RefineExecutor
      MicroSail.Soundness
-     RiscvPmp.Machine
+     RiscvPmp.GVT.Machine
      RiscvPmp.GVT.Logic
      RiscvPmp.GVT.Sig
      RiscvPmp.GVT.IrisModel

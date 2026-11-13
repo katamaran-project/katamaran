@@ -34,12 +34,12 @@ From Katamaran Require Import
      Base
      Bitvector
      SmallStep.Step
-     RiscvPmp.PmpCheck
+     RiscvPmp.GVT.PmpCheck
      RiscvPmp.GVT.Spec
      RiscvPmp.GVT.TotalVerifier
      RiscvPmp.GVT.IrisModel
      RiscvPmp.GVT.IrisInstance
-     RiscvPmp.Machine
+     RiscvPmp.GVT.Machine
      RiscvPmp.GVT.Logic
      RiscvPmp.GVT.trace
      RiscvPmp.iostate
@@ -407,14 +407,33 @@ Module inv := invariants.
     (* Shorthand for the pmp entries in both Katamaran and Iris *)
     Local Abbreviation asn_femto_pmpentries a :=
       ([(term_val ty_pmpcfg_ent femto_pmpcfg_ent0 ,ₜ (a +ᵇ term_val ty_xlenbits (bv.of_N adv_addr)));
-        (term_val ty_pmpcfg_ent femto_pmpcfg_ent1 ,ₜ (term_val ty_xlenbits (bv.of_N adv_addr_end)))])%list.
+        (term_val ty_pmpcfg_ent femto_pmpcfg_ent1 ,ₜ (term_val ty_xlenbits (bv.of_N adv_addr_end)));
+        (term_val ty_pmpcfg_ent default_pmpcfg_ent ,ₜ (term_val ty_xlenbits bv.zero));
+        (term_val ty_pmpcfg_ent default_pmpcfg_ent ,ₜ (term_val ty_xlenbits bv.zero));
+        (term_val ty_pmpcfg_ent default_pmpcfg_ent ,ₜ (term_val ty_xlenbits bv.zero));
+        (term_val ty_pmpcfg_ent default_pmpcfg_ent ,ₜ (term_val ty_xlenbits bv.zero));
+        (term_val ty_pmpcfg_ent default_pmpcfg_ent ,ₜ (term_val ty_xlenbits bv.zero));
+        (term_val ty_pmpcfg_ent default_pmpcfg_ent ,ₜ (term_val ty_xlenbits bv.zero));
+        (term_val ty_pmpcfg_ent default_pmpcfg_ent ,ₜ (term_val ty_xlenbits bv.zero));
+        (term_val ty_pmpcfg_ent default_pmpcfg_ent ,ₜ (term_val ty_xlenbits bv.zero));
+        (term_val ty_pmpcfg_ent default_pmpcfg_ent ,ₜ (term_val ty_xlenbits bv.zero));
+        (term_val ty_pmpcfg_ent default_pmpcfg_ent ,ₜ (term_val ty_xlenbits bv.zero));
+        (term_val ty_pmpcfg_ent default_pmpcfg_ent ,ₜ (term_val ty_xlenbits bv.zero));
+        (term_val ty_pmpcfg_ent default_pmpcfg_ent ,ₜ (term_val ty_xlenbits bv.zero));
+        (term_val ty_pmpcfg_ent default_pmpcfg_ent ,ₜ (term_val ty_xlenbits bv.zero));
+        (term_val ty_pmpcfg_ent default_pmpcfg_ent ,ₜ (term_val ty_xlenbits bv.zero))])%list.
 
     Definition pmp_cfg_to_term {Σ} : list PmpEntryCfg -> list (Term Σ (ty.prod ty_pmpcfg_ent ty_xlenbits)) :=
       let term_cfg cfg := term_val ty_pmpcfg_ent cfg in
       let term_addr a  := term_val ty_xlenbits a in
       map (fun '(cfg , addr) => term_binop bop.pair (term_cfg cfg) (term_addr addr)).
 
-    Definition femto_pmpentries : list PmpEntryCfg := [(femto_pmpcfg_ent0, bv.of_N adv_addr); (femto_pmpcfg_ent1, bv.of_N adv_addr_end)]%list.
+    Definition femto_pmpentries : list PmpEntryCfg :=
+      [(femto_pmpcfg_ent0, bv.of_N adv_addr); (femto_pmpcfg_ent1, bv.of_N adv_addr_end);
+       (default_pmpcfg_ent, bv.zero); (default_pmpcfg_ent, bv.zero); (default_pmpcfg_ent, bv.zero); (default_pmpcfg_ent, bv.zero);
+       (default_pmpcfg_ent, bv.zero); (default_pmpcfg_ent, bv.zero); (default_pmpcfg_ent, bv.zero); (default_pmpcfg_ent, bv.zero);
+       (default_pmpcfg_ent, bv.zero); (default_pmpcfg_ent, bv.zero); (default_pmpcfg_ent, bv.zero); (default_pmpcfg_ent, bv.zero);
+       (default_pmpcfg_ent, bv.zero); (default_pmpcfg_ent, bv.zero)]%list.
 
     Definition term_femto_pmpentries {Σ} : Term Σ (ty.list (ty.prod ty_pmpcfg_ent ty_xlenbits)) :=
       term_list (pmp_cfg_to_term femto_pmpentries).
@@ -520,6 +539,20 @@ Module inv := invariants.
       cur_privilege ↦ term_val ty_privilege Machine ∗
       asn_regs_ptsto ∅ ∗
       asn_pmp_entries (term_list [(term_val ty_pmpcfg_ent default_pmpcfg_ent ,ₜ term_val ty_xlenbits bv.zero);
+                                  (term_val ty_pmpcfg_ent default_pmpcfg_ent ,ₜ term_val ty_xlenbits bv.zero);
+                                  (term_val ty_pmpcfg_ent default_pmpcfg_ent ,ₜ term_val ty_xlenbits bv.zero);
+                                  (term_val ty_pmpcfg_ent default_pmpcfg_ent ,ₜ term_val ty_xlenbits bv.zero);
+                                  (term_val ty_pmpcfg_ent default_pmpcfg_ent ,ₜ term_val ty_xlenbits bv.zero);
+                                  (term_val ty_pmpcfg_ent default_pmpcfg_ent ,ₜ term_val ty_xlenbits bv.zero);
+                                  (term_val ty_pmpcfg_ent default_pmpcfg_ent ,ₜ term_val ty_xlenbits bv.zero);
+                                  (term_val ty_pmpcfg_ent default_pmpcfg_ent ,ₜ term_val ty_xlenbits bv.zero);
+                                  (term_val ty_pmpcfg_ent default_pmpcfg_ent ,ₜ term_val ty_xlenbits bv.zero);
+                                  (term_val ty_pmpcfg_ent default_pmpcfg_ent ,ₜ term_val ty_xlenbits bv.zero);
+                                  (term_val ty_pmpcfg_ent default_pmpcfg_ent ,ₜ term_val ty_xlenbits bv.zero);
+                                  (term_val ty_pmpcfg_ent default_pmpcfg_ent ,ₜ term_val ty_xlenbits bv.zero);
+                                  (term_val ty_pmpcfg_ent default_pmpcfg_ent ,ₜ term_val ty_xlenbits bv.zero);
+                                  (term_val ty_pmpcfg_ent default_pmpcfg_ent ,ₜ term_val ty_xlenbits bv.zero);
+                                  (term_val ty_pmpcfg_ent default_pmpcfg_ent ,ₜ term_val ty_xlenbits bv.zero);
                                   (term_val ty_pmpcfg_ent default_pmpcfg_ent ,ₜ term_val ty_xlenbits bv.zero)])
     .
 
@@ -1634,6 +1667,34 @@ Module inv := invariants.
     read_register γ pmpaddr0 = bv.zero ->
     read_register γ pmp1cfg = default_pmpcfg_ent ->
     read_register γ pmpaddr1 = bv.zero ->
+    read_register γ pmp2cfg = default_pmpcfg_ent ->
+    read_register γ pmpaddr2 = bv.zero ->
+    read_register γ pmp3cfg = default_pmpcfg_ent ->
+    read_register γ pmpaddr3 = bv.zero ->
+    read_register γ pmp4cfg = default_pmpcfg_ent ->
+    read_register γ pmpaddr4 = bv.zero ->
+    read_register γ pmp5cfg = default_pmpcfg_ent ->
+    read_register γ pmpaddr5 = bv.zero ->
+    read_register γ pmp6cfg = default_pmpcfg_ent ->
+    read_register γ pmpaddr6 = bv.zero ->
+    read_register γ pmp7cfg = default_pmpcfg_ent ->
+    read_register γ pmpaddr7 = bv.zero ->
+    read_register γ pmp8cfg = default_pmpcfg_ent ->
+    read_register γ pmpaddr8 = bv.zero ->
+    read_register γ pmp9cfg = default_pmpcfg_ent ->
+    read_register γ pmpaddr9 = bv.zero ->
+    read_register γ pmp10cfg = default_pmpcfg_ent ->
+    read_register γ pmpaddr10 = bv.zero ->
+    read_register γ pmp11cfg = default_pmpcfg_ent ->
+    read_register γ pmpaddr11 = bv.zero ->
+    read_register γ pmp12cfg = default_pmpcfg_ent ->
+    read_register γ pmpaddr12 = bv.zero ->
+    read_register γ pmp13cfg = default_pmpcfg_ent ->
+    read_register γ pmpaddr13 = bv.zero ->
+    read_register γ pmp14cfg = default_pmpcfg_ent ->
+    read_register γ pmpaddr14 = bv.zero ->
+    read_register γ pmp15cfg = default_pmpcfg_ent ->
+    read_register γ pmpaddr15 = bv.zero ->
     read_register γ pc = (bv.of_N init_addr) ->
     ⟨ γ, μ, δ, fun_loop ⟩ --->* ⟨ γ', μ', δ', s' ⟩ ->
     mem_has_word μ (bv.of_N data_addr) (match σ with
@@ -1643,12 +1704,12 @@ Module inv := invariants.
                  ->
     (∃ σ', mmio_trace_state_pred (memory_trace μ') σ'). (* The initial demands hold over the final state *)
   Proof.
-    intros μinit μhandler0 μhandler1 μhandler2 μft γcurpriv γmstatus γmideleg γmedeleg γpmp0cfg γpmpaddr0 γpmp1cfg γpmpaddr1 γpc steps Hmem.
+    intros μinit μhandler0 μhandler1 μhandler2 μft γcurpriv γmstatus γmideleg γmedeleg γpmp0cfg γpmpaddr0 γpmp1cfg γpmpaddr1 γpmp2cfg γpmpaddr2 γpmp3cfg γpmpaddr3 γpmp4cfg γpmpaddr4 γpmp5cfg γpmpaddr5 γpmp6cfg γpmpaddr6 γpmp7cfg γpmpaddr7 γpmp8cfg γpmpaddr8 γpmp9cfg γpmpaddr9 γpmp10cfg γpmpaddr10 γpmp11cfg γpmpaddr11 γpmp12cfg γpmpaddr12 γpmp13cfg γpmpaddr13 γpmp14cfg γpmpaddr14 γpmp15cfg γpmpaddr15 γpc steps Hmem.
     refine (adequacy_gen (Q := fun _ _ _ _ => True%I) _ steps _). (* inv trace satisfies protocol state *)
     iIntros (Σ' sG mpG).
     cbn.
     iIntros "(Hmem & Hpc & Hnpc & Hmstatus & Hmie & Hmip & Hmideleg & Hmedeleg & Hmtvec & Hmscratch & Hmepc & Hmcause & Hstvec & Hsscratch & Hsepc & Hscause & Hcurpriv & H')".
-    rewrite γcurpriv γpmp0cfg γpmpaddr0 γpmp1cfg γpmpaddr1 γpc γmstatus γmideleg γmedeleg.
+    rewrite γcurpriv γpmp0cfg γpmpaddr0 γpmp1cfg γpmpaddr1 γpmp2cfg γpmpaddr2 γpmp3cfg γpmpaddr3 γpmp4cfg γpmpaddr4 γpmp5cfg γpmpaddr5 γpmp6cfg γpmpaddr6 γpmp7cfg γpmpaddr7 γpmp8cfg γpmpaddr8 γpmp9cfg γpmpaddr9 γpmp10cfg γpmpaddr10 γpmp11cfg γpmpaddr11 γpmp12cfg γpmpaddr12 γpmp13cfg γpmpaddr13 γpmp14cfg γpmpaddr14 γpmp15cfg γpmpaddr15 γpc γmstatus γmideleg γmedeleg.
     iMod (femtokernel_splitMemory with "Hmem") as "(%rG & Hinit & Hhandler0 & Hhandler1 & Hhandler2 & #Hinv & Hdata & Hstate & Hadv)"; try eassumption.
     iModIntro.
     iSplitR "".
@@ -1664,13 +1725,13 @@ Module inv := invariants.
         iDestruct "H'" as "(Hx01 & Hx02 & Hx03 & Hx04 & Hx05 & Hx06 & Hx07 & Hx08 & Hx09 & H')".
         iDestruct "H'" as "(Hx10 & Hx11 & Hx12 & Hx13 & Hx14 & Hx15 & Hx16 & Hx17 & Hx18 & Hx19 & H')".
         iDestruct "H'" as "(Hx20 & Hx21 & Hx22 & Hx23 & Hx24 & Hx25 & Hx26 & Hx27 & Hx28 & Hx29 & H')".
-        iDestruct "H'" as "(Hx30 & Hx31 & Hpmp0cfg & Hpmpaddr0 & Hpmp1cfg & Hpmpaddr1 & _)".
+        iDestruct "H'" as "(Hx30 & Hx31 & Hpmp0cfg & Hpmp1cfg & Hpmp2cfg & Hpmp3cfg & Hpmp4cfg & Hpmp5cfg & Hpmp6cfg & Hpmp7cfg & Hpmp8cfg & Hpmp9cfg & Hpmp10cfg & Hpmp11cfg & Hpmp12cfg & Hpmp13cfg & Hpmp14cfg & Hpmp15cfg & Hpmpaddr0 & Hpmpaddr1 & Hpmpaddr2 & Hpmpaddr3 & Hpmpaddr4 & Hpmpaddr5 & Hpmpaddr6 & Hpmpaddr7 & Hpmpaddr8 & Hpmpaddr9 & Hpmpaddr10 & Hpmpaddr11 & Hpmpaddr12 & Hpmpaddr13 & Hpmpaddr14 & Hpmpaddr15 & _)".
         iFrame "Hx25 Hx17 Hx09 Hx21 Hx29 Hx13 Hx05".
         iFrame "Hx01 Hx23 Hx31 Hx15 Hx07 Hx19 Hx27".
         iFrame "Hx11 Hx03 Hx24 Hx16 Hx08 Hx20 Hx28".
         iFrame "Hx12 Hx04 Hx22 Hx30 Hx14 Hx06 Hx18".
         iFrame "Hx26 Hx10 Hx02".
-        Transparent interp_pmp_entries. unfold interp_pmp_entries. iFrame "Hpmp0cfg Hpmpaddr0 Hpmp1cfg Hpmpaddr1".
+        Transparent interp_pmp_entries. unfold interp_pmp_entries. iFrame "Hpmp0cfg Hpmpaddr0 Hpmp1cfg Hpmpaddr1 Hpmp2cfg Hpmpaddr2 Hpmp3cfg Hpmpaddr3 Hpmp4cfg Hpmpaddr4 Hpmp5cfg Hpmpaddr5 Hpmp6cfg Hpmpaddr6 Hpmp7cfg Hpmpaddr7 Hpmp8cfg Hpmpaddr8 Hpmp9cfg Hpmpaddr9 Hpmp10cfg Hpmpaddr10 Hpmp11cfg Hpmpaddr11 Hpmp12cfg Hpmpaddr12 Hpmp13cfg Hpmpaddr13 Hpmp14cfg Hpmpaddr14 Hpmp15cfg Hpmpaddr15".
         eauto.
       }
       unfold ptsto_instrs_handler.
