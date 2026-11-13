@@ -75,7 +75,16 @@ examples/GVT/Model.v
 examples/GVT/LoopVerification.v
 examples/GVT/Spec.v
 examples/GVT/TotalVerifier.v
-examples/GVT/StopButtonUMode.v
+# StopButtonUMode.v was written against the previous memory map (RAM at 0,
+# MMIO after it; see the end of examples/GVT/Target.v) and has to be ported
+# to the current target before it builds again:
+# examples/GVT/StopButtonUMode.v
+examples/GVT/StopButtonSMode/Layout.v
+examples/GVT/StopButtonSMode/Kernel.v
+examples/GVT/StopButtonSMode/InitChain.v
+examples/GVT/StopButtonSMode/Handler.v
+examples/GVT/StopButtonSMode/BlockVerification.v
+examples/GVT/StopButtonSMode/Integrity.v
 -R theories Katamaran
 test/Example.v
 test/LinkedList.v
