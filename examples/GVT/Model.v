@@ -37,8 +37,8 @@ From Katamaran Require Import
      Program
      Semantics
      Sep.Hoare
-     RiscvPmp.PmpCheck
-     RiscvPmp.Machine
+     RiscvPmp.GVT.PmpCheck
+     RiscvPmp.GVT.Machine
      RiscvPmp.GVT.Logic
      RiscvPmp.GVT.Contracts
      RiscvPmp.GVT.IrisModel
@@ -311,9 +311,9 @@ Module RiscvPmpModel2.
     Proof.
       intros ι; destruct_syminstance ι; cbn.
       rewrite pmp_entries_ptsto.
-      iIntros "(% & % & % & % & -> & e1 & e2 & e3 & e4)".
+      iIntros "(% & % & % & % & % & % & % & % & % & % & % & % & % & % & % & % & % & % & % & % & % & % & % & % & % & % & % & % & % & % & % & % & -> & e1 & e2 & e3 & e4 & e5 & e6 & e7 & e8 & e9 & e10 & e11 & e12 & e13 & e14 & e15 & e16 & e17 & e18 & e19 & e20 & e21 & e22 & e23 & e24 & e25 & e26 & e27 & e28 & e29 & e30 & e31 & e32)".
       repeat iExists _.
-      now iFrame "e1 e2 e3 e4".
+      now iFrame "e1 e2 e3 e4 e5 e6 e7 e8 e9 e10 e11 e12 e13 e14 e15 e16 e17 e18 e19 e20 e21 e22 e23 e24 e25 e26 e27 e28 e29 e30 e31 e32".
     Qed.
 
     Lemma close_pmp_entries_sound :

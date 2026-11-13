@@ -17,7 +17,7 @@ From Katamaran Require Import
      Syntax.BinOps
      Syntax.TypeDecl
      Syntax.UnOps
-     RiscvPmp.Base
+     RiscvPmp.GVT.Base
      RiscvPmp.GVT.Sig
      RiscvPmp.GVT.Logic.
 

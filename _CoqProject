@@ -60,6 +60,10 @@ case_study/RiscvPmp/FemtoKernel/Integrity.v
 case_study/RiscvPmp/FemtoKernel/Confidentiality.v
 case_study/Assumptions.v
 -Q examples/GVT Katamaran.RiscvPmp.GVT
+examples/GVT/Target.v
+examples/GVT/Base.v
+examples/GVT/Machine.v
+examples/GVT/PmpCheck.v
 examples/GVT/Sig.v
 examples/GVT/Logic.v
 examples/GVT/Reification.v
