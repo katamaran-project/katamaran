@@ -37,6 +37,7 @@ From Katamaran Require Import
      SmallStep.Step
      Instance
      RiscvPmp.BlockVer.Spec
+     RiscvPmp.Reification
      RiscvPmp.BlockVer.TotalVerifier
      RiscvPmp.BlockVer.BinaryVerifier
      RiscvPmp.IrisModel
@@ -508,7 +509,7 @@ Module inv := invariants.
     Lemma sat__femtoinit : safeE vc__femtoinit.
     Proof.
       vm_compute.
-      constructor; cbn.
+      reify_vc; cbn.
       intuition bv_solve_Ltac.solveBvManual.
     Qed.
 
@@ -656,14 +657,14 @@ Module inv := invariants.
     Proof.
       (* We still need to prove that our word falls within mmio *)
       vm_compute.
-      constructor; cbn.
+      reify_vc; cbn.
       intuition bv_solve_Ltac.solveBvManual.
     Qed.
 
     Lemma sat__femtohandler_write : safeE vc__femtohandler_write.
     Proof.
       vm_compute.
-      constructor; cbn.
+      reify_vc; cbn.
       intuition bv_solve_Ltac.solveBvManual.
       1-4: eapply bv.in_seqBv'; now vm_compute.
     Qed.
@@ -671,7 +672,7 @@ Module inv := invariants.
     Lemma sat__femtohandler_secret_write : safeE vc__femtohandler_secret_write.
     Proof.
       vm_compute.
-      constructor; cbn.
+      reify_vc; cbn.
       intuition bv_solve_Ltac.solveBvManual. eexists _, _. intuition.
       1-4: eapply bv.in_seqBv'; now vm_compute.
     Qed.
@@ -679,7 +680,7 @@ Module inv := invariants.
     Lemma sat__femtohandler_exit : safeE vc__femtohandler_exit.
     Proof.
       vm_compute.
-      constructor; cbn.
+      reify_vc; cbn.
       intuition bv_solve_Ltac.solveBvManual.
     Qed.
 

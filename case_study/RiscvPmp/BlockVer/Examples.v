@@ -37,6 +37,7 @@ From Katamaran Require Import
      Semantics
      Instance
      RiscvPmp.BlockVer.Spec
+     RiscvPmp.Reification
      RiscvPmp.BlockVer.PartialVerifier
      RiscvPmp.Machine
      RiscvPmp.Logic
@@ -158,7 +159,7 @@ Module Examples.
         end.
 
     Local Ltac solve_vc :=
-      vm_compute; constructor; cbn; intros; repeat split; try solve_bv; auto.
+      vm_compute; reify_vc; cbn; intros; repeat split; try solve_bv; auto.
 
     Definition with_regidx {Σ} (r : RegIdx) (P : Reg ty_xlenbits -> Assertion Σ) : Assertion Σ :=
       match reg_convert r with

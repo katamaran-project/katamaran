@@ -45,6 +45,7 @@ From Katamaran Require Import
      RiscvPmp.Logic
      RiscvPmp.PmpCheck
      RiscvPmp.Machine
+     RiscvPmp.Reification
      RiscvPmp.Sig.
 From Equations Require Import
      Equations.
@@ -1685,7 +1686,7 @@ Module RiscvPmpValidContracts.
   Ltac symbolic_simpl :=
     apply Symbolic.validcontract_with_erasure_sound;
     vm_compute;
-    constructor;
+    reify_vc;
     cbn.
 
   Section Debug.
@@ -1805,7 +1806,7 @@ Module RiscvPmpValidContracts.
   Proof.
     symbolic_simpl.
     intros; split; intros; bv_comp; auto.
-    destruct (v + v0 <=ᵘ? v1)%bv eqn:?; bv_comp; auto.
+    destruct (addr + width <=ᵘ? lo)%bv eqn:?; bv_comp; auto.
   Qed.
 
   Lemma valid_contract_pmpMatchEntry : ValidContract pmpMatchEntry.

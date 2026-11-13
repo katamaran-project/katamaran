@@ -36,6 +36,7 @@ From Katamaran Require Import
      Bitvector
      Semantics
      RiscvPmp.BlockVer.Spec
+     RiscvPmp.Reification
      RiscvPmp.BlockVer.PartialVerifier
      RiscvPmp.BlockVer.TotalVerifier
      RiscvPmp.Machine
@@ -145,7 +146,7 @@ Module UnaryCheck.
   Lemma sat_code : safeE vc_code.
   Proof.
     vm_compute.
-    constructor; cbn.
+    reify_vc; cbn.
     intuition; bv_solve_Ltac.solveBvManual.
   Qed.
 
@@ -175,7 +176,7 @@ Module RunningExample.
 
     Lemma sat_code : TotalBlockVer.Verifier.safeE vc_code.
     Proof.
-      constructor; cbn.
+      reify_vc; cbn.
       intuition; bv_solve_Ltac.solveBvManual.
     Qed.
 
