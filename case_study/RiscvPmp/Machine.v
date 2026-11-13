@@ -749,9 +749,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     use lemma close_gprs.
 
   Definition fun_bool_to_bits : Stm ["x" :: ty.bool] (ty.bvec 1) :=
-    if: exp_var "x"
-    then exp_val (ty.bvec 1) Bitvector.bv.one
-    else exp_val (ty.bvec 1) Bitvector.bv.zero.
+    exp_binop bop.bvcons (exp_var "x") (exp_val (ty.bvec 0) [bv 0]).
 
   Definition fun_shift_right_arith32 : Stm [v :: ty.bvec 32; "shift" :: ty.bvec 5] (ty.bvec 32) :=
     let: "v64" :: ty.bvec 64 := exp_sext v in
