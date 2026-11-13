@@ -650,23 +650,20 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
                           ; exp_var "Fetch_Addr_Align"
                           ].
 
-  Notation "x '|bv|' y" := (exp_binop bop.bvor x y)
-      (at level 60) : exp_scope.
+  (* Bits R(0) W(1) X(2) A(3-4) L(7); A' also covers the reserved bits 5-6. *)
   Definition stm_pmpcfg_ent_to_bits {Γ} (cfgent : Stm Γ ty_pmpcfg_ent) : Stm Γ ty_byte :=
     let: "cfgent" := cfgent in
     match: exp_var "cfgent" in rpmpcfg_ent with
       ["L";"A";"X";"W";"R"] =>
-      let: "L'" := if: exp_var "L"
-                   then exp_val ty_byte [bv (N.shiftl 1 7)]
-                   else exp_val ty_byte [bv 0] in
       let: "A'" := match: A in pmpaddrmatchtype with
-                   | OFF => exp_val ty_byte [bv (N.shiftl 0 3)]
-                   | TOR => exp_val ty_byte [bv (N.shiftl 1 3)]
+                   | OFF => exp_val (ty.bvec 4) [bv 0]
+                   | TOR => exp_val (ty.bvec 4) [bv 1]
                    end in
-      let: "X'" := if: exp_var "X" then exp_val ty_byte [bv (N.shiftl 1 2)] else exp_val ty_byte [bv 0] in
-      let: "W'" := if: exp_var "W" then exp_val ty_byte [bv (N.shiftl 1 1)] else exp_val ty_byte [bv 0] in
-      let: "R'" := if: exp_var "R" then exp_val ty_byte [bv (N.shiftl 1 0)] else exp_val ty_byte [bv 0] in
-      exp_var "L'" |bv| exp_var "A'" |bv| exp_var "X'" |bv| exp_var "W'" |bv| exp_var "R'"
+      exp_binop bop.bvcons (exp_var "R")
+        (exp_binop bop.bvcons (exp_var "W")
+          (exp_binop bop.bvcons (exp_var "X")
+            (exp_bvapp (exp_var (σ := ty.bvec 4) "A'")
+              (exp_binop bop.bvcons (exp_var "L") (exp_val (ty.bvec 0) [bv 0])))))
     end.
 
   (** Functions **)
