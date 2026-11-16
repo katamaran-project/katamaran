@@ -836,13 +836,6 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
       lift_purespec (CPureSpec.demonic σ).
     #[global] Arguments demonic σ Φ : rename.
 
-    Definition angelic_ctx {N} (Δ : NCtx N Ty) : CHeapSpec (NamedEnv Val Δ) :=
-      lift_purespec (CPureSpec.angelic_ctx Δ).
-    #[global] Arguments angelic_ctx {N} Δ.
-    Definition demonic_ctx {N} (Δ : NCtx N Ty) : CHeapSpec (NamedEnv Val Δ) :=
-      lift_purespec (CPureSpec.demonic_ctx Δ).
-    #[global] Arguments demonic_ctx {N} Δ.
-
     Definition assert_formula : Prop -> CHeapSpec unit :=
       fun fml => lift_purespec (CPureSpec.assert_formula fml).
     Definition assume_formula : Prop -> CHeapSpec unit :=
@@ -857,6 +850,72 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
       fun Φ h => CPureSpec.read_register reg h (fun '(t,h') => Φ t h').
     Definition write_register {τ} (reg : 𝑹𝑬𝑮 τ) (v : Val τ) : CHeapSpec (Val τ) :=
       fun Φ h => CPureSpec.write_register reg v h (fun '(v',h') => Φ v' h').
+
+    #[export] Instance mon_run :
+      Proper (MHeapSpec eq ==> impl) run.
+    Proof. intros m1 m2 mm. now apply mm. Qed.
+
+    #[export] Instance mon_lift_purespec `{MA : relation A} :
+      Proper (MPureSpec MA ==> MHeapSpec MA) (lift_purespec).
+    Proof. intros ? ? rm ? ? rΦ h. apply rm. intros ? ? ra. now apply rΦ. Qed.
+
+    #[export] Instance mon_pure `{MA : relation A} :
+      Proper (MA ==> MHeapSpec MA) pure.
+    Proof. firstorder. Qed.
+
+    #[export] Instance mon_bind `{MA : relation A, RB : relation B} :
+      Proper (MHeapSpec MA ==> (MA ==> MHeapSpec RB) ==> MHeapSpec RB) bind.
+    Proof.
+      intros ? ? rm ? ? rf ? ? rΦ. apply rm. intros ? ? ra.
+      apply rf. apply ra. intros ? ? rb. apply rΦ, rb.
+    Qed.
+
+    #[export] Instance mon_error `{MA : relation A} :
+      Proper (MHeapSpec MA) error.
+    Proof. now unfold error. Qed.
+
+    #[export] Instance mon_debug `{MA : relation A} :
+      Proper (MHeapSpec MA ==> MHeapSpec MA) debug.
+    Proof. now unfold debug. Qed.
+
+    #[export] Instance mon_angelic_binary `{MA : relation A} :
+      Proper (MHeapSpec MA ==> MHeapSpec MA ==> MHeapSpec MA) angelic_binary.
+    Proof. firstorder. Qed.
+
+    #[export] Instance mon_demonic_binary `{MA : relation A} :
+      Proper (MHeapSpec MA ==> MHeapSpec MA ==> MHeapSpec MA) demonic_binary.
+    Proof. firstorder. Qed.
+
+    #[global] Typeclasses Opaque run lift_purespec pure bind debug angelic_binary
+      demonic_binary.
+
+    #[export] Instance mon_angelic σ :
+      Proper (MHeapSpec eq) (angelic σ).
+    Proof. unfold angelic. solve_monotonic. Qed.
+    #[export] Instance mon_demonic σ :
+      Proper (MHeapSpec eq) (demonic σ).
+    Proof. unfold demonic. solve_monotonic. Qed.
+
+    #[export] Instance mon_assert_formula fml :
+      Proper (MHeapSpec eq) (assert_formula fml).
+    Proof. firstorder. Qed.
+    #[export] Instance mon_assume_formula fml :
+      Proper (MHeapSpec eq) (assume_formula fml).
+    Proof. firstorder. Qed.
+
+    Definition angelic_ctx {N} (Δ : NCtx N Ty) : CHeapSpec (NamedEnv Val Δ) :=
+      lift_purespec (CPureSpec.angelic_ctx Δ).
+    #[global] Arguments angelic_ctx {N} Δ.
+    Definition demonic_ctx {N} (Δ : NCtx N Ty) : CHeapSpec (NamedEnv Val Δ) :=
+      lift_purespec (CPureSpec.demonic_ctx Δ).
+    #[global] Arguments demonic_ctx {N} Δ.
+
+    #[export] Instance mon_angelic_ctx {N} Δ :
+      Proper (MHeapSpec eq) (@angelic_ctx N Δ).
+    Proof. unfold angelic_ctx. solve_monotonic. Qed.
+    #[export] Instance mon_demonic_ctx {N} Δ :
+      Proper (MHeapSpec eq) (@demonic_ctx N Δ).
+    Proof. unfold demonic_ctx. solve_monotonic. Qed.
 
     Fixpoint produce {Σ} (asn : Assertion Σ) (ι : Valuation Σ) : CHeapSpec unit :=
       match asn with
@@ -925,64 +984,6 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
           consume req ι ;;
           produce ens ι
       end.
-
-    #[export] Instance mon_run :
-      Proper (MHeapSpec eq ==> impl) run.
-    Proof. intros m1 m2 mm. now apply mm. Qed.
-
-    #[export] Instance mon_lift_purespec `{MA : relation A} :
-      Proper (MPureSpec MA ==> MHeapSpec MA) (lift_purespec).
-    Proof. intros ? ? rm ? ? rΦ h. apply rm. intros ? ? ra. now apply rΦ. Qed.
-
-    #[export] Instance mon_pure `{MA : relation A} :
-      Proper (MA ==> MHeapSpec MA) pure.
-    Proof. firstorder. Qed.
-
-    #[export] Instance mon_bind `{MA : relation A, RB : relation B} :
-      Proper (MHeapSpec MA ==> (MA ==> MHeapSpec RB) ==> MHeapSpec RB) bind.
-    Proof.
-      intros ? ? rm ? ? rf ? ? rΦ. apply rm. intros ? ? ra.
-      apply rf. apply ra. intros ? ? rb. apply rΦ, rb.
-    Qed.
-
-    #[export] Instance mon_error `{MA : relation A} :
-      Proper (MHeapSpec MA) error.
-    Proof. now unfold error. Qed.
-
-    #[export] Instance mon_debug `{MA : relation A} :
-      Proper (MHeapSpec MA ==> MHeapSpec MA) debug.
-    Proof. now unfold debug. Qed.
-
-    #[export] Instance mon_angelic_binary `{MA : relation A} :
-      Proper (MHeapSpec MA ==> MHeapSpec MA ==> MHeapSpec MA) angelic_binary.
-    Proof. firstorder. Qed.
-
-    #[export] Instance mon_demonic_binary `{MA : relation A} :
-      Proper (MHeapSpec MA ==> MHeapSpec MA ==> MHeapSpec MA) demonic_binary.
-    Proof. firstorder. Qed.
-
-    #[global] Typeclasses Opaque run lift_purespec pure bind debug angelic_binary
-      demonic_binary.
-
-    #[export] Instance mon_angelic σ :
-      Proper (MHeapSpec eq) (angelic σ).
-    Proof. unfold angelic. solve_monotonic. Qed.
-    #[export] Instance mon_demonic σ :
-      Proper (MHeapSpec eq) (demonic σ).
-    Proof. unfold demonic. solve_monotonic. Qed.
-    #[export] Instance mon_angelic_ctx {N} Δ :
-      Proper (MHeapSpec eq) (@angelic_ctx N Δ).
-    Proof. unfold angelic_ctx. solve_monotonic. Qed.
-    #[export] Instance mon_demonic_ctx {N} Δ :
-      Proper (MHeapSpec eq) (@demonic_ctx N Δ).
-    Proof. unfold demonic_ctx. solve_monotonic. Qed.
-
-    #[export] Instance mon_assert_formula fml :
-      Proper (MHeapSpec eq) (assert_formula fml).
-    Proof. firstorder. Qed.
-    #[export] Instance mon_assume_formula fml :
-      Proper (MHeapSpec eq) (assume_formula fml).
-    Proof. firstorder. Qed.
 
     #[export] Instance mon_produce_chunk c : Proper (MHeapSpec eq) (produce_chunk c).
     Proof.
