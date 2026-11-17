@@ -154,7 +154,7 @@ Module BinaryBlockVerifier
       | i :: instrs =>
           ⌜ainstr = apc⌝
           ∗ (exec_instruction_prologue i ainstr -∗
-               semWP2 [env] [env] fun_step fun_step
+               semWP2 [env] [env] fun_loop_body fun_loop_body
                  (λ v1 δ1 v2 δ2, ⌜v1 = v2⌝ ∗ ⌜δ1 = δ2⌝ ∗
                      match v1 with
                      | inl v =>
@@ -194,7 +194,7 @@ Module BinaryBlockVerifier
 
     Lemma WP2_loop_step_once {R : iProp Σ} : ∀ POST,
       powered2 true -∗
-      semWP2 [env] [env] fun_step fun_step (λ v1 δ1 v2 δ2, ⌜v1 = v2⌝ ∗ ⌜δ1 = δ2⌝ ∗ POST v1 δ1 v2 δ2) -∗
+      semWP2 [env] [env] fun_loop_body fun_loop_body (λ v1 δ1 v2 δ2, ⌜v1 = v2⌝ ∗ ⌜δ1 = δ2⌝ ∗ POST v1 δ1 v2 δ2) -∗
       (∀ v1 δ1 v2 δ2, POST v1 δ1 v2 δ2 -∗ powered2 true -∗ match v1 with inl _ => WP2_loop R | inr _ => R end) -∗
       WP2_loop R.
     Proof.
@@ -349,7 +349,7 @@ Module BinaryBlockVerifier
 
     Lemma WP2_loop_step_left {R : iProp Σ} :
       powered_left true -∗
-      @RVPBASEl.semTWP _ sailGS2_sailGS_left _ _ [env] fun_step
+      @RVPBASEl.semTWP _ sailGS2_sailGS_left _ _ [env] fun_loop_body
         (λ v _, match v with inl _ => powered_left true -∗ WP2_loop R | inr _ => False end) -∗ (* We cannot end up with a fail due to the fail logic for the BlockVer *)
       WP2_loop R.
     Proof.
@@ -367,7 +367,7 @@ Module BinaryBlockVerifier
 
     Lemma WP2_loop_step_right {R : iProp Σ} :
       powered_right true -∗
-      @RVPBASEr.semTWP _ sailGS2_sailGS_right _ _ [env] fun_step
+      @RVPBASEr.semTWP _ sailGS2_sailGS_right _ _ [env] fun_loop_body
         (λ v _, match v with inl _ => powered_right true -∗ WP2_loop R | inr _ => False end) -∗ (* We cannot end up with a fail due to the fail logic for the BlockVer *)
       WP2_loop R.
     Proof.

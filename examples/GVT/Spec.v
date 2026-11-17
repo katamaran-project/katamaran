@@ -460,6 +460,8 @@ Module RiscvPmpBlockVerifSpec.
       | rX                         => Some sep_contract_rX
       | wX                         => Some sep_contract_wX
       | fetch                      => Some sep_contract_fetch_instr
+      | retire_instruction         => Some RiscvPmpSpecification.sep_contract_retire_instruction
+      | tick_clock                 => Some RiscvPmpSpecification.sep_contract_tick_clock
       | @mem_read bytes H          => Some (@sep_contract_mem_read bytes H)
       | @mem_write_value bytes H   => Some (@sep_contract_mem_write_value bytes H)
       | tick_pc                    => Some sep_contract_tick_pc
@@ -680,6 +682,12 @@ Module RiscvPmpSpecVerif.
   Lemma valid_execute_tick_pc : ValidContract tick_pc.
   Proof. now vm_compute. Qed.
 
+  Lemma valid_retire_instruction : ValidContract retire_instruction.
+  Proof. vm_reflexivity. Qed.
+
+  Lemma valid_tick_clock : ValidContract tick_clock.
+  Proof. vm_reflexivity. Qed.
+
   Ltac symbolic_simpl :=
     apply validcontract_with_erasure_sound;
     vm_compute;
@@ -801,6 +809,8 @@ Module RiscvPmpSpecVerif.
     - refine (valid_contract_debug _ H valid_pmpMatchAddr).
     - refine (valid_contract_debug _ H valid_mem_write_value).
     - refine (valid_contract_debug _ H valid_execute_fetch).
+    - refine (valid_contract _ H valid_retire_instruction).
+    - refine (valid_contract _ H valid_tick_clock).
     - refine (valid_contract_debug _ H valid_contract_execute_EBREAK).
   Qed.
 End RiscvPmpSpecVerif.

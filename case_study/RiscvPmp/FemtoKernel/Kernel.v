@@ -248,7 +248,9 @@ Section FemtoKernel.
   Example femtokernel_handler_dispatch_asm (dispatch_addr data_addr not_zero_size : N) : list AnnotInstr :=
     resolve_ASM (femtokernel_handler_dispatch_asm' data_addr not_zero_size) dispatch_addr.
 
-  (* First performs the public write, then the private write. *)
+  (* First performs the public write, then the private write. It has as many
+     instructions as the is_zero block: the number of executed instructions
+     (observable through the counters) must not depend on the secret. *)
   Example femtokernel_handler_not_zero_asm' (data_addr exit_addr : N) : list ASM :=
     [ ADDI t0 zero (bv.of_N 42)
     ; AnnotLemmaInvocation (close_mmio_write (bv.of_N mmio_write_adv) WORD) [nenv exp_val ty_xlenbits bv.zero; exp_val ty_regno t0]%env

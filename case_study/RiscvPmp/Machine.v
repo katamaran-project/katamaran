@@ -192,6 +192,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
   | init_model            : Fun ctx.nil ty.unit
   | loop                  : Fun ctx.nil ty.unit
   | step                  : Fun ctx.nil ty.unit
+  | loop_body             : Fun ctx.nil ty.unit
   | fetch                 : Fun ctx.nil ty_fetch_result
   | init_sys              : Fun ctx.nil ty.unit
   | init_pmp              : Fun ctx.nil ty.unit
@@ -217,11 +218,19 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
   | legalize_sip          : Fun [m ∷ ty_Minterrupts; "d" ∷ ty_Minterrupts; v ∷ ty_xlenbits] ty_Minterrupts
   | lift_sie              : Fun [m ∷ ty_Minterrupts; "d" ∷ ty_Minterrupts; "s" ∷ ty_Sinterrupts] ty_Minterrupts
   | legalize_sie          : Fun [m ∷ ty_Minterrupts; "d" ∷ ty_Minterrupts; v ∷ ty_xlenbits] ty_Minterrupts
-  | check_CSR             : Fun [csr ∷ ty_csridx; p ∷ ty_privilege] ty.bool
+  | check_CSR             : Fun [csr ∷ ty_csridx; p ∷ ty_privilege; "isWrite" ∷ ty.bool] ty.bool
   | is_CSR_defined        : Fun [csr ∷ ty_csridx; p ∷ ty_privilege] ty.bool
   | csrAccess             : Fun [csr ∷ ty_csridx] ty_access_type
   | csrPriv               : Fun [csr ∷ ty_csridx] ty_privilege
-  | check_CSR_access      : Fun [csrrw ∷ ty_access_type; csrpr ∷ ty_privilege; p ∷ ty_privilege] ty.bool
+  | check_CSR_access      : Fun [csrrw ∷ ty_access_type; csrpr ∷ ty_privilege; p ∷ ty_privilege; "isWrite" ∷ ty.bool] ty.bool
+  | check_Counteren       : Fun [csr ∷ ty_csridx; p ∷ ty_privilege] ty.bool
+  | Counteren_to_bits     : Fun ["c" ∷ ty_Counteren] ty_xlenbits
+  | Counterin_to_bits     : Fun ["c" ∷ ty_Counterin] ty_xlenbits
+  | legalize_mcounteren   : Fun ["c" ∷ ty_Counteren; v ∷ ty_xlenbits] ty_Counteren
+  | legalize_scounteren   : Fun ["c" ∷ ty_Counteren; v ∷ ty_xlenbits] ty_Counteren
+  | legalize_mcountinhibit : Fun ["c" ∷ ty_Counterin; v ∷ ty_xlenbits] ty_Counterin
+  | retire_instruction    : Fun ctx.nil ty.unit
+  | tick_clock            : Fun ctx.nil ty.unit
   | readCSR               : Fun [csr ∷ ty_csridx] ty_xlenbits
   | writeCSR              : Fun [csr ∷ ty_csridx; value ∷ ty_xlenbits] ty.unit
   | dispatchInterrupt     : Fun ["priv" ∷ ty_privilege] (ty.option (ty.prod ty_interruptType ty_privilege))
@@ -1007,8 +1016,11 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
   Definition fun_loop : Stm ctx.nil ty.unit :=
     let: "on" := stm_foreign powered_on [env] in
     if: exp_var "on"
-    then call step ;; call loop
+    then call loop_body ;; call loop
     else stm_val ty.unit tt.
+
+  Definition fun_loop_body : Stm ctx.nil ty.unit :=
+    call step ;; call tick_clock.
 
   Definition fun_fetch : Stm ctx.nil ty_fetch_result :=
     let: tmp1 := Execute in
@@ -1025,30 +1037,71 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
   Definition fun_step : Stm ctx.nil ty.unit :=
     (* Allow the external world to update certain architectural state, particularly the mip (interrupts pending) CSR. *)
     stm_foreign externalWorldUpdates [env] ;;
+    stm_write_register minstret_written (exp_val ty.bool false) ;;
     let: p := stm_read_register cur_privilege in
     let: "di" := call dispatchInterrupt p in
-    match: exp_var "di" with
-    | inl "intrpriv" =>
-        match: exp_var "intrpriv" in ( ty_interruptType , ty_privilege ) with
-        | ( "intr" , "priv" ) =>
-            call handle_interrupt (exp_var "intr") (exp_var "priv") ;;
-            stm_val ty_retired RETIRE_FAIL
-        end
-    | inr "unit" =>
-        let: f := call fetch in
-        match: f in union fetch_result with
-        |> KF_Base (pat_var "w") =>  let: "ast" := foreign decode w in
-                                     let: tmp := stm_read_register pc in
-                                     stm_write_register nextpc (tmp +ᵇ exp_val ty_xlenbits [bv 4]) ;;
-                                     call execute (exp_var "ast")
-        |> KF_Error (pat_pair "e" "addr") => call handle_mem_exception addr e ;;
-                                             stm_val ty_retired RETIRE_FAIL
-        end
+    let: "retired" :=
+      match: exp_var "di" with
+      | inl "intrpriv" =>
+          match: exp_var "intrpriv" in ( ty_interruptType , ty_privilege ) with
+          | ( "intr" , "priv" ) =>
+              call handle_interrupt (exp_var "intr") (exp_var "priv") ;;
+              stm_val ty_retired RETIRE_FAIL
+          end
+      | inr "unit" =>
+          let: f := call fetch in
+          match: f in union fetch_result with
+          |> KF_Base (pat_var "w") =>  let: "ast" := foreign decode w in
+                                       let: tmp := stm_read_register pc in
+                                       stm_write_register nextpc (tmp +ᵇ exp_val ty_xlenbits [bv 4]) ;;
+                                       call execute (exp_var "ast")
+          |> KF_Error (pat_pair "e" "addr") => call handle_mem_exception addr e ;;
+                                               stm_val ty_retired RETIRE_FAIL
+          end
+      end in
+    call tick_pc ;;
+    match: exp_var "retired" in retired with
+    | RETIRE_SUCCESS => call retire_instruction
+    | RETIRE_FAIL    => stm_val ty.unit tt
+    end.
+
+  Definition fun_retire_instruction : Stm ctx.nil ty.unit :=
+    let: "w" := stm_read_register minstret_written in
+    if: exp_var "w"
+    then stm_write_register minstret_written (exp_val ty.bool false) ;;
+         stm_val ty.unit tt
+    else let: "ci" := stm_read_register mcountinhibit in
+         match: exp_var "ci" in rcounterin with
+           ["IR"; "CY"] =>
+             if: exp_var "IR"
+             then stm_val ty.unit tt
+             else let: "c" := stm_read_register minstret in
+                  stm_write_register minstret (exp_var "c" +ᵇ exp_val (ty.bvec 64) Bitvector.bv.one) ;;
+                  stm_val ty.unit tt
+         end.
+
+  Definition fun_tick_clock : Stm ctx.nil ty.unit :=
+    let: "ci" := stm_read_register mcountinhibit in
+    match: exp_var "ci" in rcounterin with
+      ["IR"; "CY"] =>
+        if: exp_var "CY"
+        then stm_val ty.unit tt
+        else let: "c" := stm_read_register mcycle in
+             stm_write_register mcycle (exp_var "c" +ᵇ exp_val (ty.bvec 64) Bitvector.bv.one) ;;
+             stm_val ty.unit tt
     end ;;
-    call tick_pc.
+    let: "t" := stm_read_register mtime in
+    stm_write_register mtime (exp_var "t" +ᵇ exp_val (ty.bvec 64) Bitvector.bv.one) ;;
+    (* clint_dispatch() *)
+    stm_val ty.unit tt.
 
   Definition fun_init_sys : Stm ctx.nil ty.unit :=
     stm_write_register cur_privilege (exp_val ty_privilege Machine) ;;
+    stm_write_register mcycle (exp_val (ty.bvec 64) Bitvector.bv.zero) ;;
+    stm_write_register mtime (exp_val (ty.bvec 64) Bitvector.bv.zero) ;;
+    stm_write_register mcounteren (exp_record rcounteren [nenv exp_val ty.bool false; exp_val ty.bool false; exp_val ty.bool false]) ;;
+    stm_write_register minstret (exp_val (ty.bvec 64) Bitvector.bv.zero) ;;
+    stm_write_register minstret_written (exp_val ty.bool false) ;;
     use lemma open_pmp_entries ;;
     call init_pmp ;;
     use lemma close_pmp_entries.
@@ -1419,15 +1472,16 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     let: "v" := stm_Sinterrupts_from_bits v in
     call lift_sie (exp_var "m") (exp_var "d") (exp_var "v").
 
-  Definition fun_check_CSR : Stm [csr ∷ ty_csridx; p ∷ ty_privilege] ty.bool :=
+  Definition fun_check_CSR : Stm [csr ∷ ty_csridx; p ∷ ty_privilege; "isWrite" ∷ ty.bool] ty.bool :=
     let: tmp1 := call is_CSR_defined csr p in
     let: tmp2 := call csrAccess csr in
     let: tmp3 := call csrPriv csr in
-    let: tmp := call check_CSR_access tmp2 tmp3 p in
-    tmp1 && tmp.
+    let: tmp := call check_CSR_access tmp2 tmp3 p isWrite in
+    let: "cnt" := call check_Counteren csr p in
+    tmp1 && tmp && exp_var "cnt".
 
   Definition fun_is_CSR_defined : Stm [csr ∷ ty_csridx; p ∷ ty_privilege] ty.bool :=
-    match: csr in csridx with
+    stm_match_enum csridx csr (fun K => match K with
     | MStatus   => p = exp_val ty_privilege Machine
     | Mie       => p = exp_val ty_privilege Machine
     | Mip       => p = exp_val ty_privilege Machine
@@ -1447,17 +1501,40 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     | SCause    => (p = exp_val ty_privilege Machine) || (p = exp_val ty_privilege Supervisor)
     | Sip       => (p = exp_val ty_privilege Machine) || (p = exp_val ty_privilege Supervisor)
     | Sie       => (p = exp_val ty_privilege Machine) || (p = exp_val ty_privilege Supervisor)
-    end.
+    | MCycle        => p = exp_val ty_privilege Machine
+    | MInstret      => p = exp_val ty_privilege Machine
+    | MCycleh       => p = exp_val ty_privilege Machine
+    | MInstreth     => p = exp_val ty_privilege Machine
+    | MCountinhibit => p = exp_val ty_privilege Machine
+    | MCounteren    => p = exp_val ty_privilege Machine
+    | SCounteren    => (p = exp_val ty_privilege Machine) || (p = exp_val ty_privilege Supervisor)
+    | Cycle         => exp_val ty.bool true
+    | Time          => exp_val ty.bool true
+    | Instret       => exp_val ty.bool true
+    | Cycleh        => exp_val ty.bool true
+    | Timeh         => exp_val ty.bool true
+    | Instreth      => exp_val ty.bool true
+    end)%exp.
 
   (* NOTE: for csrAccess and csrPriv, the access permissions and privilege that
            are associated with a CSR are gathered from a CSR index (a 12-bit
            vector), which we currently do not have (and use an enum directly). *)
-  (* NOTE: currently just assuming everything is ReadWrite and reusing our
-           existing access_type (Sail code uses a different type, csrRW here *)
+  (* NOTE: we reuse our existing access_type (Sail code uses csrRW, the bits
+           11..10 of the CSR number, where 0b11 means read-only). Read stands
+           for read-only (0b11), ReadWrite for every other encoding. Only the
+           unprivileged counter CSRs are read-only. *)
   Definition fun_csrAccess : Stm [csr ∷ ty_csridx] ty_access_type :=
-    ReadWrite.
-  Definition fun_csrPriv : Stm [csr ∷ ty_csridx] ty_privilege :=
     match: csr in csridx with
+    | Cycle    => Read
+    | Time     => Read
+    | Instret  => Read
+    | Cycleh   => Read
+    | Timeh    => Read
+    | Instreth => Read
+    | _        => ReadWrite
+    end.
+  Definition fun_csrPriv : Stm [csr ∷ ty_csridx] ty_privilege :=
+    stm_match_enum csridx csr (fun K => match K with
     | MStatus   => exp_val ty_privilege Machine
     | Mie       => exp_val ty_privilege Machine
     | Mip       => exp_val ty_privilege Machine
@@ -1477,12 +1554,101 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     | SCause    => exp_val ty_privilege Supervisor
     | Sip       => exp_val ty_privilege Supervisor
     | Sie       => exp_val ty_privilege Supervisor
-    end.
+    | MCycle        => exp_val ty_privilege Machine
+    | MInstret      => exp_val ty_privilege Machine
+    | MCycleh       => exp_val ty_privilege Machine
+    | MInstreth     => exp_val ty_privilege Machine
+    | MCountinhibit => exp_val ty_privilege Machine
+    | MCounteren    => exp_val ty_privilege Machine
+    | SCounteren    => exp_val ty_privilege Supervisor
+    | Cycle         => exp_val ty_privilege User
+    | Time          => exp_val ty_privilege User
+    | Instret       => exp_val ty_privilege User
+    | Cycleh        => exp_val ty_privilege User
+    | Timeh         => exp_val ty_privilege User
+    | Instreth      => exp_val ty_privilege User
+    end)%exp.
 
-  Definition fun_check_CSR_access : Stm [csrrw ∷ ty_access_type; csrpr ∷ ty_privilege; p ∷ ty_privilege] ty.bool :=
+  Definition fun_check_CSR_access : Stm [csrrw ∷ ty_access_type; csrpr ∷ ty_privilege; p ∷ ty_privilege; "isWrite" ∷ ty.bool] ty.bool :=
     let: tmp1 := call privLevel_to_bits csrpr in
     let: tmp2 := call privLevel_to_bits p in
-    tmp1 <=ᵘ tmp2.
+    exp_not (isWrite && (csrrw = Read)) && (tmp1 <=ᵘ tmp2).
+
+  (* NOTE: we deviate a bit from the Sail model here due to how CSRs and
+           bitfields are currently defined in our μSail model. The logic is the
+           same though, the main difference is really just in bitvectors
+           vs no bitvectors. *)
+  Definition fun_check_Counteren : Stm [csr ∷ ty_csridx; p ∷ ty_privilege] ty.bool :=
+    if: (csr = exp_val ty_csridx Cycle) || (csr = exp_val ty_csridx Time) || (csr = exp_val ty_csridx Instret)
+    then
+      if: p = exp_val ty_privilege Machine
+      then stm_val ty.bool true
+      else
+        let: "mce" := stm_read_register mcounteren in
+        let: "m" := match: exp_var "mce" in rcounteren with
+                      ["m_IR"; "m_TM"; "m_CY"] =>
+                        match: csr in csridx with
+                        | Cycle => exp_var "m_CY"
+                        | Time  => exp_var "m_TM"
+                        | _     => exp_var "m_IR"
+                        end
+                    end in
+        if: p = exp_val ty_privilege Supervisor
+        then exp_var "m"
+        else
+          let: "sce" := stm_read_register scounteren in
+          let: "s" := match: exp_var "sce" in rcounteren with
+                        ["s_IR"; "s_TM"; "s_CY"] =>
+                          match: csr in csridx with
+                          | Cycle => exp_var "s_CY"
+                          | Time  => exp_var "s_TM"
+                          | _     => exp_var "s_IR"
+                          end
+                      end in
+          exp_var "m" && exp_var "s"
+    else stm_val ty.bool true.
+
+  Definition fun_Counteren_to_bits : Stm ["c" ∷ ty_Counteren] ty_xlenbits :=
+    match: exp_var "c" in rcounteren with
+      ["IR"; "TM"; "CY"] =>
+        let: "b2" := stm_call bool_to_bits [nenv exp_var "IR"] in
+        let: "b1" := stm_call bool_to_bits [nenv exp_var "TM"] in
+        let: "b0" := stm_call bool_to_bits [nenv exp_var "CY"] in
+        let r3 : Exp _ (ty.bvec 3) :=
+           exp_bvapp (exp_var (σ := ty.bvec 1) "b0")
+          (exp_bvapp (exp_var (σ := ty.bvec 1) "b1")
+                     (exp_var (σ := ty.bvec 1) "b2")) in
+        stm_exp (exp_unop uop.zext r3)
+    end.
+
+  Definition fun_Counterin_to_bits : Stm ["c" ∷ ty_Counterin] ty_xlenbits :=
+    match: exp_var "c" in rcounterin with
+      ["IR"; "CY"] =>
+        let: "b2" := stm_call bool_to_bits [nenv exp_var "IR"] in
+        let: "b0" := stm_call bool_to_bits [nenv exp_var "CY"] in
+        let r3 : Exp _ (ty.bvec 3) :=
+           exp_bvapp (exp_var (σ := ty.bvec 1) "b0")
+          (exp_bvapp (exp_val (ty.bvec 1) Bitvector.bv.zero)
+                     (exp_var (σ := ty.bvec 1) "b2")) in
+        stm_exp (exp_unop uop.zext r3)
+    end.
+
+  Definition fun_legalize_mcounteren : Stm ["c" ∷ ty_Counteren; v ∷ ty_xlenbits] ty_Counteren :=
+    let: "IR" := exp_testbit v 2 in
+    let: "TM" := exp_testbit v 1 in
+    let: "CY" := exp_testbit v 0 in
+    exp_record rcounteren [exp_var "IR"; exp_var "TM"; exp_var "CY"].
+
+  Definition fun_legalize_scounteren : Stm ["c" ∷ ty_Counteren; v ∷ ty_xlenbits] ty_Counteren :=
+    let: "IR" := exp_testbit v 2 in
+    let: "TM" := exp_testbit v 1 in
+    let: "CY" := exp_testbit v 0 in
+    exp_record rcounteren [exp_var "IR"; exp_var "TM"; exp_var "CY"].
+
+  Definition fun_legalize_mcountinhibit : Stm ["c" ∷ ty_Counterin; v ∷ ty_xlenbits] ty_Counterin :=
+    let: "IR" := exp_testbit v 2 in
+    let: "CY" := exp_testbit v 0 in
+    exp_record rcounterin [exp_var "IR"; exp_var "CY"].
 
   Definition fun_privLevel_to_bits : Stm [p ∷ ty_privilege] ty_priv_level :=
     match: p in privilege with
@@ -1492,7 +1658,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     end.
 
   Definition fun_readCSR : Stm [csr ∷ ty_csridx] ty_xlenbits :=
-    match: csr in csridx with
+    stm_match_enum csridx csr (fun K => match K with
     | MStatus   => stm_mstatus_to_bits (stm_read_register mstatus)
     | Mie       => let: value := stm_read_register mie in
                    call Minterrupts_to_bits value
@@ -1527,10 +1693,36 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
                    let: "mideleg" := stm_read_register mideleg in
                    let: value := call lower_mie value (exp_var "mideleg") in
                    stm_Sinterrupts_to_bits value
-    end.
+    | MCycle        => let: "c" := stm_read_register mcycle in
+                       stm_exp (exp_vector_subrange 0 32 (exp_var "c"))
+    | MInstret      => let: "c" := stm_read_register minstret in
+                       stm_exp (exp_vector_subrange 0 32 (exp_var "c"))
+    | MCycleh       => let: "c" := stm_read_register mcycle in
+                       stm_exp (exp_vector_subrange 32 32 (exp_var "c"))
+    | MInstreth     => let: "c" := stm_read_register minstret in
+                       stm_exp (exp_vector_subrange 32 32 (exp_var "c"))
+    | MCountinhibit => let: "c" := stm_read_register mcountinhibit in
+                       call Counterin_to_bits (exp_var "c")
+    | MCounteren    => let: "c" := stm_read_register mcounteren in
+                       call Counteren_to_bits (exp_var "c")
+    | SCounteren    => let: "c" := stm_read_register scounteren in
+                       call Counteren_to_bits (exp_var "c")
+    | Cycle         => let: "c" := stm_read_register mcycle in
+                       stm_exp (exp_vector_subrange 0 32 (exp_var "c"))
+    | Time          => let: "c" := stm_read_register mtime in
+                       stm_exp (exp_vector_subrange 0 32 (exp_var "c"))
+    | Instret       => let: "c" := stm_read_register minstret in
+                       stm_exp (exp_vector_subrange 0 32 (exp_var "c"))
+    | Cycleh        => let: "c" := stm_read_register mcycle in
+                       stm_exp (exp_vector_subrange 32 32 (exp_var "c"))
+    | Timeh         => let: "c" := stm_read_register mtime in
+                       stm_exp (exp_vector_subrange 32 32 (exp_var "c"))
+    | Instreth      => let: "c" := stm_read_register minstret in
+                       stm_exp (exp_vector_subrange 32 32 (exp_var "c"))
+    end)%exp.
 
   Definition fun_writeCSR : Stm [csr ∷ ty_csridx; value ∷ ty_xlenbits] ty.unit :=
-    match: csr in csridx with
+    stm_match_enum csridx csr (fun K => match K with
     | MStatus => let: tmp := stm_mstatus_from_bits value in
                  stm_write_register mstatus tmp ;;
                  stm_val ty.unit tt
@@ -1596,7 +1788,37 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
                    let: "v" := call legalize_sie (exp_var "mie") (exp_var "mideleg") (exp_var "value") in
                    stm_write_register mie (exp_var "v") ;;
                    stm_val ty.unit tt
-    end.
+    | MCycle        => let: "c" := stm_read_register mcycle in
+                       stm_write_register mcycle (exp_update_vector_subrange 0%nat (exp_var "c") value) ;;
+                       stm_val ty.unit tt
+    | MInstret      => let: "c" := stm_read_register minstret in
+                       stm_write_register minstret (exp_update_vector_subrange 0%nat (exp_var "c") value) ;;
+                       stm_write_register minstret_written (exp_val ty.bool true) ;;
+                       stm_val ty.unit tt
+    | MCycleh       => let: "c" := stm_read_register mcycle in
+                       stm_write_register mcycle (exp_update_vector_subrange 32%nat (exp_var "c") value) ;;
+                       stm_val ty.unit tt
+    | MInstreth     => let: "c" := stm_read_register minstret in
+                       stm_write_register minstret (exp_update_vector_subrange 32%nat (exp_var "c") value) ;;
+                       stm_write_register minstret_written (exp_val ty.bool true) ;;
+                       stm_val ty.unit tt
+    | MCountinhibit => let: "c" := stm_read_register mcountinhibit in
+                       let: "c" := call legalize_mcountinhibit (exp_var "c") value in
+                       stm_write_register mcountinhibit (exp_var "c") ;;
+                       stm_val ty.unit tt
+    | MCounteren    => let: "c" := stm_read_register mcounteren in
+                       let: "c" := call legalize_mcounteren (exp_var "c") value in
+                       stm_write_register mcounteren (exp_var "c") ;;
+                       stm_val ty.unit tt
+    | SCounteren    => let: "c" := stm_read_register scounteren in
+                       let: "c" := call legalize_scounteren (exp_var "c") value in
+                       stm_write_register scounteren (exp_var "c") ;;
+                       stm_val ty.unit tt
+    (* NOTE: the remaining CSRs are readonly, so a write is a no-op.
+             The actual Sail code: *)
+    (* _ => ext_write_CSR(csr, value) *)
+    | _             => stm_val ty.unit tt
+    end)%exp.
 
   Definition fun_and_Minterrupts : Stm ["ints1" ∷ ty_Minterrupts; "ints2" ∷ ty_Minterrupts] ty_Minterrupts :=
     match: exp_var "ints1" in rminterrupts with
@@ -1948,7 +2170,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
                                else exp_unsigned rs1 != exp_val ty.int 0%Z
                     end in
     let: tmp1 := stm_read_register cur_privilege in
-    let: tmp2 := call check_CSR csr tmp1 in
+    let: tmp2 := call check_CSR csr tmp1 isWrite in
     if: tmp2 (* then and else branch switched, Sail model uses a not here *)
     then
       (use lemma open_pmp_entries ;;
@@ -2051,6 +2273,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     | init_pmp                => fun_init_pmp
     | loop                    => fun_loop
     | step                    => fun_step
+    | loop_body               => fun_loop_body
     | fetch                   => fun_fetch
     | handle_mem_exception    => fun_handle_mem_exception
     | exception_handler       => fun_exception_handler
@@ -2071,6 +2294,14 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     | csrAccess               => fun_csrAccess
     | csrPriv                 => fun_csrPriv
     | check_CSR_access        => fun_check_CSR_access
+    | check_Counteren         => fun_check_Counteren
+    | Counteren_to_bits       => fun_Counteren_to_bits
+    | Counterin_to_bits       => fun_Counterin_to_bits
+    | legalize_mcounteren     => fun_legalize_mcounteren
+    | legalize_scounteren     => fun_legalize_scounteren
+    | legalize_mcountinhibit  => fun_legalize_mcountinhibit
+    | retire_instruction      => fun_retire_instruction
+    | tick_clock              => fun_tick_clock
     | readCSR                 => fun_readCSR
     | writeCSR                => fun_writeCSR
     | getPendingSet           => fun_getPendingSet
@@ -2233,6 +2464,22 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     Proof. accessible_proof. Qed.
     Instance accessible_legalize_sie : AccessibleFun legalize_sie.
     Proof. accessible_proof. Qed.
+    Instance accessible_check_Counteren : AccessibleFun check_Counteren.
+    Proof. accessible_proof. Qed.
+    Instance accessible_Counteren_to_bits : AccessibleFun Counteren_to_bits.
+    Proof. accessible_proof. Qed.
+    Instance accessible_Counterin_to_bits : AccessibleFun Counterin_to_bits.
+    Proof. accessible_proof. Qed.
+    Instance accessible_legalize_mcounteren : AccessibleFun legalize_mcounteren.
+    Proof. accessible_proof. Qed.
+    Instance accessible_legalize_scounteren : AccessibleFun legalize_scounteren.
+    Proof. accessible_proof. Qed.
+    Instance accessible_legalize_mcountinhibit : AccessibleFun legalize_mcountinhibit.
+    Proof. accessible_proof. Qed.
+    Instance accessible_retire_instruction : AccessibleFun retire_instruction.
+    Proof. accessible_proof. Qed.
+    Instance accessible_tick_clock : AccessibleFun tick_clock.
+    Proof. accessible_proof. Qed.
     Instance accessible_is_CSR_defined : AccessibleFun is_CSR_defined.
     Proof. accessible_proof. Qed.
     Instance accessible_csrAccess : AccessibleFun csrAccess.
@@ -2292,6 +2539,8 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     Instance accessible_init_model : AccessibleFun init_model.
     Proof. accessible_proof. Qed.
     Instance accessible_step : AccessibleFun step.
+    Proof. accessible_proof. Qed.
+    Instance accessible_loop_body : AccessibleFun loop_body.
     Proof. accessible_proof. Qed.
   End WithAccessibleTactics.
 

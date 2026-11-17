@@ -127,7 +127,8 @@ Module UnaryCheck.
       mepc ↦ term_val ty_xlenbits (bv.of_N adv_addr) ∗
       cur_privilege ↦ term_val ty_privilege Machine ∗
       asn_regs_ptsto ∗
-      asn_pmp_entries term_pmp_cfg.
+      asn_pmp_entries term_pmp_cfg ∗
+      asn_counters.
 
     Definition POST : AssertionWith ["a" :: ty_xlenbits; "an" :: ty_xlenbits] :=
       (term_var "an" = term_val ty_xlenbits (bv.of_N adv_addr))%asn ∗
@@ -139,7 +140,8 @@ Module UnaryCheck.
       (∃ "v", mepc ↦ term_var "v") ∗
       cur_privilege ↦ term_val ty_privilege User ∗
       asn_regs_ptsto ∗
-      asn_pmp_entries term_pmp_cfg.
+      asn_pmp_entries term_pmp_cfg ∗
+      asn_counters.
   End WithAsnNotations.
 
   (* Definition vc_code : 𝕊 ε := *)
@@ -188,16 +190,16 @@ Module RunningExample.
     Definition iPOST `{sailGS Σ} (a an : Val ty_xlenbits) : iProp Σ :=
       asn.interpret POST [env].["a" :: ty_xlenbits ↦ a].["an" :: ty_xlenbits ↦ an].
 
-    Definition contract_step `{sailGS Σ} (a : Val ty_xlenbits) : iProp Σ :=
+    Definition contract_loop_body `{sailGS Σ} (a : Val ty_xlenbits) : iProp Σ :=
       semTripleBlock iPRE a code iPOST.
 
     Section WithIris.
       Import iris.program_logic.weakestpre.
       Import iris.proofmode.proofmode.
 
-      Lemma contract_step_verified : ∀ `{sailGS Σ} (a : Val ty_xlenbits), ⊢ contract_step a.
+      Lemma contract_loop_body_verified : ∀ `{sailGS Σ} (a : Val ty_xlenbits), ⊢ contract_loop_body a.
       Proof.
-        unfold contract_step.
+        unfold contract_loop_body.
         iIntros (Σ sg a).
         iApply sound_sblock_verification_condition.
         apply sat_code.
@@ -235,7 +237,7 @@ Module RunningExample.
          WP2_loop)%I.
     #[global] Arguments semTripleBlock2 {_ _} PRE%_I instrs POST%_I.
 
-    Definition contract_step2 `{sailGS2 Σ} : iProp Σ :=
+    Definition contract_loop_body2 `{sailGS2 Σ} : iProp Σ :=
       semTripleBlock2 iPRE2 code iPOST2.
 
     Section MoveToBinaryWeakestPre.
@@ -294,7 +296,7 @@ Module RunningExample.
 
     Lemma WP2_loop_split `{sg : sailGS2 Σ} : ∀ PRE POST,
       PRE -∗
-      (semTriple [env] PRE fun_step POST ∗ (∀ v1 δ1, POST v1 δ1 -∗ WP2_loop)) -∗
+      (semTriple [env] PRE fun_loop_body POST ∗ (∀ v1 δ1, POST v1 δ1 -∗ WP2_loop)) -∗
       WP2_loop.
     Proof.
       iIntros (PRE POST) "HPRE (Htrip & Hk)".
@@ -313,7 +315,7 @@ Module RunningExample.
     Qed.
 
     Lemma WP2_loop_split_n `{sg : sailGS2 Σ} : ∀ n POST,
-      (semWP2_n n [env] [env] fun_step fun_step POST ∗ (∀ v1 δ1 v2 δ2, POST v1 δ1 v2 δ2 -∗ WP2_loop)) -∗
+      (semWP2_n n [env] [env] fun_loop_body fun_loop_body POST ∗ (∀ v1 δ1 v2 δ2, POST v1 δ1 v2 δ2 -∗ WP2_loop)) -∗
       WP2_loop.
     Proof.
       iLöb as "IH".
@@ -335,7 +337,7 @@ Module RunningExample.
 
     Lemma WP2_loop_split_n' `{sg : sailGS2 Σ} : ∀ n PRE POST,
       PRE -∗
-      (semTriple_n n [env] PRE fun_step POST ∗ (∀ v1 δ1, POST v1 δ1 -∗ WP2_loop)) -∗
+      (semTriple_n n [env] PRE fun_loop_body POST ∗ (∀ v1 δ1, POST v1 δ1 -∗ WP2_loop)) -∗
       WP2_loop.
     Proof.
       iLöb as "IH".
@@ -357,9 +359,9 @@ Module RunningExample.
         + now iApply semWP2_fail.
     Abort.
 
-    Lemma contract_step2_verified : ∀ `{sailGS2 Σ}, ⊢ contract_step2.
+    Lemma contract_loop_body2_verified : ∀ `{sailGS2 Σ}, ⊢ contract_loop_body2.
     Proof.
-      unfold contract_step2.
+      unfold contract_loop_body2.
       iIntros (Σ sG a) "HPRE Hk".
       iApply (WP2_loop_split_n (length code)).
       iSplitR "Hk".

@@ -256,6 +256,14 @@ Module Type RiscvPmpIrisInstancePredicates2
     Definition interp_gprs (exclude : gset (Reg ty_xlenbits)) : iProp Σ :=
       [∗ set] r ∈ GPRS ∖ exclude, (∃ v, reg_pointsTo21 r v)%I.
 
+    (* Ownership of the counter registers, with arbitrary values (the
+       interpretation of asn_counters, see counters_equiv). *)
+    Definition interp_counters : iProp Σ :=
+      (∃ v, reg_pointsTo21 mcycle v) ∗ (∃ v, reg_pointsTo21 mtime v) ∗
+      (∃ v, reg_pointsTo21 minstret v) ∗ (∃ v, reg_pointsTo21 minstret_written v) ∗
+      (∃ v, reg_pointsTo21 mcounteren v) ∗ (∃ v, reg_pointsTo21 scounteren v) ∗
+      (∃ v, reg_pointsTo21 mcountinhibit v).
+
     Lemma interp_gprs_with_excluded_gen `{sailGS2 Σ} (exclude1 exclude2 : gset (Reg ty_xlenbits)) :
       exclude2 ⊆ GPRS ∖ exclude1 ->
       ([∗ set] r ∈ exclude2, ∃ v, reg_pointsTo21 r v) ∗ interp_gprs (exclude1 ∪ exclude2) ⊣⊢ interp_gprs exclude1.
@@ -500,6 +508,10 @@ Module Type RiscvPmpIrisInstance2
       now iApply ("IH" with "H").
   Qed.
 
+  Lemma counters_equiv `{sailGS2 Σ} : ∀ {Σ} (ι : Valuation Σ),
+      interp_counters ⊣⊢ asn.interpret asn_counters ι.
+  Proof. intros. reflexivity. Qed.
+
   Definition WP2_loop `{sailGS2 Σ} (R : iProp Σ) : iProp Σ :=
     semWP2 env.nil env.nil (FunDef loop) (FunDef loop) (λ v1 δ1 v2 δ2, ⌜v1 = v2⌝ ∗ ⌜δ1 = δ2⌝ ∗ R)%I.
 
@@ -526,7 +538,7 @@ Module Type RiscvPmpIrisInstance2
       (Q : Post2 [ctx] Γ2 ty.unit) :
       powered_left true -∗
       (powered_left true -∗ ∀ Γ (δ1 : CStore Γ),
-          semWP2 δ1 δ2 (call step ;; call loop)%exp s2 (λ v1 δ1' v2 δ2', Q v1 [env] v2 δ2')) -∗
+          semWP2 δ1 δ2 (call loop_body ;; call loop)%exp s2 (λ v1 δ1' v2 δ2', Q v1 [env] v2 δ2')) -∗
       semWP2 [env] δ2 (FunDef loop) s2 Q.
     Proof.
       iIntros "Hp H". rewrite /semWP2. iIntros (γ21 μ21) "Hres".
@@ -541,7 +553,7 @@ Module Type RiscvPmpIrisInstance2
       (Q : Post2 Γ1 [ctx] ty.unit) :
       powered_right true -∗
       (powered_right true -∗ ∀ Γ (δ2 : CStore Γ),
-          semWP2 δ1 δ2 s1 (call step ;; call loop)%exp (λ v1 δ1' v2 δ2', Q v1 δ1' v2 [env])) -∗
+          semWP2 δ1 δ2 s1 (call loop_body ;; call loop)%exp (λ v1 δ1' v2 δ2', Q v1 δ1' v2 [env])) -∗
       semWP2 δ1 [env] s1 (FunDef loop) Q.
     Proof.
       iIntros "Hp H". rewrite /semWP2. iIntros (γ21 μ21) "[Hregs Hmem]".
@@ -583,7 +595,7 @@ Module Type RiscvPmpIrisInstance2
       powered_left true -∗ powered_right true -∗
       (powered_left true -∗ powered_right true -∗
          ∀ Γ1 Γ2 (δ1 : CStore Γ1) (δ2 : CStore Γ2),
-           semWP2 δ1 δ2 (call step ;; call loop)%exp (call step ;; call loop)%exp
+           semWP2 δ1 δ2 (call loop_body ;; call loop)%exp (call loop_body ;; call loop)%exp
              (λ v1 δ1' v2 δ2', Q v1 [env] v2 [env])) -∗
       semWP2 [env] [env] (FunDef loop) (FunDef loop) Q.
     Proof.

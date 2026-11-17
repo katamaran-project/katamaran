@@ -328,6 +328,12 @@ Inductive CSRIdx : Set :=
 | MPMP0CFG
 | MPMPADDR0
 | MPMPADDR1
+| MCycle
+| MInstret
+| MCycleh
+| MInstreth
+| MCountinhibit
+| MCounteren
 (* S-mode CSRs *)
 | SStatus
 | STvec
@@ -336,6 +342,14 @@ Inductive CSRIdx : Set :=
 | SCause
 | Sip
 | Sie
+| SCounteren
+(* Unprivileged (read-only) counter CSRs *)
+| Cycle
+| Time
+| Instret
+| Cycleh
+| Timeh
+| Instreth
 .
 
 Definition NumPmpEntries := 2.
@@ -644,6 +658,19 @@ Record Sstatus : Set :=
     ; S_SIE  : bool
     }.
 
+Record Counteren : Set :=
+  MkCounteren
+    { CE_IR : bool
+    ; CE_TM : bool
+    ; CE_CY : bool
+    }.
+
+Record Counterin : Set :=
+  MkCounterin
+    { CI_IR : bool
+    ; CI_CY : bool
+    }.
+
 Inductive Records : Set :=
 | rpmpcfg_ent
 | rmstatus
@@ -651,6 +678,8 @@ Inductive Records : Set :=
 | rminterrupts
 | rsinterrupts
 | rmedeleg
+| rcounteren
+| rcounterin
 .
 
 Section TransparentObligations.
@@ -697,6 +726,8 @@ Section TransparentObligations.
   Derive NoConfusion for Minterrupts.
   Derive NoConfusion for Sinterrupts.
   Derive NoConfusion for RMedeleg.
+  Derive NoConfusion for Counteren.
+  Derive NoConfusion for Counterin.
   Derive NoConfusion for InterruptSet.
 End TransparentObligations.
 
@@ -742,6 +773,8 @@ Derive EqDec for Sstatus.
 Derive EqDec for Minterrupts.
 Derive EqDec for Sinterrupts.
 Derive EqDec for RMedeleg.
+Derive EqDec for Counteren.
+Derive EqDec for Counterin.
 Derive EqDec for InterruptSet.
 
 Section Finite.
@@ -754,7 +787,11 @@ Section Finite.
     {| enum := [User;Supervisor;Machine] |}.
 
   #[export,program] Instance CSRIdx_finite : Finite CSRIdx :=
-    {| enum := [MStatus;Mie;MTvec;MScratch;MEpc;MCause;MPMP0CFG;MPMPADDR0;MPMPADDR1;Mip;Medeleg;Mideleg;SStatus;STvec;SScratch;SEpc;SCause;Sip;Sie] |}.
+    {| enum := [MStatus;Mie;MTvec;MScratch;MEpc;MCause;Mip;Medeleg;Mideleg;
+                MPMP0CFG;MPMPADDR0;MPMPADDR1;
+                MCycle;MInstret;MCycleh;MInstreth;MCountinhibit;MCounteren;
+                SStatus;STvec;SScratch;SEpc;SCause;Sip;Sie;SCounteren;
+                Cycle;Time;Instret;Cycleh;Timeh;Instreth] |}.
 
   #[export,program] Instance EventTy_finite : Finite EventTy :=
     {| enum := [IOWrite; IORead; IOShutdown] |}.
@@ -912,6 +949,8 @@ Module Export RiscvPmpBase <: Base.
   Definition ty_Minterrupts                    := (ty.record rminterrupts).
   Definition ty_Sinterrupts                    := (ty.record rsinterrupts).
   Definition ty_Medeleg                        := (ty.record rmedeleg).
+  Definition ty_Counteren                      := (ty.record rcounteren).
+  Definition ty_Counterin                      := (ty.record rcounterin).
   Definition ty_pmpentry                       := (ty.prod ty_pmpcfg_ent ty_xlenbits).
   Definition ty_pmpentries                     := (ty.list (ty.prod ty_pmpcfg_ent ty_xlenbits)).
 
@@ -958,6 +997,8 @@ Module Export RiscvPmpBase <: Base.
     | rminterrupts => Minterrupts
     | rsinterrupts => Sinterrupts
     | rmedeleg     => RMedeleg
+    | rcounteren   => Counteren
+    | rcounterin   => Counterin
     end.
 
   #[export] Instance typedenotekit : TypeDenoteKit typedeclkit :=
@@ -1230,6 +1271,13 @@ Module Export RiscvPmpBase <: Base.
                   ; "Fetch_Access_Fault" ∷ ty.bool
                   ; "Fetch_Addr_Align"   ∷ ty.bool
                   ]
+    | rcounteren => [ "IR" ∷ ty.bool
+                    ; "TM" ∷ ty.bool
+                    ; "CY" ∷ ty.bool
+                    ]
+    | rcounterin => [ "IR" ∷ ty.bool
+                    ; "CY" ∷ ty.bool
+                    ]
     end.
 
   Equations record_fold (R : recordi) : NamedEnv Val (record_field_type R) -> recordt R :=
@@ -1239,7 +1287,9 @@ Module Export RiscvPmpBase <: Base.
   | rminterrupts | [mei;sei;uei;mti;sti;uti;msi;ssi;usi]%env := MkMinterrupts mei sei uei mti sti uti msi ssi usi
   | rsinterrupts | [sei;uei;sti;uti;ssi;usi]%env := MkSinterrupts sei uei sti uti ssi usi
   | rmedeleg     | [spf;lpf;fpf;mecall;secall;uecall;saf;saa;laf;laa;br;ii;faf;faa]%env :=
-                     MkRMedeleg spf lpf fpf mecall secall uecall saf saa laf laa br ii faf faa.
+                     MkRMedeleg spf lpf fpf mecall secall uecall saf saa laf laa br ii faf faa
+  | rcounteren   | [ir;tm;cy]%env := MkCounteren ir tm cy
+  | rcounterin   | [ir;cy]%env    := MkCounterin ir cy.
 
   Equations record_unfold (R : recordi) : recordt R -> NamedEnv Val (record_field_type R) :=
   | rpmpcfg_ent  | p := [kv (_ ∷ ty.bool             ; L p);
@@ -1287,6 +1337,13 @@ Module Export RiscvPmpBase <: Base.
                         ;   ("Illegal_Instr"      ∷ ty.bool; Illegal_Instr m)
                         ;   ("Fetch_Access_Fault" ∷ ty.bool; Fetch_Access_Fault m)
                         ;   ("Fetch_Addr_Align"   ∷ ty.bool; Fetch_Addr_Align m)
+                        ]
+    | rcounteren | c := [kv ("IR" ∷ ty.bool; CE_IR c)
+                        ;   ("TM" ∷ ty.bool; CE_TM c)
+                        ;   ("CY" ∷ ty.bool; CE_CY c)
+                        ]
+    | rcounterin | c := [kv ("IR" ∷ ty.bool; CI_IR c)
+                        ;   ("CY" ∷ ty.bool; CI_CY c)
                         ].
 
   #[export,refine] Instance typedefkit : TypeDefKit typedenotekit :=
@@ -1370,6 +1427,13 @@ Module Export RiscvPmpBase <: Base.
     | pmp1cfg       : Reg ty_pmpcfg_ent
     | pmpaddr0      : Reg ty_xlenbits
     | pmpaddr1      : Reg ty_xlenbits
+    | mcycle           : Reg (ty.bvec 64)
+    | mtime            : Reg (ty.bvec 64)
+    | minstret         : Reg (ty.bvec 64)
+    | minstret_written : Reg ty.bool
+    | mcounteren       : Reg ty_Counteren
+    | scounteren       : Reg ty_Counteren
+    | mcountinhibit    : Reg ty_Counterin
     .
 
     Import bv.notations.
@@ -1482,58 +1546,65 @@ Module Export RiscvPmpBase <: Base.
     #[export,refine] Instance 𝑹𝑬𝑮_eq_dec : EqDec (sigT Reg) :=
       fun '(existT σ x) '(existT τ y) =>
         match x , y with
-        | pc            , pc            => left eq_refl
-        | nextpc        , nextpc        => left eq_refl
-        | mstatus       , mstatus       => left eq_refl
-        | mie           , mie           => left eq_refl
-        | mip           , mip           => left eq_refl
-        | mideleg       , mideleg       => left eq_refl
-        | medeleg       , medeleg       => left eq_refl
-        | mtvec         , mtvec         => left eq_refl
-        | mscratch      , mscratch      => left eq_refl
-        | mepc          , mepc          => left eq_refl
-        | mcause        , mcause        => left eq_refl
-        | stvec         , stvec         => left eq_refl
-        | sscratch      , sscratch      => left eq_refl
-        | sepc          , sepc          => left eq_refl
-        | scause        , scause        => left eq_refl
-        | cur_privilege , cur_privilege => left eq_refl
-        | x1            , x1            => left eq_refl
-        | x2            , x2            => left eq_refl
-        | x3            , x3            => left eq_refl
-        | x4            , x4            => left eq_refl
-        | x5            , x5            => left eq_refl
-        | x6            , x6            => left eq_refl
-        | x7            , x7            => left eq_refl
-        | x8            , x8            => left eq_refl
-        | x9            , x9            => left eq_refl
-        | x10           , x10           => left eq_refl
-        | x11           , x11           => left eq_refl
-        | x12           , x12           => left eq_refl
-        | x13           , x13           => left eq_refl
-        | x14           , x14           => left eq_refl
-        | x15           , x15           => left eq_refl
-        | x16           , x16           => left eq_refl
-        | x17           , x17           => left eq_refl
-        | x18           , x18           => left eq_refl
-        | x19           , x19           => left eq_refl
-        | x20           , x20           => left eq_refl
-        | x21           , x21           => left eq_refl
-        | x22           , x22           => left eq_refl
-        | x23           , x23           => left eq_refl
-        | x24           , x24           => left eq_refl
-        | x25           , x25           => left eq_refl
-        | x26           , x26           => left eq_refl
-        | x27           , x27           => left eq_refl
-        | x28           , x28           => left eq_refl
-        | x29           , x29           => left eq_refl
-        | x30           , x30           => left eq_refl
-        | x31           , x31           => left eq_refl
-        | pmp0cfg       , pmp0cfg       => left eq_refl
-        | pmp1cfg       , pmp1cfg       => left eq_refl
-        | pmpaddr0      , pmpaddr0      => left eq_refl
-        | pmpaddr1      , pmpaddr1      => left eq_refl
-        | _             , _             => right _
+        | pc               , pc               => left eq_refl
+        | nextpc           , nextpc           => left eq_refl
+        | mstatus          , mstatus          => left eq_refl
+        | mie              , mie              => left eq_refl
+        | mip              , mip              => left eq_refl
+        | mideleg          , mideleg          => left eq_refl
+        | medeleg          , medeleg          => left eq_refl
+        | mtvec            , mtvec            => left eq_refl
+        | mscratch         , mscratch         => left eq_refl
+        | mepc             , mepc             => left eq_refl
+        | mcause           , mcause           => left eq_refl
+        | stvec            , stvec            => left eq_refl
+        | sscratch         , sscratch         => left eq_refl
+        | sepc             , sepc             => left eq_refl
+        | scause           , scause           => left eq_refl
+        | cur_privilege    , cur_privilege    => left eq_refl
+        | x1               , x1               => left eq_refl
+        | x2               , x2               => left eq_refl
+        | x3               , x3               => left eq_refl
+        | x4               , x4               => left eq_refl
+        | x5               , x5               => left eq_refl
+        | x6               , x6               => left eq_refl
+        | x7               , x7               => left eq_refl
+        | x8               , x8               => left eq_refl
+        | x9               , x9               => left eq_refl
+        | x10              , x10              => left eq_refl
+        | x11              , x11              => left eq_refl
+        | x12              , x12              => left eq_refl
+        | x13              , x13              => left eq_refl
+        | x14              , x14              => left eq_refl
+        | x15              , x15              => left eq_refl
+        | x16              , x16              => left eq_refl
+        | x17              , x17              => left eq_refl
+        | x18              , x18              => left eq_refl
+        | x19              , x19              => left eq_refl
+        | x20              , x20              => left eq_refl
+        | x21              , x21              => left eq_refl
+        | x22              , x22              => left eq_refl
+        | x23              , x23              => left eq_refl
+        | x24              , x24              => left eq_refl
+        | x25              , x25              => left eq_refl
+        | x26              , x26              => left eq_refl
+        | x27              , x27              => left eq_refl
+        | x28              , x28              => left eq_refl
+        | x29              , x29              => left eq_refl
+        | x30              , x30              => left eq_refl
+        | x31              , x31              => left eq_refl
+        | pmp0cfg          , pmp0cfg          => left eq_refl
+        | pmp1cfg          , pmp1cfg          => left eq_refl
+        | pmpaddr0         , pmpaddr0         => left eq_refl
+        | pmpaddr1         , pmpaddr1         => left eq_refl
+        | mcycle           , mcycle           => left eq_refl
+        | mtime            , mtime            => left eq_refl
+        | minstret         , minstret         => left eq_refl
+        | minstret_written , minstret_written => left eq_refl
+        | mcounteren       , mcounteren       => left eq_refl
+        | scounteren       , scounteren       => left eq_refl
+        | mcountinhibit    , mcountinhibit    => left eq_refl
+        | _                , _                => right _
         end.
     Proof. all: transparent_abstract (exact (fun H => noConfusion_inv (noConfusion_inv H))). Defined.
 
@@ -1600,7 +1671,14 @@ Module Export RiscvPmpBase <: Base.
           existT _ pmp0cfg;
           existT _ pmp1cfg;
           existT _ pmpaddr0;
-          existT _ pmpaddr1
+          existT _ pmpaddr1;
+          existT _ mcycle;
+          existT _ mtime;
+          existT _ minstret;
+          existT _ minstret_written;
+          existT _ mcounteren;
+          existT _ scounteren;
+          existT _ mcountinhibit
         ]%list
       |}.
 

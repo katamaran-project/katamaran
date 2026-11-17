@@ -96,10 +96,10 @@ Module RiscvPmpIrisBase <: IrisBase RiscvPmpBase RiscvPmpProgram RiscvPmpSemanti
   Import Katamaran.Environment.env.notations.
 
   (* One iteration of the main loop: first the power status is checked. If the
-     machine is powered on, it performs a step and continues, otherwise the
+     machine is powered on, it runs the loop body and continues, otherwise the
      loop ends. *)
   Lemma semWP_fun_loop `{sg : sailGS Σ} (Q : Post [ctx] ty.unit) :
-    ((∀ Γ (δ : CStore Γ), semWP δ (call RiscvPmpProgram.step ;; call RiscvPmpProgram.loop) (λ v _, Q v [env])) ∧
+    ((∀ Γ (δ : CStore Γ), semWP δ (call RiscvPmpProgram.loop_body ;; call RiscvPmpProgram.loop) (λ v _, Q v [env])) ∧
      Q (inl tt) [env])
     ⊢ semWP env.nil (FunDef loop) Q.
   Proof.
