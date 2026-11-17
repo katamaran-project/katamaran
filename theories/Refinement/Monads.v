@@ -98,7 +98,7 @@ Module Type RefinementMonadsOn
 
     #[export] Instance refine_compat_purespec_pure `{RA : Rel SA CA} {w} :
       RefineCompat (RA -> RPureSpec RA) CPureSpec.pure w (SPureSpec.pure (w := w)) _
-      := MkRefineCompat refine_pure.
+      := refine_pure.
 
     Lemma refine_bind `{RA : Rel SA CA, RB : Rel SB CB} {w} :
       ⊢ ℛ⟦RPureSpec RA -> □ᵣ(RA -> RPureSpec RB) -> RPureSpec RB⟧
@@ -118,7 +118,7 @@ Module Type RefinementMonadsOn
     #[export] Instance refine_compat_bind `{RA : Rel SA CA, RB : Rel SB CB} {w} :
       RefineCompat (RPureSpec RA -> □ᵣ(RA -> RPureSpec RB) -> RPureSpec RB)
         CPureSpec.bind w (SPureSpec.bind (w := w)) emp :=
-      MkRefineCompat refine_bind.
+      refine_bind.
 
     Lemma refine_block `{R : Rel AT A} {w} :
       ⊢ ℛ⟦RPureSpec R⟧ CPureSpec.block (@SPureSpec.block AT w).
@@ -126,7 +126,7 @@ Module Type RefinementMonadsOn
 
     #[export] Instance refine_compat_block`{R : Rel AT A} {w : World} :
       RefineCompat (RPureSpec R) CPureSpec.block w (SPureSpec.block (w := w)) _ :=
-      MkRefineCompat refine_block.
+      refine_block.
 
     Lemma refine_error `{RA : Rel AT A} {w} m :
       ⊢ ℛ⟦RMsg _ (RPureSpec RA)⟧ m (@SPureSpec.error _ w).
@@ -138,9 +138,9 @@ Module Type RefinementMonadsOn
 
     #[export] Program Instance refine_compat_error `{RA : Rel AT A} {w : World} {cm : CPureSpec A} {msg} :
       RefineCompat (RPureSpec RA) cm w (SPureSpec.error (w := w) msg) emp :=
-      MkRefineCompat _.
+      _.
     Next Obligation.
-      iIntros (AT A RA w cm msg) "_".
+      unfold RefineCompat. iIntros (AT A RA w cm msg) "_".
       now iApply refine_error.
     Qed.
 
@@ -161,7 +161,7 @@ Module Type RefinementMonadsOn
 
     #[export] Program Instance refine_compat_angelic (x : option LVar) {w : World} {σ}:
       RefineCompat (RPureSpec (RVal σ)) (CPureSpec.angelic σ) w (SPureSpec.angelic (w := w) x σ) emp :=
-      MkRefineCompat (refine_angelic _ _).
+      (refine_angelic _ _).
 
     Lemma refine_demonic (x : option LVar) σ {w} :
       ⊢ ℛ⟦RPureSpec (RVal σ)⟧ (CPureSpec.demonic σ) (SPureSpec.demonic (w := w) x σ).
@@ -179,7 +179,7 @@ Module Type RefinementMonadsOn
 
     #[export] Program Instance refine_compat_demonic (x : option LVar) {w : World} {σ}:
         RefineCompat (RPureSpec (RVal σ)) (CPureSpec.demonic σ) w (SPureSpec.demonic (w := w) x σ) emp :=
-        MkRefineCompat (refine_demonic _ _).
+        (refine_demonic _ _).
 
     Lemma refine_angelic_ctx {N : Set} {n : N -> LVar} {w} :
       ⊢ ℛ⟦∀ᵣ Δ, RPureSpec (RNEnv N Δ)⟧
@@ -193,7 +193,7 @@ Module Type RefinementMonadsOn
 
     #[export] Instance refine_compat_angelic_ctx {N : Set} {n : N -> LVar} {w} {Δ} :
       RefineCompat (RPureSpec (RNEnv N Δ)) (CPureSpec.angelic_ctx Δ) w (SPureSpec.angelic_ctx n (w := w) Δ) emp.
-    Proof. constructor. iIntros. iApply refine_angelic_ctx. Qed.
+    Proof. unfold RefineCompat. iIntros. iApply refine_angelic_ctx. Qed.
 
     Lemma refine_demonic_ctx {N : Set} {n : N -> LVar} {w} :
       ⊢ ℛ⟦∀ᵣ Δ : NCtx N Ty, RPureSpec (RNEnv N Δ)⟧
@@ -210,7 +210,7 @@ Module Type RefinementMonadsOn
 
     #[export] Instance refine_compat_demonic_ctx {N : Set} {n : N -> LVar} {w} {Δ}:
       RefineCompat (RPureSpec (RNEnv N Δ)) (CPureSpec.demonic_ctx Δ) w (SPureSpec.demonic_ctx n (w := w) Δ) emp.
-    Proof. constructor. iIntros. iApply refine_demonic_ctx. Qed.
+    Proof. unfold RefineCompat. iIntros. iApply refine_demonic_ctx. Qed.
 
     Lemma obligation_equiv {w : World} (msg : AMessage w) (fml : Formula w) :
       (Obligation msg fml : Pred w) ⊣⊢ instprop fml.
@@ -320,8 +320,8 @@ Module Type RefinementMonadsOn
     #[export, refine] Instance refine_compat_assert_pathcondition {w msg} :
       RefineCompat (RPathCondition -> RPureSpec RUnit)
         CPureSpec.assert_pathcondition w (SPureSpec.assert_pathcondition (w := w) msg) emp :=
-      MkRefineCompat _.
-    Proof. iIntros "_". now iApply (refine_assert_pathcondition $! msg). Qed.
+      _.
+    Proof. unfold RefineCompat. iIntros "_". now iApply (refine_assert_pathcondition $! msg). Qed.
 
     Lemma refine_assume_pathcondition {w} :
       ⊢ ℛ⟦RPathCondition -> RPureSpec RUnit⟧
@@ -377,7 +377,7 @@ Module Type RefinementMonadsOn
 
     #[export] Instance refine_compat_purespec_assert_formula {w msg} :
       RefineCompat (RFormula -> RPureSpec RUnit) CPureSpec.assert_formula w (SPureSpec.assert_formula (w := w) msg) _ :=
-      MkRefineCompat refine_assert_formula'.
+      refine_assert_formula'.
 
     Lemma refine_assume_formula {w} :
       ⊢ ℛ⟦RFormula -> RPureSpec RUnit⟧
@@ -392,7 +392,7 @@ Module Type RefinementMonadsOn
 
     #[export] Instance refine_compat_purespec_assume_formula {w} :
       RefineCompat (RFormula -> RPureSpec RUnit) CPureSpec.assume_formula w (SPureSpec.assume_formula (w := w)) _ :=
-      MkRefineCompat refine_assume_formula.
+      refine_assume_formula.
 
     Lemma refine_angelic_binary `{RA : Rel SA CA} {w} :
       ⊢ ℛ⟦RPureSpec RA -> RPureSpec RA -> RPureSpec RA⟧
@@ -407,7 +407,7 @@ Module Type RefinementMonadsOn
 
     #[export] Instance refine_compat_angelic_binary {AT A} `{R : Rel AT A} {w} :
       RefineCompat (RPureSpec R -> RPureSpec R -> RPureSpec R) CPureSpec.angelic_binary w (SPureSpec.angelic_binary (w := w)) _ :=
-      MkRefineCompat refine_angelic_binary.
+      refine_angelic_binary.
 
     Lemma refine_demonic_binary `{RA : Rel SA CA} {w} :
       ⊢ ℛ⟦RPureSpec RA -> RPureSpec RA -> RPureSpec RA⟧
@@ -422,7 +422,7 @@ Module Type RefinementMonadsOn
 
     #[export] Instance refine_compat_demonic_binary {AT A} `{R : Rel AT A} {w} :
       RefineCompat (RPureSpec R -> RPureSpec R -> RPureSpec R) CPureSpec.demonic_binary w (SPureSpec.demonic_binary (w := w)) _ :=
-      MkRefineCompat refine_demonic_binary.
+      refine_demonic_binary.
 
     Lemma refine_angelic_list' `{RA : Rel SA CA} {w} :
       ⊢ ℛ⟦RA -> RList RA -> RPureSpec RA⟧
@@ -758,7 +758,7 @@ Module Type RefinementMonadsOn
     #[export] Instance refine_compat_demonic_pattern_match {N : Set} (n : N -> LVar)
       {σ} (pat : Pattern (N:=N) σ) {w} :
       RefineCompat (RVal σ -> RPureSpec (RMatchResult pat)) (CPureSpec.demonic_pattern_match pat) w (SPureSpec.demonic_pattern_match n pat (w := w)) emp :=
-      MkRefineCompat (refine_demonic_pattern_match _ _).
+      (refine_demonic_pattern_match _ _).
 
     Lemma refine_new_pattern_match_regular {N : Set} n σ (pat : Pattern (N:=N) σ) {w} :
       ⊢ ℛ⟦RVal σ -> RPureSpec (RMatchResult pat)⟧
@@ -911,7 +911,7 @@ Module Type RefinementMonadsOn
 
     #[export] Instance refine_compat_debug `{R : Rel AT A} {w0 : World} {f} {mc ms} :
       RefineCompat (RPureSpec R) (CPureSpec.debug mc) w0 (@SPureSpec.debug AT w0 f ms) (ℛ⟦RPureSpec R⟧ mc ms).
-    Proof. constructor. iApply refine_debug. Qed.
+    Proof. unfold RefineCompat. iApply refine_debug. Qed.
 
     Lemma refine_assert_eq_nenv {N : Set} {w} :
       ⊢ ℛ⟦∀ᵣ Δ : NCtx N Ty, RMsg _ (RNEnv _ Δ -> RNEnv _ Δ -> RPureSpec RUnit)⟧
@@ -931,7 +931,7 @@ Module Type RefinementMonadsOn
 
     #[export] Instance refine_compat_assert_eq_nenv {N : Set} {w} {Δ : NCtx N Ty} {msg} :
       RefineCompat (RNEnv _ Δ -> RNEnv _ Δ -> RPureSpec RUnit) (CPureSpec.assert_eq_nenv (Δ := Δ)) w (SPureSpec.assert_eq_nenv (w := w) msg) emp.
-    Proof. constructor. iIntros. iApply refine_assert_eq_nenv. Qed.
+    Proof. unfold RefineCompat. iIntros. iApply refine_assert_eq_nenv. Qed.
 
     Lemma refine_assert_eq_env {w} :
       ⊢ ℛ⟦∀ᵣ Δ, RMsg _ (REnv Δ -> REnv Δ -> RPureSpec RUnit)⟧
@@ -1065,7 +1065,7 @@ Module Type RefinementMonadsOn
     #[export] Instance refine_compat_assert_eq_chunk {w msg} :
       RefineCompat (RChunk -> RChunk -> □ᵣ(RPureSpec RUnit))
         CPureSpec.assert_eq_chunk w (SPureSpec.assert_eq_chunk (w := w) msg) emp.
-    Proof. constructor. iIntros. iApply refine_assert_eq_chunk. Qed.
+    Proof. unfold RefineCompat. iIntros. iApply refine_assert_eq_chunk. Qed.
 
     Lemma refine_replay_aux {Σ} (s : 𝕊 Σ) {w} :
       ⊢ ℛ⟦RBox (RNEnv LVar Σ -> RPureSpec RUnit)⟧
@@ -1372,7 +1372,7 @@ Module Type RefinementMonadsOn
 
     #[export] Instance refine_compat_lift_purespec `{RA : Rel SA CA} {w} :
       RefineCompat (RPureSpec RA -> RHeapSpec RA) CHeapSpec.lift_purespec w (SHeapSpec.lift_purespec (w := w)) _ :=
-      MkRefineCompat refine_lift_purespec.
+      refine_lift_purespec.
 
     Lemma refine_pure `{RA : Rel SA CA} {w} :
       ⊢ ℛ⟦RA -> RHeapSpec RA⟧ CHeapSpec.pure (SHeapSpec.pure (w := w)).
@@ -1383,7 +1383,7 @@ Module Type RefinementMonadsOn
 
     #[export] Instance refine_compat_heapspec_pure `{R : Rel AT A} {w} :
       RefineCompat (R -> RHeapSpec R) CHeapSpec.pure w (SHeapSpec.pure (w := w)) _ :=
-      MkRefineCompat (HeapSpec.refine_pure (RA := R)).
+      (HeapSpec.refine_pure (RA := R)).
 
     Lemma refine_bind `{RA : Rel SA CA, RB : Rel SB CB} {w} :
       ⊢ ℛ⟦RHeapSpec RA -> □ᵣ(RA -> RHeapSpec RB) -> RHeapSpec RB⟧
@@ -1399,7 +1399,7 @@ Module Type RefinementMonadsOn
     #[export] Instance refine_compat_heapspec_bind `{RA : Rel AT A} `{RB : Rel BT B} {w} :
       RefineCompat (RHeapSpec RA -> (□ᵣ (RA -> RHeapSpec RB)) -> RHeapSpec RB)
         CHeapSpec.bind w (SHeapSpec.bind (w := w)) _ | (RefineCompat _ _ _ SHeapSpec.bind _) :=
-      MkRefineCompat HeapSpec.refine_bind.
+      HeapSpec.refine_bind.
 
     Lemma refine_error `{RA : Rel SA CA} cm {w} :
       ⊢ ℛ⟦RMsg _ (RHeapSpec RA)⟧ cm (SHeapSpec.error (w := w)).
@@ -1410,9 +1410,9 @@ Module Type RefinementMonadsOn
 
     #[export] Program Instance refine_compat_error `{RA : Rel AT A} {w : World} {cm : CHeapSpec A} {msg} :
       RefineCompat (RHeapSpec RA) cm w (SHeapSpec.error (w := w) msg) emp :=
-      MkRefineCompat _.
+      _.
     Next Obligation.
-      iIntros (AT A RA w cm msg) "_".
+      unfold RefineCompat. iIntros (AT A RA w cm msg) "_".
       iApply refine_error.
     Qed.
 
@@ -1427,7 +1427,7 @@ Module Type RefinementMonadsOn
 
     #[export] Instance refine_compat_heapspec_angelic (x : option LVar) σ {w : World}:
       RefineCompat (RHeapSpec (RVal σ)) (CHeapSpec.angelic σ) w (SHeapSpec.angelic (w := w) x σ) emp :=
-      MkRefineCompat (HeapSpec.refine_angelic x σ).
+      (HeapSpec.refine_angelic x σ).
 
     Lemma refine_demonic x σ {w} :
       ⊢ ℛ⟦RHeapSpec (RVal σ)⟧
@@ -1440,7 +1440,7 @@ Module Type RefinementMonadsOn
 
     #[export] Instance refine_compat_heapspec_demonic (x : option LVar) σ {w : World} :
       RefineCompat (RHeapSpec (RVal σ)) (CHeapSpec.demonic σ) w (SHeapSpec.demonic (w := w) x σ) emp :=
-      MkRefineCompat (HeapSpec.refine_demonic x σ).
+      (HeapSpec.refine_demonic x σ).
 
     Lemma refine_angelic_ctx {N : Set} {n : N -> LVar} Δ {w} :
       ⊢ ℛ⟦RHeapSpec (RNEnv N Δ)⟧
@@ -1453,7 +1453,7 @@ Module Type RefinementMonadsOn
 
     #[export] Instance refine_compat_heapspec_angelic_ctx {N : Set} (n : N -> LVar) {w : World} Δ :
       RefineCompat (RHeapSpec (RNEnv N Δ)) (CHeapSpec.angelic_ctx Δ) w (SHeapSpec.angelic_ctx (w := w) n Δ) emp :=
-      MkRefineCompat (HeapSpec.refine_angelic_ctx Δ).
+      (HeapSpec.refine_angelic_ctx Δ).
 
     Lemma refine_demonic_ctx {N : Set} {n : N -> LVar} Δ {w} :
       ⊢ ℛ⟦RHeapSpec (RNEnv N Δ)⟧
@@ -1466,7 +1466,7 @@ Module Type RefinementMonadsOn
 
     #[export] Instance refine_compat_heapspec_demonic_ctx {N : Set} (n : N -> LVar) {w : World} Δ :
       RefineCompat (RHeapSpec (RNEnv N Δ)) (CHeapSpec.demonic_ctx Δ) w (SHeapSpec.demonic_ctx (w := w) n Δ) emp :=
-      MkRefineCompat (HeapSpec.refine_demonic_ctx Δ).
+      (HeapSpec.refine_demonic_ctx Δ).
 
     Lemma refine_angelic_binary `{RA : Rel SA CA} {w} :
       ⊢ ℛ⟦RHeapSpec RA -> RHeapSpec RA -> RHeapSpec RA⟧
@@ -1481,7 +1481,7 @@ Module Type RefinementMonadsOn
 
     #[export] Instance refine_compat_angelic_binary `{RA : Rel SA CA} {w} :
       RefineCompat (RHeapSpec RA -> RHeapSpec RA -> RHeapSpec RA) CHeapSpec.angelic_binary w (SHeapSpec.angelic_binary (w := w)) _ :=
-      MkRefineCompat refine_angelic_binary.
+      refine_angelic_binary.
     
     Lemma refine_demonic_binary `{RA : Rel SA CA} {w} :
       ⊢ ℛ⟦RHeapSpec RA -> RHeapSpec RA -> RHeapSpec RA⟧
@@ -1496,7 +1496,7 @@ Module Type RefinementMonadsOn
 
     #[export] Instance refine_compat_demonic_binary `{RA : Rel SA CA} {w} :
       RefineCompat (RHeapSpec RA -> RHeapSpec RA -> RHeapSpec RA) CHeapSpec.demonic_binary w (SHeapSpec.demonic_binary (w := w)) _ :=
-      MkRefineCompat refine_demonic_binary.
+      refine_demonic_binary.
     
     Lemma refine_debug `{RA : Rel SA CA} {w} :
       ⊢ ℛ⟦RMsg _ (RHeapSpec RA -> RHeapSpec RA)⟧
@@ -1510,7 +1510,7 @@ Module Type RefinementMonadsOn
 
     #[export] Instance refine_compat_debug `{RA : Rel SA CA} {w msg} :
       RefineCompat (RHeapSpec RA -> RHeapSpec RA) CHeapSpec.debug w (SHeapSpec.debug (w := w) msg) emp.
-      Proof. constructor. iIntros. iApply refine_debug. Qed.
+      Proof. unfold RefineCompat. iIntros. iApply refine_debug. Qed.
 
     Lemma refine_assert_formula {w} :
       ⊢ ℛ⟦RMsg _ (RFormula -> RHeapSpec RUnit)⟧
@@ -1526,7 +1526,7 @@ Module Type RefinementMonadsOn
 
     #[export] Instance refine_compat_heapspec_assert_formula {w msg} :
       RefineCompat (RFormula -> RHeapSpec RUnit) CHeapSpec.assert_formula w (SHeapSpec.assert_formula (w := w) msg) emp.
-    Proof. constructor. iIntros. iApply HeapSpec.refine_assert_formula. Qed.
+    Proof. unfold RefineCompat. iIntros. iApply HeapSpec.refine_assert_formula. Qed.
 
     Lemma refine_assume_formula {w} :
       ⊢ ℛ⟦RFormula -> RHeapSpec RUnit⟧
@@ -1540,7 +1540,7 @@ Module Type RefinementMonadsOn
 
     #[export] Instance refine_compat_heapspec_assume_formula {w} :
       RefineCompat (RFormula -> RHeapSpec RUnit) CHeapSpec.assume_formula w (SHeapSpec.assume_formula (w := w)) _ :=
-      MkRefineCompat HeapSpec.refine_assume_formula.
+      HeapSpec.refine_assume_formula.
 
     Lemma refine_produce_chunk {w} :
       ⊢ ℛ⟦RChunk -> RHeapSpec RUnit⟧
@@ -1555,7 +1555,7 @@ Module Type RefinementMonadsOn
 
     #[export] Instance refine_compat_heapspec_produce_chunk {w} :
       RefineCompat (RChunk -> RHeapSpec RUnit) CHeapSpec.produce_chunk w (SHeapSpec.produce_chunk (w := w)) _ :=
-      MkRefineCompat HeapSpec.refine_produce_chunk.
+      HeapSpec.refine_produce_chunk.
 
     Lemma refine_consume_chunk {w} :
       ⊢ ℛ⟦RChunk -> RHeapSpec RUnit⟧
@@ -1570,7 +1570,7 @@ Module Type RefinementMonadsOn
 
     #[export] Instance refine_compat_heapspec_consume_chunk {w} :
       RefineCompat (RChunk -> RHeapSpec RUnit) CHeapSpec.consume_chunk w (SHeapSpec.consume_chunk (w := w)) _ :=
-      MkRefineCompat HeapSpec.refine_consume_chunk.
+      HeapSpec.refine_consume_chunk.
 
     Lemma refine_consume_chunk_angelic {w} :
       ⊢ ℛ⟦RChunk -> RHeapSpec RUnit⟧
@@ -1585,7 +1585,7 @@ Module Type RefinementMonadsOn
 
     #[export] Instance refine_compat_heapspec_consume_chunk_angelic {w} :
       RefineCompat (RChunk -> RHeapSpec RUnit) CHeapSpec.consume_chunk w (SHeapSpec.consume_chunk_angelic (w := w)) _ :=
-      MkRefineCompat HeapSpec.refine_consume_chunk_angelic.
+      HeapSpec.refine_consume_chunk_angelic.
 
     Lemma refine_produce {Σ} (asn : Assertion Σ) :
       ∀ w, ⊢ ℛ⟦RInst (Sub Σ) (Valuation Σ) -> RHeapSpec RUnit⟧
@@ -1606,7 +1606,7 @@ Module Type RefinementMonadsOn
 
     #[export] Instance refine_compat_heapspec_produce {Σ} (asn : Assertion Σ) {w} :
       RefineCompat (RNEnv LVar Σ -> RHeapSpec RUnit) (CHeapSpec.produce asn) w (SHeapSpec.produce asn (w := w)) _ :=
-      MkRefineCompat (HeapSpec.refine_produce asn w).
+      (HeapSpec.refine_produce asn w).
 
     Lemma refine_consume {Σ} (asn : Assertion Σ) :
       ∀ w, ⊢ ℛ⟦RInst (Sub Σ) (Valuation Σ) -> RHeapSpec RUnit⟧
@@ -1628,7 +1628,7 @@ Module Type RefinementMonadsOn
 
     #[export] Instance refine_compat_heapspec_consume {Σ} (asn : Assertion Σ) {w} :
       RefineCompat (RNEnv LVar Σ -> RHeapSpec RUnit) (CHeapSpec.consume asn) w (SHeapSpec.consume asn (w := w)) _ :=
-      MkRefineCompat (HeapSpec.refine_consume asn w).
+      (HeapSpec.refine_consume asn w).
 
     Lemma refine_read_register {τ} (reg : 𝑹𝑬𝑮 τ) {w} :
       ⊢ ℛ⟦RHeapSpec (RVal τ)⟧ (CHeapSpec.read_register reg) (SHeapSpec.read_register reg (w := w)).
@@ -1645,7 +1645,7 @@ Module Type RefinementMonadsOn
 
     #[export] Instance refine_compat_heapspec_read_register {τ} (r : 𝑹𝑬𝑮 τ) {w} :
       RefineCompat (RHeapSpec (RVal τ)) (CHeapSpec.read_register r) w (SHeapSpec.read_register r (w := w)) _ :=
-      MkRefineCompat (HeapSpec.refine_read_register r).
+      (HeapSpec.refine_read_register r).
 
     Lemma refine_write_register {τ} (reg : 𝑹𝑬𝑮 τ) {w} :
       ⊢ ℛ⟦RVal τ -> RHeapSpec (RVal τ)⟧ (CHeapSpec.write_register reg) (SHeapSpec.write_register reg (w := w)).
@@ -1662,7 +1662,7 @@ Module Type RefinementMonadsOn
 
     #[export] Instance refine_compat_heapspec_write_register {τ} (r : 𝑹𝑬𝑮 τ) {w} :
       RefineCompat (RVal τ -> RHeapSpec (RVal τ)) (CHeapSpec.write_register r) w (SHeapSpec.write_register r (w := w)) _ :=
-      MkRefineCompat (HeapSpec.refine_write_register r).
+      (HeapSpec.refine_write_register r).
 
     Import PureSpec.
     Lemma refine_call_contract {Δ τ} (c : SepContract Δ τ) {w} :
@@ -1677,7 +1677,7 @@ Module Type RefinementMonadsOn
     #[export] Instance refine_compat_call_contract {Δ τ} (c : SepContract Δ τ) {w} :
       RefineCompat (RInst (SStore Δ) (CStore Δ) -> RHeapSpec (RVal τ))
         (CHeapSpec.call_contract c) w (SHeapSpec.call_contract c (w := w)) _ :=
-      MkRefineCompat (refine_call_contract _).
+      (refine_call_contract _).
 
     Lemma refine_call_lemma {Δ} (lem : Lemma Δ) w :
       ⊢ ℛ⟦RInst (SStore Δ) (CStore Δ) -> RHeapSpec RUnit⟧
@@ -1690,7 +1690,7 @@ Module Type RefinementMonadsOn
     #[export] Instance refine_compat_call_lemma {Δ} (lem : Lemma Δ) w :
       RefineCompat (RInst (SStore Δ) (CStore Δ) -> RHeapSpec RUnit)
           (CHeapSpec.call_lemma lem) w (SHeapSpec.call_lemma lem (w := w)) _ :=
-      MkRefineCompat (refine_call_lemma _ _).
+      (refine_call_lemma _ _).
   End HeapSpec.
 
 End RefinementMonadsOn.

@@ -254,7 +254,7 @@ Section BlockVerificationDerived.
     #[export] Instance refine_compat_exec_instruction {i : AST} {w} :
       RefineCompat (RVal ty_xlenbits -> RHeapSpec (RVal ty_xlenbits))
         (cexec_instruction i) w (sexec_instruction (w := w) i) _ :=
-      MkRefineCompat (rexec_instruction i).
+      (rexec_instruction i).
 
     Lemma rexec_block_addr (b : list AST) {w} :
       ⊢ ℛ⟦RVal ty_xlenbits -> RVal ty_xlenbits -> RHeapSpec (RVal ty_xlenbits)⟧
