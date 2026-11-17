@@ -1375,6 +1375,88 @@ Module Type UnifLogicOn
             format "'[  ' '[  ' ∀ᵣ  x  ..  y ']' ,  '/' R ']'")
           : rel_scope.
     End notations.
+
+    (* Instance classes for the logical relation.
+
+       To prove a goal [ℛ⟦R⟧ v vs] automatically, we need to find lemmas about
+       the terms [v] and [vs]. As with [Proper] in generalized rewriting, these
+       lemmas are type class instances indexed by the related terms, so that
+       instance search finds them. There are two classes: [Related] for
+       statements without premises, and [RelatedFrom] for rules with a
+       premise.
+
+       [Related R v w vs] states [⊢ ℛ⟦R⟧ v vs]: the concrete [v] and the
+       symbolic [vs] in world [w] are related by [R], unconditionally. It is
+       the heterogeneous analogue of [Proper R m], which states [R m m].
+       Typical instances relate a concrete operation to its symbolic
+       counterpart at a function relation, for example
+
+         Related (RPureSpec RA -> □ᵣ(RA -> RPureSpec RB) -> RPureSpec RB)
+           CPureSpec.bind w SPureSpec.bind.
+
+       The solver applies such an instance to related arguments one at a time,
+       so [v] and [vs] are usually unapplied symbols, or
+       symbols applied only to parameters that are not related themselves:
+       types, messages, patterns, variable names. Parameters that only occur
+       on one side are best kept outside the relation, as in
+       [Related (RPathCondition -> RPureSpec RUnit) CPureSpec.assert_pathcondition
+       w (SPureSpec.assert_pathcondition (w := w) msg)].
+
+       The class is a singleton class, i.e. a definition rather than a record.
+       A lemma stated as [Related R v w vs] is therefore its own instance, and
+       it is still an ordinary proof of [⊢ ℛ⟦R⟧ v vs]. Induction hypotheses
+       and section variables of a [Related] type are found as local instances,
+       so a solver can use them without a [pose proof].
+
+       Mode: [v], [w] and [vs] are inputs, so instance search never guesses
+       the related terms, and so is [A], the type of [v]. The relation [R]
+       and the symbolic type [AT] are outputs. The solver looks up [f] versus
+       [fs] in [f a] versus [fs sa] at [?RA -> R], where [?RA : Rel ?SA ?CA]
+       is still unknown. [?CA] is solved by first-order unification with the
+       type of [f]. [?SA : TYPE] only occurs applied to the world, and
+       unification does not invert [?SA w ≡ Env (λ xt, Term w (type xt)) Δ].
+       So [?SA], and with it [AT = Impl ?SA SB], is left for the instance
+       to fix. *)
+    #[mode="- + - + + +"]
+    Class Related `(R : Rel AT A) (v : A) w (vs : AT w) :=
+      related_lemma : ⊢ ℛ⟦ R ⟧ v vs.
+    #[global] Arguments related_lemma {AT A R v w vs} rsi : rename.
+    #[global] Arguments Related {AT A} R v w vs : simpl never.
+    (* [Related R v w vs] unfolds to [⊢ ℛ⟦R⟧ v vs], but the proof mode does not
+       see through the class. This instance tells it that the statement is an
+       entailment, so [iIntros] can start on a [Related] goal and [iApply]
+       accepts a [Related] lemma. [iApply] then also solves the lemma's own
+       [Related] premises by instance search. *)
+    #[export] Instance as_emp_valid_related `{R : Rel AT A} {v w vs} d :
+      iris.proofmode.classes.AsEmpValid0 d (Related R v w vs) (ℛ⟦ R ⟧ v vs) :=
+      iris.proofmode.class_instances.as_emp_valid_emp_valid d _.
+
+    (* [RelatedFrom R v w vs Ob] is a rule [Ob ⊢ ℛ⟦R⟧ v vs]. The solver applies
+       it to a goal [ℛ⟦R⟧ v vs] and continues with the premise [Ob], an output
+       of the search. Rules handle pairs whose two sides do not have the same
+       shape, so that the arguments cannot be related in parallel:
+       - an operation on one side only: [peval t] versus [v], or [debug];
+       - different representations of the same value: [formula_bool sv]
+         versus [v = true], [sub_snoc] versus [env.snoc];
+       - transport to a later world: [persist t ω], whose premise is
+         [forgetting ω (ℛ⟦R⟧ v t)];
+       - side conditions: the premise of [block] contains a pure [⌜P⌝].
+       The premise is typically a separating conjunction of relational goals
+       and pure facts, which the solver splits and proves in turn.
+
+       If both sides are applications of related functions to related
+       arguments, state a [Related] instance for the functions instead. The
+       shape of a rule is that of the [From*] classes of the Iris proof mode:
+       [FromSep P Q1 Q2 : Q1 ∗ Q2 ⊢ P] has the input [P] and the outputs [Q1]
+       and [Q2].
+
+       Like [Related], this class is a singleton class, so a lemma
+       [Ob ⊢ ℛ⟦R⟧ v vs] is an instance as it is. *)
+    #[mode="- + - + + + -"]
+    Class RelatedFrom `(R : Rel AT A) (v : A)  w (vs : AT w) (Ob : Pred w) :=
+      related_from_lemma : Ob ⊢ ℛ⟦ R ⟧ v vs.
+    #[global] Arguments related_from_lemma {AT A R v w vs Ob} rci : rename.
+    #[global] Arguments RelatedFrom {AT A} R v w vs Ob%_I : simpl never.
   End logicalrelation.
 
   Section ModalRel.
@@ -1396,28 +1478,27 @@ Module Type UnifLogicOn
   Module RSolve.
     Import logicalrelation logicalrelation.notations iris.bi.interface notations ModalNotations iris.proofmode.proofmode iris.proofmode.environments.
 
-    Class RefineCompat `(R : Rel AT A) (v : A)  w (vs : AT w) (Ob : Pred w) :=
-      refine_compat_lemma : Ob ⊢ ℛ⟦ R ⟧ v vs.
-    #[export] Hint Mode RefineCompat - + - + + + - : typeclass_instances.
-    #[global] Arguments refine_compat_lemma {AT A R v w vs Ob} rci : rename.
-    #[global] Arguments RefineCompat {AT A} R v w vs Ob%_I.
+    (* [rsolve] looks up rules, and finds the [Related] instances as rules
+       without premise. *)
+    #[export] Instance related_from_related `{R : Rel AT A} {v w vs} :
+      Related R v w vs → RelatedFrom R v w vs emp | 0 := id.
 
     Lemma refine_compat_impl `{RA : Rel AT A} `{RB : Rel BT B} {f v w fs vs} {Pf}
-      (compatf : RefineCompat (RA -> RB) f w fs Pf) : RefineCompat RB (f v) w (fs vs) (Pf ∗ RSat RA v vs).
+      (compatf : RelatedFrom (RA -> RB) f w fs Pf) : RelatedFrom RB (f v) w (fs vs) (Pf ∗ RSat RA v vs).
     Proof.
-      unfold RefineCompat. iIntros "[Hcf Hv]".
-      now iApply (refine_compat_lemma compatf with "Hcf").
+      unfold RelatedFrom. iIntros "[Hcf Hv]".
+      now iApply (related_from_lemma compatf with "Hcf").
     Qed.
 
     (* Outside section because Coq doesn't allow to put it inside (?) *)
     (* The Hint Resolve used "simple apply", which wasn't instantiating evars sufficiently strongly. Hint Extern with eapply works better. *)
-    #[export] Hint Extern 1 (RefineCompat ?RB (?f ?v) ?w (?fs ?vs) _) => eapply (refine_compat_impl (RB := RB) (fs := fs) (vs := vs) (f := f) (v := v) (w := w)) : typeclass_instances.
+    #[export] Hint Extern 1 (RelatedFrom ?RB (?f ?v) ?w (?fs ?vs) _) => eapply (refine_compat_impl (RB := RB) (fs := fs) (vs := vs) (f := f) (v := v) (w := w)) : typeclass_instances.
 
     #[export] Instance refine_compat_forall {𝑲} {AT : forall K : 𝑲, TYPE} {A : forall K : 𝑲, Type} (RA : forall K, Rel (AT K) (A K)) {f w fs k P}
-      (compatf : RefineCompat (RForall RA) f w fs P) : RefineCompat (RA k) (f k) w (fs k) P.
+      (compatf : RelatedFrom (RForall RA) f w fs P) : RelatedFrom (RA k) (f k) w (fs k) P.
     Proof.
-      unfold RefineCompat. iIntros "Hcf".
-      now iApply (refine_compat_lemma compatf with "Hcf").
+      unfold RelatedFrom. iIntros "Hcf".
+      now iApply (related_from_lemma compatf with "Hcf").
     Qed.
 
     Ltac rsolve_step :=
@@ -1429,8 +1510,8 @@ Module Type UnifLogicOn
            end)
         | lazymatch goal with
           | |- envs_entails _ (ℛ⟦ ?R ⟧ ?v ?vs) =>
-              (iApply (refine_compat_lemma (R := R) (vs := vs));
-               lazymatch goal with | |- RefineCompat _ _ _ _ _ => fail | _ => idtac end
+              (iApply (related_from_lemma (R := R) (vs := vs));
+               lazymatch goal with | |- RelatedFrom _ _ _ _ _ => fail | _ => idtac end
               )
           | |- envs_entails _ (_ ∗ _) => iSplit
           | |- envs_entails _ (unconditionally _) => iIntros (? ?) "!>"
@@ -1459,12 +1540,12 @@ Module Type UnifLogicOn
     #[global] Arguments refine_compat_gen_lemma {w} P%_I {Ob} withbase rcg : rename.
 
     #[export] Program Instance refine_compat_gen_step `(R : Rel AT A) (v : A) (w : World) (vs : AT w) Ob1 Ob2 b
-      (rc : RefineCompat R v w vs Ob1)
+      (rc : RelatedFrom R v w vs Ob1)
       (iter : RefineCompatGen Ob1 Ob2 b) :
       RefineCompatGen (ℛ⟦ R ⟧ v vs) Ob2 b := MkRefineCompatGen Ob2 _.
     Next Obligation.
       iIntros (AT A R v w vs Ob1 Ob2 b rc iter) "H".
-      iApply (refine_compat_lemma with "[H]").
+      iApply (related_from_lemma with "[H]").
       now iApply (refine_compat_gen_lemma with "[H]").
     Qed.
 
@@ -1548,7 +1629,7 @@ Module Type UnifLogicOn
     Proof. iIntros "Hargs". now iExists eq_refl. Qed.
 
     #[export] Instance refine_compat_RMatchResult_existT_eq {N σ} {p : Pattern (N:=N) σ} {w} {pc args1 args2} :
-      RefineCompat (RMatchResult p) (existT pc args1) w (existT pc args2) _ :=
+      RelatedFrom (RMatchResult p) (existT pc args1) w (existT pc args2) _ :=
       refine_RMatchResult_existT_eq.
 
     Lemma refine_term_val {w τ v} : ⊢ (ℛ⟦RVal τ⟧ v (term_val τ v) : Pred w).
@@ -1573,40 +1654,29 @@ Module Type UnifLogicOn
       ℛ⟦ RProd RA RB ⟧ (v1, v2) (sv1 , sv2) ⊣⊢ ℛ⟦ RA ⟧ v1 sv1 ∗ ℛ⟦ RB ⟧ v2 sv2.
     Proof. now crushPredEntails3. Qed.
 
-    Lemma refine_pair {AT A} {RA : Rel AT A} {BT B} {RB : Rel BT B} {w} :
-      ⊢ ℛ⟦ RA -> RB -> RProd RA RB ⟧ pair (@pair (AT w) (BT w)).
+    #[export] Instance refine_pair {AT A} {RA : Rel AT A} {BT B} {RB : Rel BT B} {w} :
+      Related (RA -> RB -> RProd RA RB) pair w (@pair (AT w) (BT w)).
     Proof.
+      unfold Related.
       crushPredEntails3.
       now constructor.
     Qed.
 
-    #[export] Instance refine_compat_pair {AT A} {RA : Rel AT A} {BT B} {RB : Rel BT B} {w} :
-      RefineCompat (RA -> RB -> RProd RA RB) pair w (@pair (AT w) (BT w)) emp :=
-      refine_pair.
-
-    Lemma refine_RHeap_nil {w} :
-      ⊢ ℛ⟦ RHeap ⟧ nil (nil : SHeap (wctx w)).
+    #[export] Instance refine_RHeap_nil {w} :
+      Related RHeap nil w (nil : SHeap (wctx w)).
     Proof.
       iApply repₚ_triv.
       now intros.
     Qed.
     Hint Resolve refine_RHeap_nil : core.
 
-    #[export] Instance refine_compat_RHeap_nil {w} :
-      RefineCompat RHeap nil w (nil : SHeap (wctx w)) emp :=
-      refine_RHeap_nil.
-
-    Lemma refine_RHeap_cons {w} :
-      ⊢ ℛ⟦ RChunk -> RHeap -> RHeap ⟧ cons (@cons (Chunk (wctx w))).
+    #[export] Instance refine_RHeap_cons {w} :
+      Related (RChunk -> RHeap -> RHeap) cons w (@cons (Chunk (wctx w))).
     Proof.
       iIntros (c1 c2) "Rc %h1 %h2 Rh".
       iApply ((repₚ_cong₂ (T2 := fun Σ => list (Chunk Σ)) (T3 := fun Σ => list (Chunk Σ)) cons cons) with "[$Rc $Rh]").
       now intros.
     Qed.
-
-    #[export] Instance refine_compat_RHeap_cons {w} :
-      RefineCompat (RChunk -> RHeap -> RHeap) cons w (@cons (Chunk (wctx w))) emp :=
-      refine_RHeap_cons.
 
     Lemma refine_nil {AT A} {R : Rel AT A} {w} :
       ⊢ ℛ⟦ RList R ⟧ nil (nil : list (AT w)).
@@ -1617,19 +1687,16 @@ Module Type UnifLogicOn
     Hint Resolve refine_nil : core.
 
     Definition refine_compat_nil {AT A} {R : Rel AT A} {w} :
-      RefineCompat (RList R) nil w (nil : list (AT w)) emp :=
+      RelatedFrom (RList R) nil w (nil : list (AT w)) emp :=
       refine_nil.
 
-    Lemma refine_cons {AT A} {R : Rel AT A} {w} :
-      ⊢ ℛ⟦ R -> RList R -> RList R ⟧ cons (@cons (AT w)).
+    #[export] Instance refine_cons {AT A} {R : Rel AT A} {w} :
+      Related (R -> RList R -> RList R) cons w (@cons (AT w)).
     Proof.
+      unfold Related.
       crushPredEntails3.
       now constructor.
     Qed.
-
-    #[export] Instance refine_compat_cons {AT A} {R : Rel AT A} {w} :
-      RefineCompat (R -> RList R -> RList R) cons w (@cons (AT w)) emp :=
-      refine_cons.
 
     Lemma refine_if {AT A} {R : Rel AT A} {w} {v1 sv1 v2 sv2 c sc}:
       ⊢ ℛ⟦ RConst bool ⟧ c sc -∗ ℛ⟦ R ⟧ v1 sv1 -∗ ℛ⟦ R ⟧ v2 sv2 -∗
@@ -1737,7 +1804,7 @@ Module Type UnifLogicOn
     Qed.
 
     Definition refine_compat_inst_subst {Σ} {T : LCtx -> Type} `{InstSubst T A} (vs : T Σ) {w : World} :
-      RefineCompat (RInst (Sub Σ) (Valuation Σ) -> RInst T A) (inst vs) w (subst vs) _ :=
+      RelatedFrom (RInst (Sub Σ) (Valuation Σ) -> RInst T A) (inst vs) w (subst vs) _ :=
       (refine_inst_subst vs).
 
     Lemma refine_instprop_subst {Σ} {T : LCtx -> Type} `{InstPredSubst T}
@@ -1754,16 +1821,12 @@ Module Type UnifLogicOn
 
     #[export] Instance refine_compat_instprop_subst {Σ} {T : LCtx -> Type} `{InstPredSubst T}
       {vs : T Σ} {w : World} :
-      RefineCompat ((RInst (Sub Σ) (Valuation Σ) -> RInstPropIff T)) (instprop vs) w (subst vs : Sub Σ w -> T w)%I emp :=
+      RelatedFrom ((RInst (Sub Σ) (Valuation Σ) -> RInstPropIff T)) (instprop vs) w (subst vs : Sub Σ w -> T w)%I emp :=
       (refine_instprop_subst _).
 
-    Lemma refine_lift {AT A} `{InstLift AT A} {w : World} (a : A) :
-      ⊢ ℛ⟦RInst AT A⟧ a (lift a : AT w).
+    #[export] Instance refine_lift {AT A} `{InstLift AT A} {w : World} (a : A) :
+      Related (RInst AT A) a w (lift a : AT w).
     Proof. iApply lift_repₚ. Qed.
-
-    #[export] Instance refine_compat_lift `{InstLift AT A} {w : World} (a : A) :
-      RefineCompat (RInst AT A) a w (lift a) _ :=
-      (refine_lift a).
 
     Import ModalNotations. 
     Section WithNotations.
@@ -1778,7 +1841,7 @@ Module Type UnifLogicOn
       Qed.
 
       #[export] Instance refine_compat_namedenv_snoc {N} {Δ : NCtx N Ty} {b} {w : World} {vs : NamedEnv Val Δ} {svs : NamedEnv (Term w) Δ} {v : Val (type b)} {sv : Term w (type b)} :
-        RefineCompat (RNEnv N (Δ ▻ b)) (vs.[b ↦ v])%env w (svs.[b ↦ sv])%env _ :=
+        RelatedFrom (RNEnv N (Δ ▻ b)) (vs.[b ↦ v])%env w (svs.[b ↦ sv])%env _ :=
         refine_namedenv_snoc.
 
       Lemma refine_sub_snoc {τ : Ty} {Γ : LCtx} {x : LVar}
@@ -1810,16 +1873,12 @@ Module Type UnifLogicOn
       Qed.
 
 
-      Lemma refine_namedenv_nil {N} {w : World} :
-         ⊢ ℛ⟦RNEnv N [ctx] ⟧ env.nil (env.nil : NamedEnv (Term w) [ctx]).
+      #[export] Instance refine_namedenv_nil {N} {w : World} :
+        Related (RNEnv N [ctx]) env.nil w (env.nil : NamedEnv (Term w) [ctx]).
       Proof.
         iApply (repₚ_triv (T := fun w => NamedEnv (Term w) [ctx])).
         now intros.
       Qed.
-
-      #[export] Instance refine_compat_namedenv_nil {N} {w : World} :
-        RefineCompat (RNEnv N [ctx]) env.nil w (env.nil : NamedEnv (Term w) [ctx]) _ :=
-        refine_namedenv_nil.
 
       Lemma refine_namedenv_singleton {N : Set} {x : N} {σ : Ty} {w : World} {v : Val σ} {sv : Term w σ} :
         ℛ⟦RVal σ⟧ v sv ⊢ ℛ⟦RNEnv N (ctx.nil ▻ x∷σ)⟧ ([env].[x∷σ ↦ v])%env ([env].[x∷σ ↦ sv])%env.
@@ -1845,7 +1904,7 @@ Module Type UnifLogicOn
       Qed.
 
       #[export] Instance refine_compat_namedenv_cat {N} {Δ : NCtx N Ty} {Γ} {w : World} :
-        RefineCompat (RNEnv N Δ -> RNEnv N Γ -> RNEnv N (Δ ▻▻ Γ)) env.cat w env.cat emp :=
+        RelatedFrom (RNEnv N Δ -> RNEnv N Γ -> RNEnv N (Δ ▻▻ Γ)) env.cat w env.cat emp :=
         refine_namedenv_cat.
 
       Lemma refine_namedenv_sub_acc {Σ : LCtx} {w : World} {ι : Valuation Σ} {ω : wlctx Σ ⊒ w}:
@@ -1902,7 +1961,7 @@ Module Type UnifLogicOn
 
     #[export] Instance refine_compat_pattern_match_val_term_reverse {N} {w : World} {σ}
       {pat : Pattern (N:=N) σ} {ι} :
-        RefineCompat (RNEnv N (PatternCaseCtx ι) -> RVal σ) (pattern_match_val_reverse pat ι) w (pattern_match_term_reverse pat ι) _ :=
+        RelatedFrom (RNEnv N (PatternCaseCtx ι) -> RVal σ) (pattern_match_val_reverse pat ι) w (pattern_match_term_reverse pat ι) _ :=
       refine_pattern_match_val_term_reverse.
 
     Import ctx.notations.
@@ -2046,73 +2105,74 @@ Module Type UnifLogicOn
   Import ctx.notations.
   Import ModalNotations.
   
-  #[export] Hint Extern 0 (RefineCompat _ (inst ?vs) ?w (subst ?vs) _) => refine (refine_compat_inst_subst vs (w := w)) : typeclass_instances.
-  #[export] Hint Extern 0 (RefineCompat (RList ?R) nil _ _ _) => refine (refine_compat_nil (R := R)) : typeclass_instances.
-  #[export] Hint Extern 0 (RefineCompat RHeap nil _ _ _) => refine (refine_compat_nil (R := RChunk)) : typeclass_instances.
+  #[export] Hint Extern 0 (RelatedFrom _ (inst ?vs) ?w (subst ?vs) _) => refine (refine_compat_inst_subst vs (w := w)) : typeclass_instances.
+  #[export] Hint Extern 0 (RelatedFrom (RList ?R) nil _ _ _) => refine (refine_compat_nil (R := R)) : typeclass_instances.
+  #[export] Hint Extern 0 (RelatedFrom RHeap nil _ _ _) => refine (refine_compat_nil (R := RChunk)) : typeclass_instances.
 
 
   (* Outside the LRCompat section because of Coq restriction *)
-  #[export] Instance refine_compat_term_val {σ} {v w} : RefineCompat (RVal σ) v w (term_val σ v) _ :=
+  #[export] Instance refine_compat_term_val {σ} {v w} : Related (RVal σ) v w (term_val σ v) :=
     refine_term_val.
 
   Definition refine_compat_inst_persist {AT A} `{InstSubst AT A, @SubstLaws AT _} {v} {w1 w2} {ω : Acc w1 w2} {t} :
-    RefineCompat (RInst AT A) v w2 (persist t ω) _ :=
+    RelatedFrom (RInst AT A) v w2 (persist t ω) _ :=
     (refine_inst_persist _).
   #[global] Opaque refine_compat_inst_persist.
-  #[export] Hint Extern 0 (RefineCompat _ ?v _ (persist ?t ?ω) _) => refine (refine_compat_inst_persist (v := v) (t := t) (ω := ω)) : typeclass_instances.
+  #[export] Hint Extern 0 (RelatedFrom _ ?v _ (persist ?t ?ω) _) => refine (refine_compat_inst_persist (v := v) (t := t) (ω := ω)) : typeclass_instances.
 
   #[export] Instance refine_compat_inst_persist_term {σ} {v} {w1 w2} {ω : Acc w1 w2} {t} :
-    RefineCompat (RVal σ) v w2 (persist__term t ω) _ :=
+    RelatedFrom (RVal σ) v w2 (persist__term t ω) _ :=
     (refine_inst_persist _).
 
   Definition refine_compat_term_binop {w τ1 τ2 τ3} {op : BinOp τ1 τ2 τ3} {a1 sa1 a2 sa2} :
-    RefineCompat (RVal τ3) (bop.eval op a1 a2)  w (term_binop op sa1 sa2) _ :=
+    RelatedFrom (RVal τ3) (bop.eval op a1 a2)  w (term_binop op sa1 sa2) _ :=
     refine_term_binop.
   #[global] Opaque refine_compat_term_binop.
-  #[export] Hint Extern 0 (RefineCompat (RVal _) _ _ (term_binop ?binop _ _) _) => ( refine (refine_compat_term_binop (op := binop)) ) : typeclass_instances.
+  #[export] Hint Extern 0 (RelatedFrom (RVal _) _ _ (term_binop ?binop _ _) _) => ( refine (refine_compat_term_binop (op := binop)) ) : typeclass_instances.
 
   #[export] Instance refine_compat_formula_bool {w : World} {v} {sv : Term w ty.bool} :
-    RefineCompat RFormula (v = true) w (formula_bool sv) _ :=
+    RelatedFrom RFormula (v = true) w (formula_bool sv) _ :=
     refine_formula_bool.
 
   Definition refine_compat_formula_relop {w : World} {σ v1 v2} {sv1 sv2 : Term w σ}  {relop : RelOp σ} :
-    RefineCompat RFormula (bop.eval_relop_prop relop v1 v2) w (formula_relop relop sv1 sv2) _ :=
+    RelatedFrom RFormula (bop.eval_relop_prop relop v1 v2) w (formula_relop relop sv1 sv2) _ :=
     refine_formula_relop.
   #[global] Opaque refine_compat_formula_relop.
-  #[export] Hint Extern 0 (RefineCompat RFormula _ _ (formula_relop ?relop _ _) _) => ( refine (refine_compat_formula_relop (relop := relop)) ) : typeclass_instances.
+  #[export] Hint Extern 0 (RelatedFrom RFormula _ _ (formula_relop ?relop _ _) _) => ( refine (refine_compat_formula_relop (relop := relop)) ) : typeclass_instances.
 
   #[export] Instance refine_compat_chunk_ptsreg {w σ} {pc a ta} :
-    RefineCompat RChunk (chunk_ptsreg pc a) w(chunk_ptsreg (σ := σ) pc ta) _ :=
+    RelatedFrom RChunk (chunk_ptsreg pc a) w(chunk_ptsreg (σ := σ) pc ta) _ :=
     refine_chunk_ptsreg.
 
-  #[export] Instance refine_compat_chunk_user {w c vs svs} :
-    RefineCompat RChunk (chunk_user c vs) w (chunk_user c svs) _ :=
-    refine_chunk_user.
-
   #[export] Instance refine_compat_env_snoc {Δ : Ctx Ty} {τ} {w : World} {vs : Env Val Δ} {svs : Env (Term w) Δ} {v : Val τ} {sv : Term w τ} :
-    RefineCompat (REnv (Δ ▻ τ)) (vs ► ( τ ↦ v ))%env w (svs ► (τ ↦ sv ))%env _ :=
+    RelatedFrom (REnv (Δ ▻ τ)) (vs ► ( τ ↦ v ))%env w (svs ► (τ ↦ sv ))%env _ :=
     refine_env_snoc.
 
   #[export] Instance refine_compat_sub_snoc {τ : Ty} {Γ : LCtx} {x : LVar}
     {w : World} {vs : NamedEnv Val Γ} {svs : NamedEnv (Term w) Γ}
     {v : Val τ} {sv : Term w τ} :
-    RefineCompat (RNEnv LVar (Γ ▻ x∷τ)) (vs.[x∷τ ↦ v])%env w (sub_snoc svs (x∷τ) sv) _ :=
+    RelatedFrom (RNEnv LVar (Γ ▻ x∷τ)) (vs.[x∷τ ↦ v])%env w (sub_snoc svs (x∷τ) sv) _ :=
     refine_sub_snoc.
 
   #[export] Instance refine_compat_env_nil {w : World} {vs : Env Val [ctx]} {svs : Env (Term w) [ctx]} :
-    RefineCompat (REnv [ctx]) vs  w svs _ :=
+    Related (REnv [ctx]) vs  w svs :=
     refine_env_nil.
 
   #[export] Instance refine_compat_named_env_sub_acc_trans {Σ : LCtx} {w1 w2 : World} {ι : Valuation Σ} {ω1 : wlctx Σ ⊒ w1} {ω2 : w1 ⊒ w2}:
-    RefineCompat (RNEnv LVar (wlctx Σ)) ι w2 (sub_acc (acc_trans ω1 ω2)) _ :=
+    RelatedFrom (RNEnv LVar (wlctx Σ)) ι w2 (sub_acc (acc_trans ω1 ω2)) _ :=
     refine_namedenv_sub_acc_trans.
 
   (* #[export] Instance refine_compat_named_env_sub_acc {Σ : LCtx} {w : World} {ι : Valuation Σ} {ω : wlctx Σ ⊒ w} : *)
-  (*   RefineCompat (RNEnv LVar (wlctx Σ)) ι w (sub_acc ω) _ | 10 := *)
+  (*   RelatedFrom (RNEnv LVar (wlctx Σ)) ι w (sub_acc ω) _ | 10 := *)
   (*   refine_namedenv_sub_acc. *)
 
 
   Import notations logicalrelation.notations logicalrelation iris.proofmode.proofmode.
+
+  #[export] Instance refine_compat_chunk_user {w c} :
+    Related (REnv (𝑯_Ty c) -> RChunk) (chunk_user c) w (chunk_user c).
+  Proof. iIntros (vs svs) "Hvs". now iApply refine_chunk_user. Qed.
+
   Global Hint Extern 0 (environments.envs_entails _ (ℛ⟦ RUnit ⟧ _ _)) => iApply refine_unit : core.
 
   #[export] Instance instpredsubst_ctx `{InstPredSubst A, !SubstLaws A} : InstPredSubst (fun Σ => Ctx (A Σ)).

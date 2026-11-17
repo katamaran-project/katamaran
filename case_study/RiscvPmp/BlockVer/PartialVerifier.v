@@ -261,18 +261,12 @@ Module RiscvPmpBlockVerifPartialVerifier
       Import StoreSpec.
       Import RSolve HeapSpec.
 
-      Lemma rexec_instruction (i : AST) {w} :
-        ⊢ ℛ⟦RVal ty_xlenbits -> RHeapSpec (RVal ty_xlenbits)⟧
-            (cexec_instruction i)
-            (sexec_instruction (w := w) i).
+      #[export] Instance rexec_instruction (i : AST) {w} :
+        Related (RVal ty_xlenbits -> RHeapSpec (RVal ty_xlenbits))
+          (cexec_instruction i) w (sexec_instruction (w := w) i).
       Proof.
-        unfold cexec_instruction, sexec_instruction. rsolve.
+        unfold Related, cexec_instruction, sexec_instruction. rsolve.
       Qed.
-
-      #[export] Instance refine_compat_exec_instruction {i : AST} {w} :
-        RefineCompat (RVal ty_xlenbits -> RHeapSpec (RVal ty_xlenbits))
-          (cexec_instruction i) w (sexec_instruction (w := w) i) _ :=
-        (rexec_instruction i).
 
       Lemma rexec_block_addr (b : list AST) {w} :
         ⊢ ℛ⟦RVal ty_xlenbits -> RVal ty_xlenbits -> RHeapSpec (RVal ty_xlenbits)⟧
