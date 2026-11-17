@@ -65,6 +65,10 @@ Open Scope ctx_scope.
 
 Module inv := invariants.
 
+(* Keep cbn from unfolding the counter increments (term_counter_inc) into an
+   if on the inhibit bit, so that they stay a single term. *)
+#[local] Arguments bv.cons : simpl never.
+
 Import iris.program_logic.weakestpre.
 Import iris.proofmode.proofmode.
 
@@ -132,9 +136,9 @@ Section Integrity.
         asn_interpret femtokernel_handler_exit_pre (csrs_valuation archstate vmie).["a" ∷ ty_xlenbits ↦ bv.of_N handler_exit_addr] ∗
         interp_gprs ∅ ∗
         phantom_res ∗
-        ▷ (∀ priv ms ss pc, ⌜priv ≠ Machine⌝ -∗
+        ▷ (∀ priv ms ss pc cs, ⌜priv ≠ Machine⌝ -∗
              ptsto_instrs (bv.of_N handler_exit_addr) (filter_AST femtokernel_handler_exit) -∗
-             LoopVerificationl.M_Trap (femto_archstate priv ms ss pc) -∗ phantom_res -∗ WP_loop)
+             LoopVerificationl.M_Trap (femto_archstate priv ms ss pc cs) -∗ phantom_res -∗ WP_loop)
         -∗
         WP_loop.
     Proof.
@@ -142,7 +146,7 @@ Section Integrity.
       iPoseProof (contract_femtohandler_exit_verified__l (bv.of_N handler_exit_addr) archstate vmie) as "Htrip".
       iApply (RVPTVl.WP_loop_semTripleBlock with "Hpro [Hpre] Htrip"); first iExact "Hpre".
       iIntros (an) "(Hpost & Hpc & Hinstrs & Hnpc)".
-      iDestruct "Hpost" as "((Hcurpriv & Hmtvec & Hmcause & Hmip & Hmie & Hmepc & Hsepc & Hscause & Hsscratch & Hstvec & Hmideleg & Hmedeleg & Hpmp) & Hmstatus & [%Han _])"; cbn - [interp_ptstomem] in *.
+      iDestruct "Hpost" as "((Hcurpriv & Hmtvec & Hmcause & Hmip & Hmie & Hmepc & Hsepc & Hscause & Hsscratch & Hstvec & Hmideleg & Hmedeleg & Hpmp & Hmtime & Hminstret_written & Hmcounteren & Hscounteren & Hmcountinhibit & Hmcycle & Hminstret) & Hmstatus & [%Han _])"; cbn - [interp_ptstomem] in *.
       iAssert (interp_pmp_addr_access liveAddrs mmioAddrs femto_pmpentries (ArchState.mpp (ArchState.mstate archstate))) with "[HaccU]" as "Hacc".
       { assert (Hmpp' : ArchState.mpp (ArchState.mstate archstate) = User ∨ ArchState.mpp (ArchState.mstate archstate) = Supervisor)
           by (destruct (ArchState.mpp (ArchState.mstate archstate)); auto; congruence).
@@ -151,8 +155,8 @@ Section Integrity.
       iApply (loop_pre_WP_loop (femto_return_archstate archstate vmscratch an)).
       unfold LoopVerificationl.loop_pre.
       iSplitR "HR Htrap Hinstrs".
-      { unfold LoopVerificationl.Step_pre; cbn.
-        iFrame "Hacc Hgprs Hpmp Hmie Hmip Hcurpriv Hpc Hnpc Hmtvec Hstvec Hmstatus Hmepc Hsepc Hmideleg Hmedeleg Hmscratch Hmcause Hsscratch Hscause".
+      { unfold LoopVerificationl.LoopBody_pre; cbn.
+        iFrame "Hacc Hgprs Hpmp Hmie Hmip Hcurpriv Hpc Hnpc Hmtvec Hstvec Hmstatus Hmepc Hsepc Hmideleg Hmedeleg Hmscratch Hmcause Hsscratch Hscause Hmtime Hminstret_written Hmcounteren Hscounteren Hmcountinhibit Hmcycle Hminstret".
         auto. }
       iFrame "HR".
       iSplitR.
@@ -171,6 +175,7 @@ Section Integrity.
        not_zero block, which both perform the observable write. *)
     Lemma femtokernel_dispatch_path (vx1 vx5 secret : Val ty_xlenbits) (archstate : ArchState) (vmie : Val ty_Minterrupts) :
       let ι__csrs := csrs_valuation archstate vmie in
+      let ι__csrs' := csrs_valuation (archstate_after femtokernel_handler_dispatch archstate) vmie in
       ⊢ femto_inv_mmio -∗
         RVPTVl.exec_instructions_prologue (bv.of_N handler_dispatch_addr) (filter_AST femtokernel_handler_dispatch) -∗
         asn_interpret femtokernel_handler_dispatch_pre
@@ -182,7 +187,7 @@ Section Integrity.
         ptsto_instrs (bv.of_N handler_is_zero_addr) (filter_AST femtokernel_handler_is_zero) -∗
         (∀ x1 x5 a an,
            asn_interpret femtokernel_handler_ack_post
-             (ι__csrs ►► [env].["x1" ∷ ty_xlenbits ↦ x1].["x5" ∷ ty_xlenbits ↦ x5].["secret" ∷ ty_xlenbits ↦ secret]
+             (ι__csrs' ►► [env].["x1" ∷ ty_xlenbits ↦ x1].["x5" ∷ ty_xlenbits ↦ x5].["secret" ∷ ty_xlenbits ↦ secret]
                       ►► [env].["a" ∷ ty_xlenbits ↦ a].["an" ∷ ty_xlenbits ↦ an]) -∗
            pc ↦ᵣ an -∗
            (∃ v, nextpc ↦ᵣ v) -∗
@@ -192,7 +197,7 @@ Section Integrity.
            WP_loop) -∗
         WP_loop.
     Proof.
-      iIntros (ι__csrs) "#Hinv Hpro Hpre Hnp Hx5 Hnz Hiz Hk".
+      iIntros (ι__csrs ι__csrs') "#Hinv Hpro Hpre Hnp Hx5 Hnz Hiz Hk".
       iPoseProof (contract_femtohandler_dispatch_verified__l vx1 secret (bv.of_N handler_dispatch_addr) archstate vmie) as "Htrip".
       iApply (RVPTVl.WP_loop_semTripleBlock with "Hpro [Hpre] Htrip"); first iExact "Hpre".
       iIntros (an) "(Hpost & Hpc & Hcode & Hnpc)".
@@ -200,7 +205,7 @@ Section Integrity.
       iDestruct "Hpost" as "(Hshared & Hmstatus & Han & Hx1 & Hdata)".
       case_match; iDestruct "Han" as "[%Han _]"; cbn in Han; subst an.
       - (* The secret is zero: is_zero block. *)
-        iPoseProof (contract_femtohandler_is_zero_verified__l secret vx5 secret (bv.of_N handler_is_zero_addr) archstate vmie) as "Htrip'".
+        iPoseProof (contract_femtohandler_is_zero_verified__l secret vx5 secret (bv.of_N handler_is_zero_addr) (archstate_after femtokernel_handler_dispatch archstate) vmie) as "Htrip'".
         iApply (RVPTVl.WP_loop_semTripleBlock with "[Hpc Hiz Hnpc] [Hshared Hmstatus Hnp Hx1 Hx5 Hdata] Htrip'").
         + iFrame "Hpc Hiz Hnpc".
         + cbn - [interp_ptstomem].
@@ -210,7 +215,7 @@ Section Integrity.
         + iIntros (an') "(Hpost & Hpc & Hcode' & Hnpc)".
           iApply ("Hk" with "Hpost Hpc Hnpc Hcode Hnz Hcode'").
       - (* The secret is not zero: not_zero block. *)
-        iPoseProof (contract_femtohandler_not_zero_verified__l secret vx5 secret (bv.of_N handler_not_zero_addr) archstate vmie) as "Htrip'".
+        iPoseProof (contract_femtohandler_not_zero_verified__l secret vx5 secret (bv.of_N handler_not_zero_addr) (archstate_after femtokernel_handler_dispatch archstate) vmie) as "Htrip'".
         iApply (RVPTVl.WP_loop_semTripleBlock with "[Hpc Hnz Hnpc] [Hshared Hmstatus Hnp Hx1 Hx5 Hdata] Htrip'").
         + iFrame "Hpc Hnz Hnpc".
         + cbn - [interp_ptstomem].
@@ -232,13 +237,13 @@ Section Integrity.
         ptsto_instrs (bv.of_N handler_not_zero_addr) (filter_AST femtokernel_handler_not_zero) ∗
         ptsto_instrs (bv.of_N handler_is_zero_addr) (filter_AST femtokernel_handler_is_zero) ∗
         ptsto_instrs (bv.of_N handler_exit_addr) (filter_AST femtokernel_handler_exit) ∗
-        ▷ (∀ priv ms ss pc, ⌜priv ≠ Machine⌝ -∗
+        ▷ (∀ priv ms ss pc cs, ⌜priv ≠ Machine⌝ -∗
            ptsto_instrs (bv.of_N handler_dispatch_addr) (filter_AST femtokernel_handler_dispatch) -∗
            ptsto_instrs (bv.of_N handler_not_zero_addr) (filter_AST femtokernel_handler_not_zero) -∗
            ptsto_instrs (bv.of_N handler_is_zero_addr) (filter_AST femtokernel_handler_is_zero) -∗
            interp_ptstomem (bv.of_N data_addr) secret -∗
            ptsto_instrs (bv.of_N handler_exit_addr) (filter_AST femtokernel_handler_exit) -∗
-           LoopVerificationl.M_Trap (femto_archstate priv ms ss pc) -∗ phantom_res -∗ WP_loop)
+           LoopVerificationl.M_Trap (femto_archstate priv ms ss pc cs) -∗ phantom_res -∗ WP_loop)
         -∗
         WP_loop.
     Proof.
@@ -262,13 +267,14 @@ Section Integrity.
         iFrame "Hgprs".
         reduce_big_sepS_big_sepL.
         iFrame "Hx1 Hx5". by cbn. }
-      iAssert (▷ (∀ priv ms ss pc, ⌜priv ≠ Machine⌝ -∗
+      iAssert (▷ (∀ priv ms ss pc cs, ⌜priv ≠ Machine⌝ -∗
                  ptsto_instrs (bv.of_N handler_exit_addr) (filter_AST femtokernel_handler_exit) -∗
-                 LoopVerificationl.M_Trap (femto_archstate priv ms ss pc) -∗ phantom_res -∗ WP_loop))%I
+                 LoopVerificationl.M_Trap (femto_archstate priv ms ss pc cs) -∗ phantom_res -∗ WP_loop))%I
         with "[Hk Hcode Hhnz Hhiz Hdata]" as "Hk".
-      { iIntros "!>" (priv ms ss pc Hpriv) "Hhexit Htrap HR".
+      { iIntros "!>" (priv ms ss pc cs Hpriv) "Hhexit Htrap HR".
         iApply ("Hk" with "[//] Hcode Hhnz Hhiz Hdata Hhexit Htrap HR"). }
-      iApply (femtokernel_handler_exit_safe _ _ Hmpp).
+      iApply (femtokernel_handler_exit_safe
+                (archstate_after femtokernel_handler_not_zero (archstate_after femtokernel_handler_dispatch archstate)) _ Hmpp).
       iFrame "Hpc Hhexit Hnpc Hmscratch HaccU Hmstatus Hgprs Hk Hinv Hnp Hpow Hph"; cbn - [interp_ptstomem].
       repeat iDestruct "Hshared" as "($ & Hshared)". iFrame "Hshared".
       now iPureIntro.
@@ -283,11 +289,11 @@ Section Integrity.
         interp_gprs {[x1]} ∗
         phantom_res ∗
         ptsto_instrs (bv.of_N handler_exit_addr) (filter_AST femtokernel_handler_exit) ∗
-        ▷ (∀ priv ms ss pc, ⌜priv ≠ Machine⌝ -∗
+        ▷ (∀ priv ms ss pc cs, ⌜priv ≠ Machine⌝ -∗
            ptsto_instrs (bv.of_N handler_secret_write_addr) (filter_AST femtokernel_handler_secret_write) -∗
            interp_ptstomem (bv.of_N data_addr) secret -∗
            ptsto_instrs (bv.of_N handler_exit_addr) (filter_AST femtokernel_handler_exit) -∗
-           LoopVerificationl.M_Trap (femto_archstate priv ms ss pc) -∗ phantom_res -∗ WP_loop)
+           LoopVerificationl.M_Trap (femto_archstate priv ms ss pc cs) -∗ phantom_res -∗ WP_loop)
         -∗
         WP_loop.
     Proof.
@@ -302,13 +308,13 @@ Section Integrity.
         iFrame "Hgprs".
         reduce_big_sepS_big_sepL.
         iFrame "Hx1". by cbn. }
-      iAssert (▷ (∀ priv ms ss pc, ⌜priv ≠ Machine⌝ -∗
+      iAssert (▷ (∀ priv ms ss pc cs, ⌜priv ≠ Machine⌝ -∗
                  ptsto_instrs (bv.of_N handler_exit_addr) (filter_AST femtokernel_handler_exit) -∗
-                 LoopVerificationl.M_Trap (femto_archstate priv ms ss pc) -∗ phantom_res -∗ WP_loop))%I
+                 LoopVerificationl.M_Trap (femto_archstate priv ms ss pc cs) -∗ phantom_res -∗ WP_loop))%I
         with "[Htrap Hinstrs Hdata]" as "Htrap".
-      { iIntros "!>" (priv ms ss pc Hpriv) "Hhexit' Htrap' HR".
+      { iIntros "!>" (priv ms ss pc cs Hpriv) "Hhexit' Htrap' HR".
         iApply ("Htrap" with "[//] Hinstrs Hdata Hhexit' Htrap' HR"). }
-      iApply (femtokernel_handler_exit_safe _ _ Hmpp).
+      iApply (femtokernel_handler_exit_safe (archstate_after femtokernel_handler_secret_write archstate) _ Hmpp).
       rewrite Han.
       iFrame "Hpc Hhexit Hnpc Hmscratch HaccU Hmstatus Hgprs Htrap Hinv HR"; cbn - [interp_ptstomem].
       repeat iDestruct "Hshared" as "($ & Hshared)". iFrame "Hshared".
@@ -329,13 +335,13 @@ Section Integrity.
         ptsto_instrs (bv.of_N handler_shutdown_addr) (filter_AST femtokernel_handler_shutdown) ∗
         ptsto_instrs (bv.of_N handler_secret_write_addr) (filter_AST femtokernel_handler_secret_write) ∗
         ptsto_instrs (bv.of_N handler_exit_addr) (filter_AST femtokernel_handler_exit) ∗
-        ▷ (∀ priv ms ss pc, ⌜priv ≠ Machine⌝ -∗
+        ▷ (∀ priv ms ss pc cs, ⌜priv ≠ Machine⌝ -∗
            ptsto_instrs (bv.of_N handler_shutdown_check_addr) (filter_AST femtokernel_handler_shutdown_check) -∗
            ptsto_instrs (bv.of_N handler_shutdown_addr) (filter_AST femtokernel_handler_shutdown) -∗
            ptsto_instrs (bv.of_N handler_secret_write_addr) (filter_AST femtokernel_handler_secret_write) -∗
            (∃ v : Val ty_xlenbits, interp_ptstomem (bv.of_N data_addr) v) -∗
            ptsto_instrs (bv.of_N handler_exit_addr) (filter_AST femtokernel_handler_exit) -∗
-           LoopVerificationl.M_Trap (femto_archstate priv ms ss pc) -∗ phantom_res -∗ WP_loop)
+           LoopVerificationl.M_Trap (femto_archstate priv ms ss pc cs) -∗ phantom_res -∗ WP_loop)
         -∗
         WP_loop.
     Proof.
@@ -348,7 +354,7 @@ Section Integrity.
       case_match; iDestruct "Han" as "[-> _]".
       - (* Power off the machine. *)
         iDestruct "HR" as "(Hnp & Hpow & Hph)".
-        iPoseProof (contract_femtohandler_shutdown_verified__l (bv.of_N handler_shutdown_addr) archstate vmie) as "Htrip'".
+        iPoseProof (contract_femtohandler_shutdown_verified__l (bv.of_N handler_shutdown_addr) (archstate_after femtokernel_handler_shutdown_check archstate) vmie) as "Htrip'".
         iApply (RVPTVl.WP_loop_semTripleBlock with "[Hpc Hhshutdown Hnpc] [Hshared Hmstatus Hx5 Hnp Hpow] Htrip'").
         + iFrame "Hpc Hhshutdown Hnpc".
         + cbn - [interp_ptstomem].
@@ -366,16 +372,16 @@ Section Integrity.
           reduce_big_sepS_big_sepL.
           iFrame "Hx5 Hx10". by cbn. }
         iDestruct "Hdata" as "(%secret & Hdata)".
-        iAssert (▷ (∀ priv ms ss pc, ⌜priv ≠ Machine⌝ -∗
+        iAssert (▷ (∀ priv ms ss pc cs, ⌜priv ≠ Machine⌝ -∗
                    ptsto_instrs (bv.of_N handler_secret_write_addr) (filter_AST femtokernel_handler_secret_write) -∗
                    interp_ptstomem (bv.of_N data_addr) (secret : Val ty_xlenbits) -∗
                    ptsto_instrs (bv.of_N handler_exit_addr) (filter_AST femtokernel_handler_exit) -∗
-                   LoopVerificationl.M_Trap (femto_archstate priv ms ss pc) -∗ phantom_res -∗ WP_loop))%I
+                   LoopVerificationl.M_Trap (femto_archstate priv ms ss pc cs) -∗ phantom_res -∗ WP_loop))%I
           with "[Hk Hinstrs Hhshutdown]" as "Hksecret".
-        { iIntros "!>" (priv ms ss pc Hpriv) "Hhsecret Hdata Hhexit Htrap HR".
+        { iIntros "!>" (priv ms ss pc cs Hpriv) "Hhsecret Hdata Hhexit Htrap HR".
           iApply ("Hk" with "[//] Hinstrs Hhshutdown Hhsecret [Hdata] Hhexit Htrap HR").
           by iExists _. }
-        iApply (femtokernel_handler_secret_write_safe _ secret _ _ Hmpp with "Hinv"); cbn - [interp_ptstomem].
+        iApply (femtokernel_handler_secret_write_safe _ secret (archstate_after femtokernel_handler_shutdown_check archstate) _ Hmpp with "Hinv"); cbn - [interp_ptstomem].
         iFrame "Hhsecret Hpc Hnpc Hmscratch HaccU Hmstatus Hgprs Hhexit Hx1 Hdata HR Hksecret".
         repeat iDestruct "Hshared" as "($ & Hshared)". iFrame "Hshared".
         repeat iSplit; try iPureIntro; try done; by vm_compute.
@@ -406,29 +412,29 @@ Section Integrity.
       iIntros "((Hpro & Hmscratch & HaccU) & Hpre & Hgprs & Hx1 & Hdata & HR & Hhdispatch & Hhnotzero & Hhiszero & Hhcheck & Hhshutdown & Hhsecret & Hhexit)".
       (* When the adversary traps back into the handler, we are back at the
          start of this lemma (with possibly different CSR values). *)
-      iAssert (▷ (∀ priv ms ss pc, ⌜priv ≠ Machine⌝ -∗
+      iAssert (▷ (∀ priv ms ss pc cs, ⌜priv ≠ Machine⌝ -∗
                  ptsto_instrs_handler ∗ (∃ v : Val ty_xlenbits, interp_ptstomem (bv.of_N data_addr) v) -∗
-                 LoopVerificationl.M_Trap (femto_archstate priv ms ss pc) -∗ phantom_res -∗ WP_loop))%I with "[]" as "#Hk".
-      { iIntros "!>" (priv ms ss pc Hpriv) "(Hhandler & Hdata) Htrap HR".
+                 LoopVerificationl.M_Trap (femto_archstate priv ms ss pc cs) -∗ phantom_res -∗ WP_loop))%I with "[]" as "#Hk".
+      { iIntros "!>" (priv ms ss pc cs Hpriv) "(Hhandler & Hdata) Htrap HR".
         iDestruct "Hhandler" as "(Hhentry & Hhdispatch & Hhnotzero & Hhiszero & Hhcheck & Hhshutdown & Hhsecret & Hhexit)".
         assert (HU : User ≠ Machine) by auto.
-        iPoseProof (LoopVerificationl.M_Trap_SU_irrelevant (femto_archstate priv ms ss pc) (femto_archstate User ms ss pc)
+        iPoseProof (LoopVerificationl.M_Trap_SU_irrelevant (femto_archstate priv ms ss pc cs) (femto_archstate User ms ss pc cs)
                       Hpriv HU eq_refl with "Htrap") as "Htrap".
         unfold LoopVerificationl.M_Trap, LoopVerificationl.transition; cbn.
-        iDestruct "Htrap" as "(HaccU & Hgprs & Hpmp & [%vmie' Hmie] & Hmip & Hcurpriv & Hpc & Hnpc & Hmtvec & [%vstvec Hstvec] & [%vspp [%vmpie [%vspie [%vsie [%vmpp (Hmstatus & [%Hmpp' _])]]]]] & [%vmepc Hmepc] & [%vsepc Hsepc] & Hmideleg & Hmedeleg & [%vmscratch Hmscratch] & [%vmcause Hmcause] & [%vsscratch Hsscratch] & [%vscause Hscause])".
+        iDestruct "Htrap" as "(HaccU & Hgprs & Hpmp & [%vmie' Hmie] & Hmip & Hcurpriv & Hpc & Hnpc & Hmtvec & [%vstvec Hstvec] & [%vspp [%vmpie [%vspie [%vsie [%vmpp (Hmstatus & [%Hmpp' _])]]]]] & [%vmepc Hmepc] & [%vsepc Hsepc] & Hmideleg & Hmedeleg & [%vmscratch Hmscratch] & [%vmcause Hmcause] & [%vsscratch Hsscratch] & [%vscause Hscause] & [%vmcycle Hmcycle] & [%vmtime Hmtime] & [%vminstret Hminstret] & [%vminstret_written Hminstret_written] & [%vmcounteren Hmcounteren] & [%vscounteren Hscounteren] & [%vmcountinhibit Hmcountinhibit])".
         iPoseProof (interp_gprs_with_excluded (exclude := {[x1;x5;x10]}) with "Hgprs") as "(Hregs & Hgprs)";
           try solve_subseteq.
         reduce_big_sepS_big_sepL.
         iDestruct "Hregs" as "([% Hx5] & Hx1 & [% Hx10] & _)".
         iApply ("IH" $! _ _
-                  (femto_handler_archstate vmpp vmpie vmcause vmscratch vmepc (ArchState.mkSState vstvec (MkSstatus vspp vspie vsie) vscause vsscratch vsepc)) vmie' with "[//]").
+                  (femto_handler_archstate vmpp vmpie vmcause vmscratch vmepc (ArchState.mkSState vstvec (MkSstatus vspp vspie vsie) vscause vsscratch vsepc) (ArchState.mkCountersState vmcycle vmtime vminstret vminstret_written vmcounteren vscounteren vmcountinhibit)) vmie' with "[//]").
         cbn - [interp_ptstomem].
-        iFrame "Hhentry Hpc Hnpc Hmscratch HaccU Hcurpriv Hmtvec Hmcause Hmip Hmie Hmepc Hsepc Hscause Hsscratch Hstvec Hmideleg Hmedeleg Hpmp Hinv Hmstatus Hgprs Hx5 Hx10 Hx1 Hdata HR Hhdispatch Hhnotzero Hhiszero Hhcheck Hhshutdown Hhsecret Hhexit".
+        iFrame "Hhentry Hpc Hnpc Hmscratch HaccU Hcurpriv Hmtvec Hmcause Hmip Hmie Hmepc Hsepc Hscause Hsscratch Hstvec Hmideleg Hmedeleg Hpmp Hmcycle Hmtime Hminstret Hminstret_written Hmcounteren Hscounteren Hmcountinhibit Hinv Hmstatus Hgprs Hx5 Hx10 Hx1 Hdata HR Hhdispatch Hhnotzero Hhiszero Hhcheck Hhshutdown Hhsecret Hhexit".
         auto. }
       iPoseProof (contract_femtohandler_entry_verified__l x5_val x10_val (bv.of_N handler_entry_addr) archstate vmie) as "Htrip".
       iApply (RVPTVl.WP_loop_semTripleBlock with "Hpro [Hpre] Htrip"); first iExact "Hpre".
       iIntros (an) "(Hpost & Hpc & Hinstrs & Hnpc)".
-      iDestruct "Hpost" as "((Hcurpriv & Hmtvec & Hmcause & Hmip & Hmie & Hmepc & Hsepc & Hscause & Hsscratch & Hstvec & Hmideleg & Hmedeleg & Hpmp) & Hmstatus & Han & Hx5 & Hx10)"; cbn - [interp_ptstomem].
+      iDestruct "Hpost" as "((Hcurpriv & Hmtvec & Hmcause & Hmip & Hmie & Hmepc & Hsepc & Hscause & Hsscratch & Hstvec & Hmideleg & Hmedeleg & Hpmp & Hmtime & Hminstret_written & Hmcounteren & Hscounteren & Hmcountinhibit & Hmcycle & Hminstret) & Hmstatus & Han & Hx5 & Hx10)"; cbn - [interp_ptstomem].
       iDestruct "Hx1" as "[%vx1 Hx1]".
       case_match; cbn - [interp_ptstomem];
         iDestruct "Han" as "[-> _]".
@@ -446,62 +452,62 @@ Section Integrity.
           reduce_big_sepS_big_sepL.
           now iFrame "Hx5". }
         iDestruct "Hdata" as "(%secret & Hdata)".
-        iAssert (▷ (∀ priv ms ss pc, ⌜priv ≠ Machine⌝ -∗
+        iAssert (▷ (∀ priv ms ss pc cs, ⌜priv ≠ Machine⌝ -∗
                    ptsto_instrs (bv.of_N handler_dispatch_addr) (filter_AST femtokernel_handler_dispatch) -∗
                    ptsto_instrs (bv.of_N handler_not_zero_addr) (filter_AST femtokernel_handler_not_zero) -∗
                    ptsto_instrs (bv.of_N handler_is_zero_addr) (filter_AST femtokernel_handler_is_zero) -∗
                    interp_ptstomem (bv.of_N data_addr) (secret : Val ty_xlenbits) -∗
                    ptsto_instrs (bv.of_N handler_exit_addr) (filter_AST femtokernel_handler_exit) -∗
-                   LoopVerificationl.M_Trap (femto_archstate priv ms ss pc) -∗ phantom_res -∗ WP_loop))%I
+                   LoopVerificationl.M_Trap (femto_archstate priv ms ss pc cs) -∗ phantom_res -∗ WP_loop))%I
           with "[Hinstrs Hhcheck Hhshutdown Hhsecret]" as "Hkdispatch".
-        { iIntros "!>" (priv ms ss pc Hpriv) "Hhdispatch Hhnotzero Hhiszero Hdata Hhexit Htrap HR".
+        { iIntros "!>" (priv ms ss pc cs Hpriv) "Hhdispatch Hhnotzero Hhiszero Hdata Hhexit Htrap HR".
           iApply ("Hk" with "[//] [Hinstrs Hhdispatch Hhnotzero Hhiszero Hhcheck Hhshutdown Hhsecret Hhexit Hdata] Htrap HR").
           iSplitR "Hdata"; last by iExists _.
           iFrame "Hinstrs Hhdispatch Hhnotzero Hhiszero Hhcheck Hhshutdown Hhsecret Hhexit". }
-        iApply (femtokernel_handler_dispatch_safe _ _ _ _ Hmpp with "Hinv").
+        iApply (femtokernel_handler_dispatch_safe _ _ (archstate_after femtokernel_handler_entry archstate) _ Hmpp with "Hinv").
         iFrame "Hkdispatch"; cbn - [interp_ptstomem].
-        iFrame "Hhdispatch Hpc Hnpc Hmscratch HaccU Hcurpriv Hmtvec Hmcause Hmip Hmie Hmepc Hsepc Hscause Hsscratch Hstvec Hmideleg Hmedeleg Hpmp Hinv Hmstatus Hgprs Hhnotzero Hhiszero Hhexit Hx1 Hdata HR";
+        iFrame "Hhdispatch Hpc Hnpc Hmscratch HaccU Hcurpriv Hmtvec Hmcause Hmip Hmie Hmepc Hsepc Hscause Hsscratch Hstvec Hmideleg Hmedeleg Hpmp Hmtime Hminstret_written Hmcounteren Hscounteren Hmcountinhibit Hmcycle Hminstret Hinv Hmstatus Hgprs Hhnotzero Hhiszero Hhexit Hx1 Hdata HR";
           repeat iSplitR; auto.
       - (* Check for a shutdown request. *)
-        iAssert (▷ (∀ priv ms ss pc, ⌜priv ≠ Machine⌝ -∗
+        iAssert (▷ (∀ priv ms ss pc cs, ⌜priv ≠ Machine⌝ -∗
                    ptsto_instrs (bv.of_N handler_shutdown_check_addr) (filter_AST femtokernel_handler_shutdown_check) -∗
                    ptsto_instrs (bv.of_N handler_shutdown_addr) (filter_AST femtokernel_handler_shutdown) -∗
                    ptsto_instrs (bv.of_N handler_secret_write_addr) (filter_AST femtokernel_handler_secret_write) -∗
                    (∃ v : Val ty_xlenbits, interp_ptstomem (bv.of_N data_addr) v) -∗
                    ptsto_instrs (bv.of_N handler_exit_addr) (filter_AST femtokernel_handler_exit) -∗
-                   LoopVerificationl.M_Trap (femto_archstate priv ms ss pc) -∗ phantom_res -∗ WP_loop))%I
+                   LoopVerificationl.M_Trap (femto_archstate priv ms ss pc cs) -∗ phantom_res -∗ WP_loop))%I
           with "[Hinstrs Hhdispatch Hhnotzero Hhiszero]" as "Hkcheck".
-        { iIntros "!>" (priv ms ss pc Hpriv) "Hhcheck Hhshutdown Hhsecret Hdata Hhexit Htrap HR".
+        { iIntros "!>" (priv ms ss pc cs Hpriv) "Hhcheck Hhshutdown Hhsecret Hdata Hhexit Htrap HR".
           iApply ("Hk" with "[//] [Hinstrs Hhdispatch Hhnotzero Hhiszero Hhcheck Hhshutdown Hhsecret Hhexit Hdata] Htrap HR").
           iFrame "Hinstrs Hhdispatch Hhnotzero Hhiszero Hhcheck Hhshutdown Hhsecret Hhexit Hdata". }
-        iApply (femtokernel_handler_shutdown_check_safe vx1 _ x10_val _ _ Hmpp with "Hinv").
+        iApply (femtokernel_handler_shutdown_check_safe vx1 _ x10_val (archstate_after femtokernel_handler_entry archstate) _ Hmpp with "Hinv").
         iFrame "Hkcheck"; cbn - [interp_ptstomem].
-        iFrame "Hhcheck Hpc Hnpc Hmscratch HaccU Hcurpriv Hmtvec Hmcause Hmip Hmie Hmepc Hsepc Hscause Hsscratch Hstvec Hmideleg Hmedeleg Hpmp Hinv Hmstatus Hgprs Hx1 Hx5 Hx10 Hdata HR Hhshutdown Hhsecret Hhexit";
+        iFrame "Hhcheck Hpc Hnpc Hmscratch HaccU Hcurpriv Hmtvec Hmcause Hmip Hmie Hmepc Hsepc Hscause Hsscratch Hstvec Hmideleg Hmedeleg Hpmp Hmtime Hminstret_written Hmcounteren Hscounteren Hmcountinhibit Hmcycle Hminstret Hinv Hmstatus Hgprs Hx1 Hx5 Hx10 Hdata HR Hhshutdown Hhsecret Hhexit";
           repeat iSplitR; auto.
     Qed.
 
     Lemma femtokernel_handler_safe :
       ⊢ femto_inv_mmio -∗
-        ∀ priv ms ss pc, ⌜priv ≠ Machine⌝ -∗
+        ∀ priv ms ss pc cs, ⌜priv ≠ Machine⌝ -∗
           ptsto_instrs_handler ∗ (∃ v : Val ty_xlenbits, interp_ptstomem (bv.of_N data_addr) v) -∗
-          LoopVerificationl.M_Trap (femto_archstate priv ms ss pc) -∗ phantom_res -∗ WP_loop.
+          LoopVerificationl.M_Trap (femto_archstate priv ms ss pc cs) -∗ phantom_res -∗ WP_loop.
     Proof.
-      iIntros "#Hinv" (priv ms ss pc Hpriv) "(Hhandler & Hdata) Htrap HR".
+      iIntros "#Hinv" (priv ms ss pc cs Hpriv) "(Hhandler & Hdata) Htrap HR".
       iDestruct "Hhandler" as "(Hhentry & Hhdispatch & Hhnotzero & Hhiszero & Hhcheck & Hhshutdown & Hhsecret & Hhexit)".
       (* Traps from S-mode look the same as traps from U-mode *)
       assert (HU : User ≠ Machine) by auto.
-      iPoseProof (LoopVerificationl.M_Trap_SU_irrelevant (femto_archstate priv ms ss pc) (femto_archstate User ms ss pc)
+      iPoseProof (LoopVerificationl.M_Trap_SU_irrelevant (femto_archstate priv ms ss pc cs) (femto_archstate User ms ss pc cs)
                     Hpriv HU eq_refl with "Htrap") as "Htrap".
       unfold LoopVerificationl.M_Trap, LoopVerificationl.transition; cbn.
-      iDestruct "Htrap" as "(HaccU & Hgprs & Hpmp & [%vmie Hmie] & Hmip & Hcurpriv & Hpc & Hnpc & Hmtvec & [%vstvec Hstvec] & [%vspp [%vmpie [%vspie [%vsie [%vmpp (Hmstatus & [%Hmpp _])]]]]] & [%vmepc Hmepc] & [%vsepc Hsepc] & Hmideleg & Hmedeleg & [%vmscratch Hmscratch] & [%vmcause Hmcause] & [%vsscratch Hsscratch] & [%vscause Hscause])".
+      iDestruct "Htrap" as "(HaccU & Hgprs & Hpmp & [%vmie Hmie] & Hmip & Hcurpriv & Hpc & Hnpc & Hmtvec & [%vstvec Hstvec] & [%vspp [%vmpie [%vspie [%vsie [%vmpp (Hmstatus & [%Hmpp _])]]]]] & [%vmepc Hmepc] & [%vsepc Hsepc] & Hmideleg & Hmedeleg & [%vmscratch Hmscratch] & [%vmcause Hmcause] & [%vsscratch Hsscratch] & [%vscause Hscause] & [%vmcycle Hmcycle] & [%vmtime Hmtime] & [%vminstret Hminstret] & [%vminstret_written Hminstret_written] & [%vmcounteren Hmcounteren] & [%vscounteren Hscounteren] & [%vmcountinhibit Hmcountinhibit])".
       iPoseProof (interp_gprs_with_excluded (exclude := {[x1;x5;x10]}) with "Hgprs") as "(Hregs & Hgprs)";
         try solve_subseteq.
       reduce_big_sepS_big_sepL.
       iDestruct "Hregs" as "([% Hx5] & Hx1 & [% Hx10] & _)".
       iApply (femtokernel_handler_entry_safe _ _
-                (femto_handler_archstate vmpp vmpie vmcause vmscratch vmepc (ArchState.mkSState vstvec (MkSstatus vspp vspie vsie) vscause vsscratch vsepc)) vmie Hmpp with "Hinv").
+                (femto_handler_archstate vmpp vmpie vmcause vmscratch vmepc (ArchState.mkSState vstvec (MkSstatus vspp vspie vsie) vscause vsscratch vsepc) (ArchState.mkCountersState vmcycle vmtime vminstret vminstret_written vmcounteren vscounteren vmcountinhibit)) vmie Hmpp with "Hinv").
       cbn - [interp_ptstomem].
-      iFrame "Hhentry Hpc Hnpc Hmscratch HaccU Hcurpriv Hmtvec Hmcause Hmip Hmie Hmepc Hsepc Hscause Hsscratch Hstvec Hmideleg Hmedeleg Hpmp Hinv Hmstatus Hgprs Hx5 Hx10 Hx1 Hdata HR Hhdispatch Hhnotzero Hhiszero Hhcheck Hhshutdown Hhsecret Hhexit".
+      iFrame "Hhentry Hpc Hnpc Hmscratch HaccU Hcurpriv Hmtvec Hmcause Hmip Hmie Hmepc Hsepc Hscause Hsscratch Hstvec Hmideleg Hmedeleg Hpmp Hmcycle Hmtime Hminstret Hminstret_written Hmcounteren Hscounteren Hmcountinhibit Hinv Hmstatus Hgprs Hx5 Hx10 Hx1 Hdata HR Hhdispatch Hhnotzero Hhiszero Hhcheck Hhshutdown Hhsecret Hhexit".
       auto.
     Qed.
 
@@ -543,18 +549,20 @@ Section Integrity.
         ptsto_instrs_handler ∗
         (∃ v : Val ty_xlenbits, interp_ptstomem (bv.of_N data_addr) v) ∗
         ptstoSthL advAddrs ∗
+        interp_counters ∗
         phantom_res
         -∗
         WP_loop.
     Proof.
-      iIntros "((%mpp & %mpie & %mie & Hmst) & Hmtvec & [%vmcause Hmcause] & Hmip & Hmie & [%vmscratch Hmscratch] & [%vmepc Hmepc] & [%vscause Hscause] & [%vsscratch Hsscratch] & [%vsepc Hsepc] & [%vstvec Hstvec] & Hmideleg & Hmedeleg & Hcurpriv & Hgprs & Hpmpcfg & #Hmmio & Hpc & Hnpc & Hhandler & Hdata & Hmemadv & HR)".
+      iIntros "((%mpp & %mpie & %mie & Hmst) & Hmtvec & [%vmcause Hmcause] & Hmip & Hmie & [%vmscratch Hmscratch] & [%vmepc Hmepc] & [%vscause Hscause] & [%vsscratch Hsscratch] & [%vsepc Hsepc] & [%vstvec Hstvec] & Hmideleg & Hmedeleg & Hcurpriv & Hgprs & Hpmpcfg & #Hmmio & Hpc & Hnpc & Hhandler & Hdata & Hmemadv & ([%vmcycle Hmcycle] & [%vmtime Hmtime] & [%vminstret Hminstret] & [%vminstret_written Hminstret_written] & [%vmcounteren Hmcounteren] & [%vscounteren Hscounteren] & [%vmcountinhibit Hmcountinhibit]) & HR)".
       iApply (loop_pre_WP_loop
-                    (femto_adv_archstate mpp mpie mie vmcause vmscratch vmepc vstvec vscause vsscratch vsepc)).
+                    (femto_adv_archstate mpp mpie mie vmcause vmscratch vmepc vstvec vscause vsscratch vsepc
+                       (ArchState.mkCountersState vmcycle vmtime vminstret vminstret_written vmcounteren vscounteren vmcountinhibit))).
       unfold LoopVerificationl.loop_pre.
       iSplitR "Hhandler Hdata HR".
-      - unfold LoopVerificationl.Step_pre.
+      - unfold LoopVerificationl.LoopBody_pre.
         cbn - [ptstoSthL interp_ptstomem].
-        iFrame "Hgprs Hpmpcfg Hmie Hmip Hcurpriv Hpc Hnpc Hmtvec Hstvec Hmst Hmepc Hsepc Hmideleg Hmedeleg Hmscratch Hsscratch Hmcause Hscause".
+        iFrame "Hgprs Hpmpcfg Hmie Hmip Hcurpriv Hpc Hnpc Hmtvec Hstvec Hmst Hmepc Hsepc Hmideleg Hmedeleg Hmscratch Hsscratch Hmcause Hscause Hmcycle Hmtime Hminstret Hminstret_written Hmcounteren Hscounteren Hmcountinhibit".
         iSplitR; first auto.
         by iApply memAdv_pmpPolicy.
       - iFrame "HR".
@@ -594,7 +602,7 @@ Section Integrity.
       iApply (RVPTVl.WP_loop_semTripleBlock with "Hpro [Hpre] Htrip"); first iExact "Hpre".
       iIntros (an) "(Hpost & Hepi)".
       cbn - [asn_regs_ptsto interp_pmp_entries].
-      iDestruct "Hpost" as "([-> _] & Hmtvec & Hmcause & Hmip & Hmie & Hmepc & Hmstatus & Hmideleg & Hmedeleg & Hcurpriv & Hx1 & Hpmpentries)".
+      iDestruct "Hpost" as "([-> _] & Hmtvec & Hmcause & Hmip & Hmie & Hmepc & Hmstatus & Hmideleg & Hmedeleg & Hcurpriv & Hx1 & Hpmpentries & Hmtime & Hminstret_written & Hmcounteren & Hscounteren & Hmcountinhibit & Hmcycle & Hminstret)".
       iAssert (interp_gprs ∅) with "[Hgprs Hx1]" as "Hgprs".
       { iApply (interp_gprs_with_excluded (exclude := {[x1]}));
           try solve_subseteq.
@@ -603,7 +611,8 @@ Section Integrity.
         iFrame "Hx1". by cbn. }
       iDestruct "Hepi" as "(Hpc & Hinstrs & Hnpc)".
       rewrite ?bv.add_zero_l.
-      iApply (femtokernel_manualStep with "[$Hmstatus $Hmtvec $Hmcause $Hmip $Hmie $Hmscratch $Hmepc $Hscause $Hsscratch $Hsepc $Hstvec $Hmideleg $Hmedeleg $Hcurpriv $Hgprs $Hpmpentries $Hmem $Hpc $Hnpc $Hhandler $Hdata $Hadv $HR]").
+      iApply (femtokernel_manualStep with "[$Hmstatus $Hmtvec $Hmcause $Hmip $Hmie $Hmscratch $Hmepc $Hscause $Hsscratch $Hsepc $Hstvec $Hmideleg $Hmedeleg $Hcurpriv $Hgprs $Hpmpentries $Hmem $Hpc $Hnpc $Hhandler $Hdata $Hadv $HR Hmtime Hminstret_written Hmcounteren Hscounteren Hmcountinhibit Hmcycle Hminstret]").
+      unfold interp_counters. cbn; iFrame "Hmtime Hminstret_written Hmcounteren Hscounteren Hmcountinhibit Hmcycle Hminstret".
     Qed.
   End WithUnarySailGS.
 
@@ -649,8 +658,8 @@ Section Integrity.
       rewrite γmstatus γcurpriv γpmp0cfg γpmpaddr0 γpmp1cfg γpmpaddr1 γpc γmideleg γmedeleg.
       iDestruct "Hregs" as "(Hpc & Hnpc & Hmstatus & Hmie & Hmip & Hmideleg & Hmedeleg & Hmtvec & Hmscratch & Hmepc & Hmcause & Hstvec & Hsscratch & Hsepc & Hscause & Hcp & Hx1 & Hregs)".
       iFrame "Hpc Hnpc Hmstatus Hmie Hmip Hmideleg Hmedeleg Hmtvec Hmscratch Hmepc Hmcause Hstvec Hsscratch Hsepc Hscause Hcp Hx1".
-      iDestruct "Hregs" as "(Hx2 & Hx3 & Hx4 & Hx5 & Hx6 & Hx7 & Hx8 & Hx9 & Hx10 & Hx11 & Hx12 & Hx13 & Hx14 & Hx15 & Hx16 & Hx17 & Hx18 & Hx19 & Hx20 & Hx21 & Hx22 & Hx23 & Hx24 & Hx25 & Hx26 & Hx27 & Hx28 & Hx29 & Hx30 & Hx31 & Hp0 & Hp1 & Ha0 & Ha1 & _)".
-      iFrame "Hp0 Hp1 Ha0 Ha1".
+      iDestruct "Hregs" as "(Hx2 & Hx3 & Hx4 & Hx5 & Hx6 & Hx7 & Hx8 & Hx9 & Hx10 & Hx11 & Hx12 & Hx13 & Hx14 & Hx15 & Hx16 & Hx17 & Hx18 & Hx19 & Hx20 & Hx21 & Hx22 & Hx23 & Hx24 & Hx25 & Hx26 & Hx27 & Hx28 & Hx29 & Hx30 & Hx31 & Hp0 & Hp1 & Ha0 & Ha1 & Hmcycle & Hmtime & Hminstret & Hminstret_written & Hmcounteren & Hscounteren & Hmcountinhibit & _)".
+      iFrame "Hp0 Hp1 Ha0 Ha1 Hmcycle Hmtime Hminstret Hminstret_written Hmcounteren Hscounteren Hmcountinhibit".
       iSplitR; first (iPureIntro; split; [by vm_compute | done]).
       unfold interp_gprs; reduce_big_sepS_big_sepL; cbn.
       iFrame.

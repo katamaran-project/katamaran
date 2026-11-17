@@ -97,7 +97,8 @@ Module Examples.
       ∗ ∃ "mip", mip ↦ term_var "mip" ∗ ∃ "mie", mie ↦ term_var "mie"
       ∗ ∃ "mideleg", mideleg ↦ term_var "mideleg"
       ∗ asn_pmp_entries (term_list [(term_val ty_pmpcfg_ent default_pmpcfg_ent ,ₜ term_val ty_xlenbits bv.zero) ;
-                                    (term_val ty_pmpcfg_ent default_pmpcfg_ent ,ₜ term_val ty_xlenbits bv.zero)]).
+                                    (term_val ty_pmpcfg_ent default_pmpcfg_ent ,ₜ term_val ty_xlenbits bv.zero)])
+      ∗ asn_counters.
 
     (* minimal_post asserts ownership of the cur_privilege CSR,
        but do not care in which mode we end up. *)
@@ -108,7 +109,8 @@ Module Examples.
       ∗ ∃ "mip", mip ↦ term_var "mip" ∗ ∃ "mie", mie ↦ term_var "mie"
       ∗ ∃ "mideleg", mideleg ↦ term_var "mideleg"
       ∗ asn_pmp_entries (term_list [(term_val ty_pmpcfg_ent default_pmpcfg_ent ,ₜ term_val ty_xlenbits bv.zero) ;
-                                    (term_val ty_pmpcfg_ent default_pmpcfg_ent ,ₜ term_val ty_xlenbits bv.zero)]).
+                                    (term_val ty_pmpcfg_ent default_pmpcfg_ent ,ₜ term_val ty_xlenbits bv.zero)])
+      ∗ asn_counters.
 
     Definition extend_to_minimal_pre {Σ} (P : Assertion Σ) : Assertion Σ :=
       P ∗ minimal_pre.

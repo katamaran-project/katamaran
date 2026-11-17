@@ -1117,6 +1117,34 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
         (fun r => asn.exist "w" _ (r ↦ term_var "w"))
         (elements (GPRS ∖ exclude)).
 
+    (* Ownership of the counter registers, with the given values. *)
+    Definition asn_counters_at {Σ}
+      (cycle time instret : Term Σ (ty.bvec 64)) (instret_written : Term Σ ty.bool)
+      (mce sce : Term Σ ty_Counteren) (inhibit : Term Σ ty_Counterin) : Assertion Σ :=
+      mcycle           ↦ cycle ∗
+      mtime            ↦ time ∗
+      minstret         ↦ instret ∗
+      minstret_written ↦ instret_written ∗
+      mcounteren       ↦ mce ∗
+      scounteren       ↦ sce ∗
+      mcountinhibit    ↦ inhibit.
+
+    (* What a counter advances by in one step: 1, or 0 when it is inhibited. *)
+    Definition term_counter_inc {Σ} (inhibited : Term Σ ty.bool) : Term Σ (ty.bvec 64) :=
+      term_binop bop.bvcons (term_not inhibited) (term_val (ty.bvec 63) bv.zero).
+
+    (* Ownership of the counter registers, with arbitrary values. Unlike
+       asn_gprs, this is not a user predicate but the register chunks
+       themselves, so no open/close lemmas are needed to access them. *)
+    Definition asn_counters {Σ} : Assertion Σ :=
+      ∃ "v_mcycle", mcycle ↦ term_var "v_mcycle" ∗
+      ∃ "v_mtime", mtime ↦ term_var "v_mtime" ∗
+      ∃ "v_minstret", minstret ↦ term_var "v_minstret" ∗
+      ∃ "v_minstret_written", minstret_written ↦ term_var "v_minstret_written" ∗
+      ∃ "v_mcounteren", mcounteren ↦ term_var "v_mcounteren" ∗
+      ∃ "v_scounteren", scounteren ↦ term_var "v_scounteren" ∗
+      ∃ "v_mcountinhibit", mcountinhibit ↦ term_var "v_mcountinhibit".
+
     Local Notation "e1 ',ₜ' e2" := (term_binop bop.pair e1 e2) (at level 100).
 
     (* TODO: abstract away the concrete type, look into unions for that *)

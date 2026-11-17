@@ -131,7 +131,7 @@ Module Type RiscvPmpBlockVerifTotalVerifier
           ⟨ θ1 ⟩ _  <- produce
                          (exec_instruction_prologue i)
                          [env].["a"∷_ ↦ a] ;;
-          ⟨ θ2 ⟩ _  <- evalStoreSpec (sexec default_config inline_fuel (FunDef step) _) [env] ;;
+          ⟨ θ2 ⟩ _  <- evalStoreSpec (sexec default_config inline_fuel (FunDef loop_body) _) [env] ;;
           ⟨ θ3 ⟩ na <- angelic None _ ;;
           let a3 := persist__term a (θ1 ∘ θ2 ∘ θ3) in
           ⟨ θ4 ⟩ _  <- consume
@@ -192,7 +192,7 @@ Module Type RiscvPmpBlockVerifTotalVerifier
           _ <- produce
                  (exec_instruction_prologue i)
                  [env].["a"∷_ ↦ a] ;;
-          _ <- evalStoreSpec (cexec inline_fuel (FunDef step)) [env] ;;
+          _ <- evalStoreSpec (cexec inline_fuel (FunDef loop_body)) [env] ;;
           na <- angelic _ ;;
           _ <- consume
                  (exec_instruction_epilogue i)
@@ -339,7 +339,7 @@ Module Type RiscvPmpBlockVerifTotalVerifier
         | []   => POST apc
         | i :: instrs => ⌜ainstr = apc⌝
                   ∗ (asn.interpret (exec_instruction_prologue i) [env].["a"∷ty_xlenbits ↦ ainstr]  -∗
-                     semTWP [env] fun_step
+                     semTWP [env] fun_loop_body
                        (λ v δ, match v with
                                | inl v => ∃ na, asn.interpret (exec_instruction_epilogue i) [env].["a"∷ty_xlenbits ↦ ainstr].["an"∷ty_xlenbits ↦ na] ∗ step_n instrs (bv.add ainstr bv_instrsize) na POST
                                | inr _ =>
@@ -389,11 +389,11 @@ Module Type RiscvPmpBlockVerifTotalVerifier
         iIntros "(Hpc & Hinstr & [%npc Hnpc])". cbn.
         specialize (Hverif npc). apply sound_cexec in Hverif.
         iApply (semTWP_mono with "[-]").
-        iApply (sound_tstm (callgraph.mkNode step) TforeignSemBlockVerif lemSemBlockVerif Hverif with "[] [$]").
+        iApply (sound_tstm (callgraph.mkNode loop_body) TforeignSemBlockVerif lemSemBlockVerif Hverif with "[] [$]").
         - apply callgraph.InvokedByStmList_WellFormed_aux; auto.
         - iIntros (n R) "!>". iApply TcontractsSound. iPureIntro.
           apply (Transitive_Closure.Acc_inv_trans _ _ _ _ R).
-          apply accessible_step.
+          apply accessible_loop_body.
         - iIntros ([v|m] _); last done; iIntros "(%h1 & Hh1 & %Htrip)". clear Hverif.
           destruct Htrip as [an Htrip].
           iPoseProof (consume_sound _ _ Htrip with "Hh1")
@@ -492,7 +492,7 @@ Module Type RiscvPmpBlockVerifTotalVerifier
 
       Lemma WP_loop_semTTriple : ∀ PRE POST,
         PRE -∗
-        semTTriple [env] PRE fun_step POST -∗
+        semTTriple [env] PRE fun_loop_body POST -∗
         (∀ v1 δ1, POST v1 δ1 -∗ WP_loop) -∗
         WP_loop.
       Proof.
@@ -877,7 +877,7 @@ Module Type RiscvPmpBlockVerifTotalVerifier
           iAssert (stepTriple (filter_AST instrs) a a (λ _, interpret_scheap h2) (λ _ an, asn.interpret post ι.["a"∷ty_xlenbits ↦ a].["an"∷ty_xlenbits ↦ an]) -∗
                    interpret_scheap h2 -∗
                    asn.interpret (exec_instruction_prologue ainstr) [env].["a"∷ty_xlenbits ↦ a] -∗
-                   semTWP [env] fun_step
+                   semTWP [env] fun_loop_body
                        (λ (v : IVal ty.unit) (_ : NamedEnv Val [ctx]),
                          match v with
                          | inl _ =>

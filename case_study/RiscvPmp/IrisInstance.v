@@ -292,6 +292,14 @@ Module Type RiscvPmpIrisInstancePredicates (LOR : LeftOrRight)
       [∗ set] r ∈ GPRS ∖ exclude,
         (∃ v, reg_pointsTo r v)%I.
 
+    (* Ownership of the counter registers, with arbitrary values (the
+       interpretation of asn_counters, see counters_equiv). *)
+    Definition interp_counters : iProp Σ :=
+      (∃ v, reg_pointsTo mcycle v) ∗ (∃ v, reg_pointsTo mtime v) ∗
+      (∃ v, reg_pointsTo minstret v) ∗ (∃ v, reg_pointsTo minstret_written v) ∗
+      (∃ v, reg_pointsTo mcounteren v) ∗ (∃ v, reg_pointsTo scounteren v) ∗
+      (∃ v, reg_pointsTo mcountinhibit v).
+
     Lemma list_to_set_list_difference : ∀ {A : Type} `{Countable A} (l1 l2 : list A),
       (list_to_set (list_difference l1 l2) : gset A) = list_to_set l1 ∖ list_to_set l2.
     Proof.
@@ -727,6 +735,10 @@ Module Type RiscvPmpIrisInstance (LOR : LeftOrRight)
     - iDestruct "H" as "($ & H)".
       now iApply ("IH" with "H").
   Qed.
+
+  Lemma counters_equiv `{sailGS Σ} : ∀ {Σ} (ι : Valuation Σ),
+      interp_counters ⊣⊢ asn.interpret asn_counters ι.
+  Proof. intros. reflexivity. Qed.
 
 End RiscvPmpIrisInstance.
 

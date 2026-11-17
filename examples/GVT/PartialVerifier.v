@@ -126,7 +126,7 @@ Section BlockVerificationDerived.
         ⟨ θ1 ⟩ _  <- produce
                        (exec_instruction_prologue i)
                        [env].["a"∷_ ↦ a] ;;
-        ⟨ θ2 ⟩ _  <- evalStoreSpec (sexec default_config inline_fuel (FunDef step) _) [env] ;;
+        ⟨ θ2 ⟩ _  <- evalStoreSpec (sexec default_config inline_fuel (FunDef loop_body) _) [env] ;;
         ⟨ θ3 ⟩ na <- angelic None _ ;;
         let a3 := persist__term a (θ1 ∘ θ2 ∘ θ3) in
         ⟨ θ4 ⟩ _  <- consume
@@ -200,7 +200,7 @@ Section BlockVerificationDerived.
         _ <- produce
                (exec_instruction_prologue i)
                [env].["a"∷_ ↦ a] ;;
-        _ <- evalStoreSpec (cexec inline_fuel (FunDef step)) [env] ;;
+        _ <- evalStoreSpec (cexec inline_fuel (FunDef loop_body)) [env] ;;
         na <- angelic _ ;;
         _ <- consume
                (exec_instruction_epilogue i)
@@ -337,7 +337,7 @@ Section BlockVerificationDerived.
 
     Definition semTripleOneInstrStep (PRE : iProp Σ) (instr : AST) (POST : Val ty_word -> iProp Σ) (a : Val ty_word) : iProp Σ :=
       semTriple [env] (PRE ∗ blockVerifierAssumptions a ∗ interp_ptsto_instr a instr)
-        (FunDef RiscvPmpProgram.step)
+        (FunDef RiscvPmpProgram.loop_body)
         (fun ret _ => (∃ an, lptsreg nextpc an ∗ lptsreg pc an ∗ POST an) ∗ interp_ptsto_instr a instr)%I.
 
     Definition semTripleBlock (PRE : Val ty_word -> iProp Σ) (instrs : list AST) (POST : Val ty_word -> Val ty_word -> iProp Σ) : iProp Σ :=

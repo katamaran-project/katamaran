@@ -112,11 +112,19 @@ Section BlockVerification.
      "scause" :: ty_xlenbits;
      "sscratch" :: ty_xlenbits;
      "sepc" :: ty_xlenbits;
-     "stvec" :: ty_xlenbits].
+     "stvec" :: ty_xlenbits;
+     "mcycle" :: ty.bvec 64;
+     "mtime" :: ty.bvec 64;
+     "minstret" :: ty.bvec 64;
+     "minstret_written" :: ty.bool;
+     "mcounteren" :: ty_Counteren;
+     "scounteren" :: ty_Counteren;
+     "mcountinhibit" :: ty_Counterin].
 
   Definition csrs_valuation (archstate : ArchState) (vmie : Val ty_Minterrupts) : Valuation Σ__csrs :=
     let ms := ArchState.mstate archstate in
     let ss := ArchState.sstate archstate in
+    let cs := ArchState.counters archstate in
     [env]
       .["mtvec" ∷ ty_xlenbits ↦ ArchState.mtvec ms]
       .["mcause" ∷ ty_xlenbits ↦ ArchState.mcause ms]
@@ -132,13 +140,63 @@ Section BlockVerification.
       .["scause" ∷ ty_xlenbits ↦ ArchState.scause ss]
       .["sscratch" ∷ ty_xlenbits ↦ ArchState.sscratch ss]
       .["sepc" ∷ ty_xlenbits ↦ ArchState.sepc ss]
-      .["stvec" ∷ ty_xlenbits ↦ ArchState.stvec ss].
+      .["stvec" ∷ ty_xlenbits ↦ ArchState.stvec ss]
+      .["mcycle" ∷ ty.bvec 64 ↦ ArchState.mcycle cs]
+      .["mtime" ∷ ty.bvec 64 ↦ ArchState.mtime cs]
+      .["minstret" ∷ ty.bvec 64 ↦ ArchState.minstret cs]
+      .["minstret_written" ∷ ty.bool ↦ ArchState.minstret_written cs]
+      .["mcounteren" ∷ ty_Counteren ↦ ArchState.mcounteren cs]
+      .["scounteren" ∷ ty_Counteren ↦ ArchState.scounteren cs]
+      .["mcountinhibit" ∷ ty_Counterin ↦ ArchState.mcountinhibit cs].
+
+  Definition instr_count (b : list AnnotInstr) : N :=
+    N.of_nat (length (filter_AST b)).
+
+  (* The value of term_counter_inc. *)
+  Definition counter_inc (inhibited : bool) : bv 64 :=
+    bv.cons (negb inhibited) bv.zero.
+
+  (* The counter values after executing n instructions that all retire and
+     do not write a counter CSR. *)
+  Definition counters_after (n : N) (cs : ArchState.CountersState) : ArchState.CountersState :=
+    let inhibit := ArchState.mcountinhibit cs in
+    {| ArchState.mcycle           := bv.add (ArchState.mcycle cs) (bv.mul (bv.of_N n) (counter_inc (CI_CY inhibit)));
+       ArchState.mtime            := bv.add (ArchState.mtime cs) (bv.of_N n);
+       ArchState.minstret         := bv.add (ArchState.minstret cs) (bv.mul (bv.of_N n) (counter_inc (CI_IR inhibit)));
+       ArchState.minstret_written := false;
+       ArchState.mcounteren       := ArchState.mcounteren cs;
+       ArchState.scounteren       := ArchState.scounteren cs;
+       ArchState.mcountinhibit    := inhibit |}.
+
+  (* The ArchState after executing block b: only the counters change. *)
+  Definition archstate_after (b : list AnnotInstr) (a : ArchState) : ArchState :=
+    ArchState.archstate_update_counters a (counters_after (instr_count b) (ArchState.counters a)).
 
   Section WithAsnNotations.
     Import asn.notations.
     Import TermNotations.
 
-    Example femtokernel_init_pre : Assertion (Σ__csrs ▻▻ ["a"::ty_xlenbits]) :=
+    (* The counters at the start of a block, with the values of the ArchState. *)
+    Definition femtokernel_counters_pre : Assertion (Σ__csrs ▻▻ ["a" :: ty_xlenbits]) :=
+      asn_counters_at (term_var "mcycle") (term_var "mtime") (term_var "minstret")
+        (term_var "minstret_written") (term_var "mcounteren") (term_var "scounteren")
+        (term_var "mcountinhibit").
+
+    (* The counters at the end of a block of n instructions. *)
+    Definition femtokernel_counters_post (n : N) : Assertion (Σ__csrs ▻▻ ["a" :: ty_xlenbits; "an" :: ty_xlenbits]) :=
+      let n64 := term_val (ty.bvec 64) (bv.of_N n) in
+      mtime            ↦ term_binop bop.bvadd (term_var "mtime") n64 ∗
+      minstret_written ↦ term_val ty.bool false ∗
+      mcounteren       ↦ term_var "mcounteren" ∗
+      scounteren       ↦ term_var "scounteren" ∗
+      mcountinhibit    ↦ term_var "mcountinhibit" ∗
+      match: term_var "mcountinhibit" in rcounterin with
+        ["inhibit_IR"; "inhibit_CY"] =>
+          mcycle   ↦ term_binop bop.bvadd (term_var "mcycle") (term_binop bop.bvmul (term_val (ty.bvec 64) (bv.of_N n)) (term_counter_inc (term_var "inhibit_CY"))) ∗
+          minstret ↦ term_binop bop.bvadd (term_var "minstret") (term_binop bop.bvmul (term_val (ty.bvec 64) (bv.of_N n)) (term_counter_inc (term_var "inhibit_IR")))
+      end.
+
+    Example femtokernel_init_pre' : Assertion (Σ__csrs ▻▻ ["a"::ty_xlenbits]) :=
       (term_unop uop.unsigned (term_var "a") + term_val ty.int (Z.of_N adv_addr) < term_val ty.int (Z.of_N maxAddr))%asn ∗
         mtvec ↦ term_var "mtvec" ∗
         mcause ↦ term_var "mcause" ∗
@@ -150,9 +208,12 @@ Section BlockVerification.
         cur_privilege ↦ term_val ty_privilege Machine ∗
         (∃ "x1", x1 ↦ term_var "x1") ∗
         (asn_pmp_entries (term_list [(term_val ty_pmpcfg_ent default_pmpcfg_ent ,ₜ term_val ty_xlenbits bv.zero);
-                                     (term_val ty_pmpcfg_ent default_pmpcfg_ent ,ₜ term_val ty_xlenbits bv.zero)])).
+                                     (term_val ty_pmpcfg_ent default_pmpcfg_ent ,ₜ term_val ty_xlenbits bv.zero)])) ∗
+        femtokernel_counters_pre.
+    Definition femtokernel_init_pre : Assertion (Σ__csrs ▻▻ ["a"::ty_xlenbits]) :=
+      Eval vm_compute in femtokernel_init_pre'.
 
-    Example femtokernel_init_post : Assertion (Σ__csrs ▻▻ ["a"::ty_xlenbits; ("an"::ty_xlenbits)]) :=
+    Example femtokernel_init_post' : Assertion (Σ__csrs ▻▻ ["a"::ty_xlenbits; ("an"::ty_xlenbits)]) :=
       (
         (term_var "an" = term_var "a" +ᵇ (term_val ty_xlenbits (bv.of_N adv_addr)))%asn ∗
           (mtvec ↦ term_var "a" +ᵇ term_val ty_xlenbits (bv.of_N handler_entry_addr)) ∗
@@ -164,8 +225,11 @@ Section BlockVerification.
         medeleg ↦ term_val ty_Medeleg Medeleg_zero ∗
           cur_privilege ↦ term_val ty_privilege User ∗
           x1 ↦ term_val ty_xlenbits [bv 0x80] ∗
-          asn_pmp_entries (term_list (asn_femto_pmpentries (term_var "a")))
+          asn_pmp_entries (term_list (asn_femto_pmpentries (term_var "a"))) ∗
+          femtokernel_counters_post (instr_count femtokernel_init_gen)
       ).
+    Definition femtokernel_init_post : Assertion (Σ__csrs ▻▻ ["a"::ty_xlenbits; ("an"::ty_xlenbits)]) :=
+      Eval vm_compute in femtokernel_init_post'.
 
     Definition femtokernel_handler_shared_pre (addr : N) : Assertion (Σ__csrs ▻▻ ["a" :: ty_xlenbits]) :=
       (term_unop uop.unsigned (term_var "a") + term_val ty.int (Z.of_N (adv_addr - handler_entry_addr)) < term_val ty.int (Z.of_N maxAddr))%asn ∗
@@ -183,9 +247,10 @@ Section BlockVerification.
         medeleg ↦ term_val ty_Medeleg Medeleg_zero ∗
         asn_pmp_entries term_femto_pmpentries ∗
         (* asn_pmp_entries (term_list (asn_femto_pmpentries (term_var "a" -ᵇ term_val ty_xlenbits (bv.of_N handler_entry_addr)))) ∗ (* Different handler sizes cause different entries *) *)
-        asn_inv_mmio.
+        asn_inv_mmio ∗
+        femtokernel_counters_pre.
 
-    Definition femtokernel_handler_shared_post (priv : Term (Σ__csrs ▻▻ ["a" :: ty_xlenbits; "an" :: ty_xlenbits]) ty_privilege) : Assertion (Σ__csrs ▻▻ ["a" :: ty_xlenbits; "an" :: ty_xlenbits]) :=
+    Definition femtokernel_handler_shared_post (n : N) (priv : Term (Σ__csrs ▻▻ ["a" :: ty_xlenbits; "an" :: ty_xlenbits]) ty_privilege) : Assertion (Σ__csrs ▻▻ ["a" :: ty_xlenbits; "an" :: ty_xlenbits]) :=
       cur_privilege ↦ priv ∗
         mtvec ↦ term_val ty_word (bv.of_N handler_entry_addr) ∗
         mcause ↦ term_var "mcause" ∗
@@ -197,40 +262,49 @@ Section BlockVerification.
         stvec ↦ term_var "stvec" ∗
         mideleg ↦ term_val ty_Minterrupts Minterrupts_zero ∗
         medeleg ↦ term_val ty_Medeleg Medeleg_zero ∗
-        asn_pmp_entries term_femto_pmpentries.
+        asn_pmp_entries term_femto_pmpentries ∗
+        femtokernel_counters_post n.
     (* asn_pmp_entries (term_list (asn_femto_pmpentries (term_var "a" -ᵇ term_val ty_xlenbits (bv.of_N handler_entry_addr)))). (* Different handler sizes cause different entries *) *)
 
-    Example femtokernel_handler_entry_pre : Assertion (Σ__csrs ▻▻ ["x5" :: ty_xlenbits; "x10" :: ty_xlenbits] ▻▻ ["a" :: ty_xlenbits]) :=
+    Example femtokernel_handler_entry_pre' : Assertion (Σ__csrs ▻▻ ["x5" :: ty_xlenbits; "x10" :: ty_xlenbits] ▻▻ ["a" :: ty_xlenbits]) :=
       asn.sub_assertion (femtokernel_handler_shared_pre handler_entry_addr) (sub_up1 (sub_cat_left _)) ∗
         mstatus ↦ term_record rmstatus [nenv term_var "mstatus_mpp"; term_var "mstatus_spp"; term_var "mstatus_mpie"; term_var "mstatus_spie"; term_val ty.bool false; term_var "mstatus_sie"] ∗
         x5 ↦ term_var "x5" ∗
         x10 ↦ term_var "x10".
+    Definition femtokernel_handler_entry_pre : Assertion (Σ__csrs ▻▻ ["x5" :: ty_xlenbits; "x10" :: ty_xlenbits] ▻▻ ["a" :: ty_xlenbits]) :=
+      Eval vm_compute in femtokernel_handler_entry_pre'.
 
-    Example femtokernel_handler_entry_post :
+    Example femtokernel_handler_entry_post' :
       Assertion (Σ__csrs ▻▻ ["x5" :: ty_xlenbits; "x10" :: ty_xlenbits] ▻▻ ["a" :: ty_xlenbits; "an"::ty_xlenbits]) :=
-      asn.sub_assertion (femtokernel_handler_shared_post (term_val ty_privilege Machine)) (sub_up1 (sub_up1 (sub_cat_left _))) ∗
+      asn.sub_assertion (femtokernel_handler_shared_post (instr_count femtokernel_handler_entry) (term_val ty_privilege Machine)) (sub_up1 (sub_up1 (sub_cat_left _))) ∗
         mstatus ↦ term_record rmstatus [nenv term_var "mstatus_mpp"; term_var "mstatus_spp"; term_var "mstatus_mpie"; term_var "mstatus_spie"; term_val ty.bool false; term_var "mstatus_sie"] ∗
         (if: (term_var "x10" ?= term_val ty_xlenbits (bv.of_N mmio_write_adv))
          then term_var "an" = term_var "a" +ᵇ term_val ty_xlenbits (bv.of_N handler_entry_size)
          else term_var "an" = term_var "a" +ᵇ term_val ty_xlenbits (bv.of_N (handler_entry_size + handler_dispatch_size + handler_not_zero_size + handler_is_zero_size))) ∗
         x5 ↦ term_val ty_xlenbits (bv.of_N mmio_write_adv) ∗
         x10 ↦ term_var "x10".
+    Definition femtokernel_handler_entry_post : Assertion (Σ__csrs ▻▻ ["x5" :: ty_xlenbits; "x10" :: ty_xlenbits] ▻▻ ["a" :: ty_xlenbits; "an"::ty_xlenbits]) :=
+      Eval vm_compute in femtokernel_handler_entry_post'.
 
-    Example femtokernel_handler_dispatch_pre : Assertion (Σ__csrs ▻▻ ["x1" :: ty_xlenbits; "secret" :: ty_xlenbits] ▻▻ ["a" :: ty_xlenbits]) :=
+    Example femtokernel_handler_dispatch_pre' : Assertion (Σ__csrs ▻▻ ["x1" :: ty_xlenbits; "secret" :: ty_xlenbits] ▻▻ ["a" :: ty_xlenbits]) :=
       asn.sub_assertion (femtokernel_handler_shared_pre handler_dispatch_addr) (sub_up1 (sub_cat_left _)) ∗
         mstatus ↦ term_record rmstatus [nenv term_var "mstatus_mpp"; term_var "mstatus_spp"; term_var "mstatus_mpie"; term_var "mstatus_spie"; term_val ty.bool false; term_var "mstatus_sie"] ∗
         x1 ↦ term_var "x1" ∗
         term_val ty_xlenbits (bv.of_N data_addr) ↦ₘ term_var "secret".
+    Definition femtokernel_handler_dispatch_pre : Assertion (Σ__csrs ▻▻ ["x1" :: ty_xlenbits; "secret" :: ty_xlenbits] ▻▻ ["a" :: ty_xlenbits]) :=
+      Eval vm_compute in femtokernel_handler_dispatch_pre'.
 
-    Example femtokernel_handler_dispatch_post :
+    Example femtokernel_handler_dispatch_post' :
       Assertion (Σ__csrs ▻▻ ["x1" :: ty_xlenbits; "secret" :: ty_xlenbits] ▻▻ ["a" :: ty_xlenbits; "an"::ty_xlenbits]) :=
-      asn.sub_assertion (femtokernel_handler_shared_post (term_val ty_privilege Machine)) (sub_up1 (sub_up1 (sub_cat_left _))) ∗
+      asn.sub_assertion (femtokernel_handler_shared_post (instr_count femtokernel_handler_dispatch) (term_val ty_privilege Machine)) (sub_up1 (sub_up1 (sub_cat_left _))) ∗
         mstatus ↦ term_record rmstatus [nenv term_var "mstatus_mpp"; term_var "mstatus_spp"; term_var "mstatus_mpie"; term_var "mstatus_spie"; term_val ty.bool false; term_var "mstatus_sie"] ∗
         (if: (term_var "secret" ?= term_val ty_xlenbits bv.zero)
          then term_var "an" = term_var "a" +ᵇ term_val ty_xlenbits (bv.of_N (handler_dispatch_size + handler_not_zero_size))
          else term_var "an" = term_var "a" +ᵇ term_val ty_xlenbits (bv.of_N handler_dispatch_size)) ∗
         x1 ↦ term_var "secret" ∗
         term_val ty_xlenbits (bv.of_N data_addr) ↦ₘ term_var "secret".
+    Definition femtokernel_handler_dispatch_post : Assertion (Σ__csrs ▻▻ ["x1" :: ty_xlenbits; "secret" :: ty_xlenbits] ▻▻ ["a" :: ty_xlenbits; "an"::ty_xlenbits]) :=
+      Eval vm_compute in femtokernel_handler_dispatch_post'.
 
     (* The not_zero and is_zero blocks share their contract (modulo their address):
        both perform the (only) observable write of the handler, and log the
@@ -243,9 +317,11 @@ Section BlockVerification.
         x5 ↦ term_var "x5" ∗
         term_val ty_xlenbits (bv.of_N data_addr) ↦ₘ term_var "secret".
 
-    Example femtokernel_handler_ack_post :
+    (* Shared by the not_zero and is_zero blocks, which therefore must have
+       the same length (see not_zero_is_zero_same_length). *)
+    Example femtokernel_handler_ack_post' :
       Assertion (Σ__csrs ▻▻ ["x1" :: ty_xlenbits; "x5" :: ty_xlenbits; "secret" :: ty_xlenbits] ▻▻ ["a" :: ty_xlenbits; "an"::ty_xlenbits]) :=
-      asn.sub_assertion (femtokernel_handler_shared_post (term_val ty_privilege Machine)) (sub_up1 (sub_up1 (sub_cat_left _))) ∗
+      asn.sub_assertion (femtokernel_handler_shared_post (instr_count femtokernel_handler_not_zero) (term_val ty_privilege Machine)) (sub_up1 (sub_up1 (sub_cat_left _))) ∗
         mstatus ↦ term_record rmstatus [nenv term_var "mstatus_mpp"; term_var "mstatus_spp"; term_var "mstatus_mpie"; term_var "mstatus_spie"; term_val ty.bool false; term_var "mstatus_sie"] ∗
         term_var "an" = term_val ty_xlenbits (bv.of_N handler_exit_addr) ∗
         x1 ↦ term_val ty_xlenbits bv.zero ∗
@@ -256,34 +332,52 @@ Section BlockVerification.
         asn.chunk (chunk_user (written bytes_per_word)
                      [term_val ty_xlenbits (bv.of_N mmio_write_adv);
                       term_val (ty_bytes bytes_per_word) (bv.of_N 42)]).
+    Definition femtokernel_handler_ack_post : Assertion (Σ__csrs ▻▻ ["x1" :: ty_xlenbits; "x5" :: ty_xlenbits; "secret" :: ty_xlenbits] ▻▻ ["a" :: ty_xlenbits; "an"::ty_xlenbits]) :=
+      Eval vm_compute in femtokernel_handler_ack_post'.
 
-    Example femtokernel_handler_not_zero_pre := femtokernel_handler_ack_pre handler_not_zero_addr.
-    Example femtokernel_handler_is_zero_pre := femtokernel_handler_ack_pre handler_is_zero_addr.
+    (* Which of both blocks runs depends on the secret, so their length must
+       not differ: it is observable through the counters. *)
+    Lemma not_zero_is_zero_same_length :
+      instr_count femtokernel_handler_not_zero = instr_count femtokernel_handler_is_zero.
+    Proof. now vm_compute. Qed.
 
-    Example femtokernel_handler_secret_write_pre : Assertion (Σ__csrs ▻▻ ["x1" :: ty_xlenbits; "secret" :: ty_xlenbits] ▻▻ ["a" :: ty_xlenbits]) :=
+    Example femtokernel_handler_not_zero_pre' := femtokernel_handler_ack_pre handler_not_zero_addr.
+    Definition femtokernel_handler_not_zero_pre : Assertion (Σ__csrs ▻▻ ["x1" :: ty_xlenbits; "x5" :: ty_xlenbits; "secret" :: ty_xlenbits] ▻▻ ["a" :: ty_xlenbits]) :=
+      Eval vm_compute in femtokernel_handler_not_zero_pre'.
+    Example femtokernel_handler_is_zero_pre' := femtokernel_handler_ack_pre handler_is_zero_addr.
+    Definition femtokernel_handler_is_zero_pre : Assertion (Σ__csrs ▻▻ ["x1" :: ty_xlenbits; "x5" :: ty_xlenbits; "secret" :: ty_xlenbits] ▻▻ ["a" :: ty_xlenbits]) :=
+      Eval vm_compute in femtokernel_handler_is_zero_pre'.
+
+    Example femtokernel_handler_secret_write_pre' : Assertion (Σ__csrs ▻▻ ["x1" :: ty_xlenbits; "secret" :: ty_xlenbits] ▻▻ ["a" :: ty_xlenbits]) :=
       asn.sub_assertion (femtokernel_handler_shared_pre handler_secret_write_addr) (sub_up1 (sub_cat_left _)) ∗
         mstatus ↦ term_record rmstatus [nenv term_var "mstatus_mpp"; term_var "mstatus_spp"; term_var "mstatus_mpie"; term_var "mstatus_spie"; term_val ty.bool false; term_var "mstatus_sie"] ∗
         x1 ↦ term_var "x1" ∗
         term_val ty_xlenbits (bv.of_N data_addr) ↦ₘ term_var "secret".
+    Definition femtokernel_handler_secret_write_pre : Assertion (Σ__csrs ▻▻ ["x1" :: ty_xlenbits; "secret" :: ty_xlenbits] ▻▻ ["a" :: ty_xlenbits]) :=
+      Eval vm_compute in femtokernel_handler_secret_write_pre'.
 
-    Example femtokernel_handler_secret_write_post :
+    Example femtokernel_handler_secret_write_post' :
       Assertion (Σ__csrs ▻▻ ["x1" :: ty_xlenbits; "secret" :: ty_xlenbits] ▻▻ ["a" :: ty_xlenbits; "an"::ty_xlenbits]) :=
-      asn.sub_assertion (femtokernel_handler_shared_post (term_val ty_privilege Machine)) (sub_up1 (sub_up1 (sub_cat_left _))) ∗
+      asn.sub_assertion (femtokernel_handler_shared_post (instr_count femtokernel_handler_secret_write) (term_val ty_privilege Machine)) (sub_up1 (sub_up1 (sub_cat_left _))) ∗
         mstatus ↦ term_record rmstatus [nenv term_var "mstatus_mpp"; term_var "mstatus_spp"; term_var "mstatus_mpie"; term_var "mstatus_spie"; term_val ty.bool false; term_var "mstatus_sie"] ∗
         term_var "an" = term_var "a" +ᵇ term_val ty_xlenbits (bv.of_N handler_secret_write_size) ∗
                                         x1 ↦ term_val ty_xlenbits bv.zero ∗
                                         term_val ty_xlenbits (bv.of_N data_addr) ↦ₘ term_var "secret".
+    Definition femtokernel_handler_secret_write_post : Assertion (Σ__csrs ▻▻ ["x1" :: ty_xlenbits; "secret" :: ty_xlenbits] ▻▻ ["a" :: ty_xlenbits; "an"::ty_xlenbits]) :=
+      Eval vm_compute in femtokernel_handler_secret_write_post'.
 
-    Example femtokernel_handler_shutdown_check_pre : Assertion (Σ__csrs ▻▻ ["x1" :: ty_xlenbits; "x5" :: ty_xlenbits; "x10" :: ty_xlenbits] ▻▻ ["a" :: ty_xlenbits]) :=
+    Example femtokernel_handler_shutdown_check_pre' : Assertion (Σ__csrs ▻▻ ["x1" :: ty_xlenbits; "x5" :: ty_xlenbits; "x10" :: ty_xlenbits] ▻▻ ["a" :: ty_xlenbits]) :=
       asn.sub_assertion (femtokernel_handler_shared_pre handler_shutdown_check_addr) (sub_up1 (sub_cat_left _)) ∗
         mstatus ↦ term_record rmstatus [nenv term_var "mstatus_mpp"; term_var "mstatus_spp"; term_var "mstatus_mpie"; term_var "mstatus_spie"; term_val ty.bool false; term_var "mstatus_sie"] ∗
         x1 ↦ term_var "x1" ∗
         x5 ↦ term_var "x5" ∗
         x10 ↦ term_var "x10".
+    Definition femtokernel_handler_shutdown_check_pre : Assertion (Σ__csrs ▻▻ ["x1" :: ty_xlenbits; "x5" :: ty_xlenbits; "x10" :: ty_xlenbits] ▻▻ ["a" :: ty_xlenbits]) :=
+      Eval vm_compute in femtokernel_handler_shutdown_check_pre'.
 
-    Example femtokernel_handler_shutdown_check_post :
+    Example femtokernel_handler_shutdown_check_post' :
       Assertion (Σ__csrs ▻▻ ["x1" :: ty_xlenbits; "x5" :: ty_xlenbits; "x10" :: ty_xlenbits] ▻▻ ["a" :: ty_xlenbits; "an"::ty_xlenbits]) :=
-      asn.sub_assertion (femtokernel_handler_shared_post (term_val ty_privilege Machine)) (sub_up1 (sub_up1 (sub_cat_left _))) ∗
+      asn.sub_assertion (femtokernel_handler_shared_post (instr_count femtokernel_handler_shutdown_check) (term_val ty_privilege Machine)) (sub_up1 (sub_up1 (sub_cat_left _))) ∗
         mstatus ↦ term_record rmstatus [nenv term_var "mstatus_mpp"; term_var "mstatus_spp"; term_var "mstatus_mpie"; term_var "mstatus_spie"; term_val ty.bool false; term_var "mstatus_sie"] ∗
         (if: (term_var "x10" ?= term_val ty_xlenbits (bv.of_N shutdown_code))
          then term_var "an" = term_var "a" +ᵇ term_val ty_xlenbits (bv.of_N handler_shutdown_check_size)
@@ -291,34 +385,44 @@ Section BlockVerification.
         x1 ↦ term_val ty_xlenbits (bv.of_N shutdown_code) ∗
         x5 ↦ term_val ty_xlenbits mmioShutdownAddr ∗
         x10 ↦ term_var "x10".
+    Definition femtokernel_handler_shutdown_check_post : Assertion (Σ__csrs ▻▻ ["x1" :: ty_xlenbits; "x5" :: ty_xlenbits; "x10" :: ty_xlenbits] ▻▻ ["a" :: ty_xlenbits; "an"::ty_xlenbits]) :=
+      Eval vm_compute in femtokernel_handler_shutdown_check_post'.
 
     (* Powering off the machine is observable by the adversary, and requires
        that the machine is still powered on. The power tokens are kept apart
        from the rest of the pre- and postcondition, as the relational
        verification hands them to the block separately. *)
-    Example femtokernel_handler_shutdown_pre : Assertion (Σ__csrs ▻▻ ["a" :: ty_xlenbits]) :=
+    Example femtokernel_handler_shutdown_pre' : Assertion (Σ__csrs ▻▻ ["a" :: ty_xlenbits]) :=
       (femtokernel_handler_shared_pre handler_shutdown_addr ∗
          mstatus ↦ term_record rmstatus [nenv term_var "mstatus_mpp"; term_var "mstatus_spp"; term_var "mstatus_mpie"; term_var "mstatus_spie"; term_val ty.bool false; term_var "mstatus_sie"] ∗
          x5 ↦ term_val ty_xlenbits mmioShutdownAddr ∗
          asn.chunk (chunk_user nothingPending env.nil)) ∗
         asn.chunk (chunk_user Sig.powered [term_val ty.bool true]).
+    Definition femtokernel_handler_shutdown_pre : Assertion (Σ__csrs ▻▻ ["a" :: ty_xlenbits]) :=
+      Eval vm_compute in femtokernel_handler_shutdown_pre'.
 
-    Example femtokernel_handler_shutdown_post :
+    Example femtokernel_handler_shutdown_post' :
       Assertion (Σ__csrs ▻▻ ["a" :: ty_xlenbits; "an"::ty_xlenbits]) :=
       (term_var "an" = term_var "a" +ᵇ term_val ty_xlenbits (bv.of_N handler_shutdown_size) ∗
          asn.chunk (chunk_user (Sig.written_shutdown bytes_per_word)
                       [term_val ty_xlenbits mmioShutdownAddr; term_val (ty_bytes bytes_per_word) bv.zero])) ∗
         asn.chunk (chunk_user Sig.powered [term_val ty.bool false]).
+    Definition femtokernel_handler_shutdown_post : Assertion (Σ__csrs ▻▻ ["a" :: ty_xlenbits; "an"::ty_xlenbits]) :=
+      Eval vm_compute in femtokernel_handler_shutdown_post'.
 
-    Example femtokernel_handler_exit_pre : Assertion (Σ__csrs ▻▻ ["a" :: ty_xlenbits]) :=
+    Example femtokernel_handler_exit_pre' : Assertion (Σ__csrs ▻▻ ["a" :: ty_xlenbits]) :=
       femtokernel_handler_shared_pre handler_exit_addr ∗
         mstatus ↦ term_record rmstatus [nenv term_var "mstatus_mpp"; term_var "mstatus_spp"; term_var "mstatus_mpie"; term_var "mstatus_spie"; term_val ty.bool false; term_var "mstatus_sie"].
+    Definition femtokernel_handler_exit_pre : Assertion (Σ__csrs ▻▻ ["a" :: ty_xlenbits]) :=
+      Eval vm_compute in femtokernel_handler_exit_pre'.
 
-    Example femtokernel_handler_exit_post :
+    Example femtokernel_handler_exit_post' :
       Assertion (Σ__csrs ▻▻ ["a" :: ty_xlenbits; "an"::ty_xlenbits]) :=
-      femtokernel_handler_shared_post (term_var "mstatus_mpp") ∗
+      femtokernel_handler_shared_post (instr_count femtokernel_handler_exit) (term_var "mstatus_mpp") ∗
         mstatus ↦ term_record rmstatus [nenv term_val ty_privilege User; term_var "mstatus_spp"; term_val ty.bool true; term_var "mstatus_spie"; term_var "mstatus_mpie"; term_var "mstatus_sie"] ∗
         term_var "an" = term_var "mepc".
+    Definition femtokernel_handler_exit_post : Assertion (Σ__csrs ▻▻ ["a" :: ty_xlenbits; "an"::ty_xlenbits]) :=
+      Eval vm_compute in femtokernel_handler_exit_post'.
 
   End WithAsnNotations.
 
@@ -1064,7 +1168,7 @@ Section Shared.
   (* The architectural state with which the femtokernel hands control to the
      adversary (or traps back): M-mode state is fixed by the kernel, except
      for the parts that the adversary can influence. *)
-  Definition femto_archstate (priv : Privilege) (ms : ArchState.MState) (ss : ArchState.SState) (pc : Xlenbits) : ArchState :=
+  Definition femto_archstate (priv : Privilege) (ms : ArchState.MState) (ss : ArchState.SState) (pc : Xlenbits) (cs : ArchState.CountersState) : ArchState :=
     {| ArchState.m := priv;
        ArchState.mstate :=
          {| ArchState.mtvec      := bv.of_N handler_entry_addr;
@@ -1078,11 +1182,13 @@ Section Shared.
             ArchState.mideleg    := Minterrupts_zero;
             ArchState.medeleg    := Medeleg_zero |};
        ArchState.sstate := ss;
-       ArchState.pc := pc |}.
+       ArchState.pc := pc;
+       ArchState.counters := cs |}.
 
   (* The architectural state with which the handler returns to the
      adversary: the pc is the address the handler returns to, everything else
-     is fixed by the handler pre- and postconditions. *)
+     is fixed by the handler pre- and postconditions. The counters are those
+     after the exit block. *)
   Definition femto_return_archstate (archstate : ArchState) (vmscratch : Val ty_xlenbits) (an : Val ty_xlenbits) : ArchState :=
     femto_archstate (ArchState.mpp (ArchState.mstate archstate))
       {| ArchState.mtvec      := bv.of_N handler_entry_addr;
@@ -1096,12 +1202,13 @@ Section Shared.
          ArchState.mideleg    := Minterrupts_zero;
          ArchState.medeleg    := Medeleg_zero |}
       (ArchState.sstate archstate)
-      an.
+      an
+      (counters_after (instr_count femtokernel_handler_exit) (ArchState.counters archstate)).
 
   (* The architectural state on entry of the trap handler, after a trap from
      S- or U-mode. *)
   Definition femto_handler_archstate (mpp : Privilege) (mpie : bool) (mcause mscratch mepc : Xlenbits)
-    (ss : ArchState.SState) : ArchState :=
+    (ss : ArchState.SState) (cs : ArchState.CountersState) : ArchState :=
     {| ArchState.m      := Machine;
        ArchState.mstate :=
          {| ArchState.mtvec      := bv.of_N handler_entry_addr;
@@ -1115,17 +1222,18 @@ Section Shared.
             ArchState.mideleg    := Minterrupts_zero;
             ArchState.medeleg    := Medeleg_zero |};
        ArchState.sstate := ss;
-       ArchState.pc     := bv.of_N handler_entry_addr |}.
+       ArchState.pc     := bv.of_N handler_entry_addr;
+       ArchState.counters := cs |}.
 
   (* The architectural state with which the femtokernel first hands control
      to the adversary, after its initialization. *)
   Definition femto_adv_archstate (mpp : Privilege) (mpie mie : bool) (mcause mscratch mepc : Xlenbits)
-    (stvec scause sscratch sepc : Xlenbits) : ArchState :=
+    (stvec scause sscratch sepc : Xlenbits) (cs : ArchState.CountersState) : ArchState :=
     femto_archstate User
       (ArchState.mkMState (bv.of_N handler_entry_addr) femto_pmpentries mpp mpie mie
          mcause mscratch mepc Minterrupts_zero Medeleg_zero)
       (ArchState.mkSState stvec (MkSstatus User false false) scause sscratch sepc)
-      (bv.of_N adv_addr).
+      (bv.of_N adv_addr) cs.
 
   (* The architectural state in which the femtokernel starts executing. *)
   Definition femto_init_archstate (γ : RegStore) : ArchState :=
@@ -1147,5 +1255,13 @@ Section Shared.
             ArchState.scause   := read_register γ scause;
             ArchState.sscratch := read_register γ sscratch;
             ArchState.sepc     := read_register γ sepc |};
-       ArchState.pc     := bv.of_N init_addr |}.
+       ArchState.pc     := bv.of_N init_addr;
+       ArchState.counters :=
+         {| ArchState.mcycle           := read_register γ mcycle;
+            ArchState.mtime            := read_register γ mtime;
+            ArchState.minstret         := read_register γ minstret;
+            ArchState.minstret_written := read_register γ minstret_written;
+            ArchState.mcounteren       := read_register γ mcounteren;
+            ArchState.scounteren       := read_register γ scounteren;
+            ArchState.mcountinhibit    := read_register γ mcountinhibit |} |}.
 End Shared.

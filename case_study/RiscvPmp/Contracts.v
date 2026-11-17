@@ -124,9 +124,11 @@ Module Import RiscvPmpSpecification.
                            mstatus       ↦ term_record rmstatus [nenv term_var "mpp"; term_var "spp"; term_var "mpie"; term_var "spie"; term_var "mie"; term_var "sie" ] ∗
                            asn_pmp_entries (term_var "pmpentries") ∗
                            asn_pmp_addr_access (term_var "pmpentries") (term_var "m") ∗
-                           asn_gprs;
+                           asn_gprs ∗
+                           asn_counters;
              sep_contract_result          := "result_mach_inv";
              sep_contract_postcondition   :=
+                           asn_counters ∗
                            asn_pmp_addr_access (term_var "pmpentries") (term_var "m") ∗
                            asn_gprs ∗
                            pc     ↦ term_var "pc" ∗
@@ -313,7 +315,8 @@ Module Import RiscvPmpSpecification.
              ∗ stvec ↦ term_var "stvec"
              ∗ sscratch ↦ term_var "sscratch"
              ∗ sepc ↦ term_var "sepc"
-             ∗ scause ↦ term_var "scause" }}
+             ∗ scause ↦ term_var "scause"
+             ∗ asn_counters }}
             fn readCSR [csr :: ty_csridx] ty_xlenbits
           {{ "result_readCSR",
              ∃ "result", term_var "result_readCSR" = term_var "result"
@@ -333,7 +336,8 @@ Module Import RiscvPmpSpecification.
              ∗ stvec ↦ term_var "stvec"
              ∗ sscratch ↦ term_var "sscratch"
              ∗ sepc ↦ term_var "sepc"
-             ∗ scause ↦ term_var "scause" }}
+             ∗ scause ↦ term_var "scause"
+             ∗ asn_counters }}
           with ["mpp" :: ty_privilege; "mtvec" :: ty_xlenbits; "mcause" :: ty_mcause;
                 "mepc" :: ty_xlenbits; "cfg0" :: ty_pmpcfg_ent; "cfg1" :: ty_pmpcfg_ent;
                 "addr0" :: ty_xlenbits; "addr1" :: ty_xlenbits; "spp" :: ty_privilege;
@@ -394,6 +398,15 @@ Module Import RiscvPmpSpecification.
                registers (which also depends on some bits of mideleg!). *)
             | Sip       => mideleg ↦ term_var "ro_mideleg" ∗ ∃ "v", mip ↦ term_var "v" ∗ default_ro_cfg ∗ default_ro_m
             | Sie       => mideleg ↦ term_var "ro_mideleg" ∗ ∃ "v", mie ↦ term_var "v" ∗ default_ro_cfg ∗ default_ro_m
+            | MCycle        => ∃ "v", mcycle ↦ term_var "v" ∗ all_defaults
+            | MCycleh       => ∃ "v", mcycle ↦ term_var "v" ∗ all_defaults
+            | MInstret      => ∃ "v", minstret ↦ term_var "v" ∗ ∃ "w", minstret_written ↦ term_var "w" ∗ all_defaults
+            | MInstreth     => ∃ "v", minstret ↦ term_var "v" ∗ ∃ "w", minstret_written ↦ term_var "w" ∗ all_defaults
+            | MCountinhibit => ∃ "v", mcountinhibit ↦ term_var "v" ∗ all_defaults
+            | MCounteren    => ∃ "v", mcounteren ↦ term_var "v" ∗ all_defaults
+            | SCounteren    => ∃ "v", scounteren ↦ term_var "v" ∗ all_defaults
+            (* Other registers are read-only, so writeCSR does nothing. *)
+            | _ => all_defaults
             end in
           {{ asn.match_enum csridx (term_var csr) csr_ptsto }}
             fn writeCSR [csr :: ty_csridx; value :: ty_xlenbits] ty.unit
@@ -405,7 +418,7 @@ Module Import RiscvPmpSpecification.
 
         Definition sep_contract_check_CSR : SepContractFun check_CSR :=
           {{ ⊤ }}
-            fn check_CSR [csr :: ty_csridx; p :: ty_privilege] ty.bool
+            fn check_CSR [csr :: ty_csridx; p :: ty_privilege; "isWrite" :: ty.bool] ty.bool
           {{ "result_check_CSR", ⊤ }}.
 
         Definition sep_contract_is_CSR_defined : SepContractFun is_CSR_defined :=
@@ -443,35 +456,49 @@ Module Import RiscvPmpSpecification.
                                                    (term_eq (term_var p) (term_val ty_privilege Supervisor))
                             | Sie       => term_or (term_eq (term_var p) (term_val ty_privilege Machine))
                                                    (term_eq (term_var p) (term_val ty_privilege Supervisor))
+                            | MCycle        => term_eq (term_var p) (term_val ty_privilege Machine)
+                            | MInstret      => term_eq (term_var p) (term_val ty_privilege Machine)
+                            | MCycleh       => term_eq (term_var p) (term_val ty_privilege Machine)
+                            | MInstreth     => term_eq (term_var p) (term_val ty_privilege Machine)
+                            | MCountinhibit => term_eq (term_var p) (term_val ty_privilege Machine)
+                            | MCounteren    => term_eq (term_var p) (term_val ty_privilege Machine)
+                            | SCounteren    => term_or (term_eq (term_var p) (term_val ty_privilege Machine))
+                                                       (term_eq (term_var p) (term_val ty_privilege Supervisor))
+                            | Cycle         => term_val ty.bool true
+                            | Time          => term_val ty.bool true
+                            | Instret       => term_val ty.bool true
+                            | Cycleh        => term_val ty.bool true
+                            | Timeh         => term_val ty.bool true
+                            | Instreth      => term_val ty.bool true
                             end in
                           let req_priv : Term (Σ ▻ "result_is_CSR_defined" ∷ ty.bool) ty.bool := sub_term req_priv sub_wk1 in
                           term_var "result_is_CSR_defined" = req_priv) }}.
 
         Definition sep_contract_check_CSR_access : SepContractFun check_CSR_access :=
           {{ ⊤ }}
-            fn check_CSR_access [csrrw :: ty_access_type; csrpr :: ty_privilege; p :: ty_privilege] ty.bool
+            fn check_CSR_access [csrrw :: ty_access_type; csrpr :: ty_privilege; p :: ty_privilege; "isWrite" :: ty.bool] ty.bool
           {{ "result_check_CSR_access",
+             let access_ok :=
+               term_not (term_binop bop.and (term_var "isWrite")
+                           (term_eq (term_var csrrw) (term_val ty_access_type Read))) in
              asn.match_enum privilege (term_var csrpr)
              (fun K => match K with
                        | Machine =>
                            asn.match_enum privilege (term_var p)
                              (fun K => match K with
-                                       | Machine => term_var "result_check_CSR_access" =
-                                                      term_val ty.bool true
+                                       | Machine => term_var "result_check_CSR_access" = access_ok
                                        | _       => term_var "result_check_CSR_access" =
                                                       term_val ty.bool false
                                        end)
                        | Supervisor =>
                            asn.match_enum privilege (term_var p)
                              (fun K => match K with
-                                       | Machine    => term_var "result_check_CSR_access" =
-                                                         term_val ty.bool true
-                                       | Supervisor => term_var "result_check_CSR_access" =
-                                                         term_val ty.bool true
+                                       | Machine    => term_var "result_check_CSR_access" = access_ok
+                                       | Supervisor => term_var "result_check_CSR_access" = access_ok
                                        | User       => term_var "result_check_CSR_access" =
                                                          term_val ty.bool false
                                        end)
-                       | User => term_var "result_check_CSR_access" = term_val ty.bool true
+                       | User => term_var "result_check_CSR_access" = access_ok
                        end) }}.
 
         Definition sep_contract_privLevel_to_bits : SepContractFun privLevel_to_bits :=
@@ -492,7 +519,80 @@ Module Import RiscvPmpSpecification.
           {{ ⊤ }}
             fn csrAccess [csr :: ty_csridx] ty_access_type
           {{ "result_csrAccess",
-             term_var "result_csrAccess" = term_val ty_access_type ReadWrite }}.
+             asn.match_enum csridx (term_var csr)
+               (fun K => match K with
+                         | Cycle    => term_var "result_csrAccess" = term_val ty_access_type Read
+                         | Time     => term_var "result_csrAccess" = term_val ty_access_type Read
+                         | Instret  => term_var "result_csrAccess" = term_val ty_access_type Read
+                         | Cycleh   => term_var "result_csrAccess" = term_val ty_access_type Read
+                         | Timeh    => term_var "result_csrAccess" = term_val ty_access_type Read
+                         | Instreth => term_var "result_csrAccess" = term_val ty_access_type Read
+                         | _        => term_var "result_csrAccess" = term_val ty_access_type ReadWrite
+                         end) }}.
+
+        Definition sep_contract_check_Counteren : SepContractFun check_Counteren :=
+          {{ mcounteren ↦ term_var "mce" ∗ scounteren ↦ term_var "sce" }}
+            fn check_Counteren [csr :: ty_csridx; p :: ty_privilege] ty.bool
+          {{ "result_check_Counteren",
+             mcounteren ↦ term_var "mce" ∗ scounteren ↦ term_var "sce" }}
+          with ["mce" :: ty_Counteren; "sce" :: ty_Counteren].
+
+        Definition sep_contract_Counteren_to_bits : SepContractFun Counteren_to_bits :=
+          {{ ⊤ }}
+            fn Counteren_to_bits ["c" :: ty_Counteren] ty_xlenbits
+          {{ "result_Counteren_to_bits", ⊤ }}.
+
+        Definition sep_contract_Counterin_to_bits : SepContractFun Counterin_to_bits :=
+          {{ ⊤ }}
+            fn Counterin_to_bits ["c" :: ty_Counterin] ty_xlenbits
+          {{ "result_Counterin_to_bits", ⊤ }}.
+
+        Definition sep_contract_legalize_mcounteren : SepContractFun legalize_mcounteren :=
+          {{ ⊤ }}
+            fn legalize_mcounteren ["c" :: ty_Counteren; v :: ty_xlenbits] ty_Counteren
+          {{ "result_legalize_mcounteren", ⊤ }}.
+
+        Definition sep_contract_legalize_scounteren : SepContractFun legalize_scounteren :=
+          {{ ⊤ }}
+            fn legalize_scounteren ["c" :: ty_Counteren; v :: ty_xlenbits] ty_Counteren
+          {{ "result_legalize_scounteren", ⊤ }}.
+
+        Definition sep_contract_legalize_mcountinhibit : SepContractFun legalize_mcountinhibit :=
+          {{ ⊤ }}
+            fn legalize_mcountinhibit ["c" :: ty_Counterin; v :: ty_xlenbits] ty_Counterin
+          {{ "result_legalize_mcountinhibit", ⊤ }}.
+
+        Definition sep_contract_retire_instruction : SepContractFun retire_instruction :=
+          {{ minstret         ↦ term_var "instret"
+             ∗ minstret_written ↦ term_var "written"
+             ∗ mcountinhibit    ↦ term_var "inhibit" }}
+            fn retire_instruction [] ty.unit
+          {{ "result_retire_instruction",
+             term_var "result_retire_instruction" = term_val ty.unit tt
+             ∗ minstret_written ↦ term_val ty.bool false
+             ∗ mcountinhibit    ↦ term_var "inhibit"
+             ∗ if: term_var "written"
+               then minstret ↦ term_var "instret"
+               else match: term_var "inhibit" in rcounterin with
+                      ["inhibit_IR"; "inhibit_CY"] =>
+                        minstret ↦ term_binop bop.bvadd (term_var "instret") (term_counter_inc (term_var "inhibit_IR"))
+                    end }}
+          with ["instret" :: ty.bvec 64; "written" :: ty.bool; "inhibit" :: ty_Counterin].
+
+        Definition sep_contract_tick_clock : SepContractFun tick_clock :=
+          {{ mcycle        ↦ term_var "cycle"
+             ∗ mtime         ↦ term_var "time"
+             ∗ mcountinhibit ↦ term_var "inhibit" }}
+            fn tick_clock [] ty.unit
+          {{ "result_tick_clock",
+             term_var "result_tick_clock" = term_val ty.unit tt
+             ∗ mtime         ↦ term_binop bop.bvadd (term_var "time") (term_val (ty.bvec 64) Bitvector.bv.one)
+             ∗ mcountinhibit ↦ term_var "inhibit"
+             ∗ match: term_var "inhibit" in rcounterin with
+                 ["inhibit_IR"; "inhibit_CY"] =>
+                   mcycle ↦ term_binop bop.bvadd (term_var "cycle") (term_counter_inc (term_var "inhibit_CY"))
+               end }}
+          with ["cycle" :: ty.bvec 64; "time" :: ty.bvec 64; "inhibit" :: ty_Counterin].
 
         Definition sep_contract_csrPriv : SepContractFun csrPriv :=
           {{ ⊤ }}
@@ -784,7 +884,9 @@ Module Import RiscvPmpSpecification.
              ∗ asn_gprs }}.
 
         Definition sep_contract_step {τ Δ} : SepContract Δ τ :=
-          let Σ := ["m" :: ty_privilege; "mtvec" :: ty_xlenbits; "stvec" :: ty_xlenbits; "pmpentries" :: ty.list ty_pmpentry; "mpp" :: ty_privilege; "spp" :: ty_privilege; "pc" :: ty_xlenbits; "mcause" :: ty_xlenbits; "mscratch" :: ty_xlenbits; "mepc" :: ty_xlenbits; "scause" :: ty_xlenbits; "sscratch" :: ty_xlenbits; "sepc" :: ty_xlenbits; "mpie" :: ty.bool; "spie" :: ty.bool; "mie" :: ty.bool; "sie" :: ty.bool; "mideleg" :: ty_Minterrupts; "medeleg" :: ty_Medeleg] in
+          let Σ := ["m" :: ty_privilege; "mtvec" :: ty_xlenbits; "stvec" :: ty_xlenbits; "pmpentries" :: ty.list ty_pmpentry; "mpp" :: ty_privilege; "spp" :: ty_privilege; "pc" :: ty_xlenbits; "mcause" :: ty_xlenbits; "mscratch" :: ty_xlenbits; "mepc" :: ty_xlenbits; "scause" :: ty_xlenbits; "sscratch" :: ty_xlenbits; "sepc" :: ty_xlenbits; "mpie" :: ty.bool; "spie" :: ty.bool; "mie" :: ty.bool; "sie" :: ty.bool; "mideleg" :: ty_Minterrupts; "medeleg" :: ty_Medeleg;
+                    "mcycle" :: ty.bvec 64; "mtime" :: ty.bvec 64; "minstret" :: ty.bvec 64; "minstret_written" :: ty.bool;
+                    "mcounteren" :: ty_Counteren; "scounteren" :: ty_Counteren; "mcountinhibit" :: ty_Counterin] in
           {| sep_contract_logic_variables := sep_contract_logvars Δ Σ;
              sep_contract_localstore      := create_localstore Δ Σ;
              sep_contract_precondition    :=
@@ -807,7 +909,10 @@ Module Import RiscvPmpSpecification.
                            mscratch      ↦ term_var "mscratch" ∗
                            mcause        ↦ term_var "mcause" ∗
                            sscratch      ↦ term_var "sscratch" ∗
-                           scause        ↦ term_var "scause";
+                           scause        ↦ term_var "scause" ∗
+                           asn_counters_at (term_var "mcycle") (term_var "mtime") (term_var "minstret")
+                             (term_var "minstret_written") (term_var "mcounteren") (term_var "scounteren")
+                             (term_var "mcountinhibit");
              sep_contract_result          := "result_mach_inv";
              sep_contract_postcondition   :=
                (  (* Executing normally *)
@@ -824,6 +929,7 @@ Module Import RiscvPmpSpecification.
                               medeleg       ↦ term_var "medeleg" ∗
                               mscratch ↦ term_var "mscratch" ∗
                               mcause ↦ term_var "mcause" ∗
+                              asn_counters ∗
                   (  (* Executing normally in M-mode. Nothing changes, no transitions, those are handled by the other disjuncts, so we rule them out here. *)
                                  term_var "m" = term_val ty_privilege Machine ∗
                                  cur_privilege ↦ term_val ty_privilege Machine ∗
@@ -864,7 +970,8 @@ Module Import RiscvPmpSpecification.
                   ∃ "new_mscratch", mscratch ↦ term_var "new_mscratch" ∗
                   ∃ "new_mcause", mcause ↦ term_var "new_mcause" ∗
                   ∃ "new_sscratch", sscratch ↦ term_var "new_sscratch" ∗
-                  ∃ "new_scause", scause ↦ term_var "new_scause"
+                  ∃ "new_scause", scause ↦ term_var "new_scause" ∗
+                  asn_counters
                 ∨
                   (* Trap occured -> Go into M-mode *)
                   asn_pmp_addr_access (term_var "pmpentries") (term_var "m") ∗
@@ -895,7 +1002,8 @@ Module Import RiscvPmpSpecification.
                   ∃ "mscratch", mscratch ↦ term_var "mscratch" ∗
                   ∃ "mcause", mcause ↦ term_var "mcause" ∗
                   ∃ "new_sscratch", sscratch ↦ term_var "new_sscratch" ∗
-                  ∃ "scause", scause ↦ term_var "scause"
+                  ∃ "scause", scause ↦ term_var "scause" ∗
+                  asn_counters
                 ∨
                   (* MRET = Recover *)
                   asn_pmp_addr_access (term_var "pmpentries") (term_var "m") ∗
@@ -917,7 +1025,8 @@ Module Import RiscvPmpSpecification.
                   ∃ "mcause", mcause ↦ term_var "mcause" ∗
                   ∃ "sscratch", sscratch ↦ term_var "sscratch" ∗
                   ∃ "scause", scause ↦ term_var "scause" ∗
-                  ∃ "mie", mstatus ↦ term_record rmstatus [nenv term_val ty_privilege User; term_var "spp"; term_val ty.bool true; term_var "spie"; term_var "mie"; term_var "sie" ]
+                  ∃ "mie", mstatus ↦ term_record rmstatus [nenv term_val ty_privilege User; term_var "spp"; term_val ty.bool true; term_var "spie"; term_var "mie"; term_var "sie" ] ∗
+                  asn_counters
                 ∨
                   (* SRET = Recover *)
                   asn_pmp_addr_access (term_var "pmpentries") (term_var "m") ∗
@@ -939,8 +1048,12 @@ Module Import RiscvPmpSpecification.
                   ∃ "mcause", mcause ↦ term_var "mcause" ∗
                   ∃ "sscratch", sscratch ↦ term_var "sscratch" ∗
                   ∃ "scause", scause ↦ term_var "scause" ∗
-                  ∃ "sie", mstatus ↦ term_record rmstatus [nenv term_var "mpp"; term_val ty_privilege User; term_var "mpie"; term_val ty.bool true; term_var "mie"; term_var "sie" ])
+                  ∃ "sie", mstatus ↦ term_record rmstatus [nenv term_var "mpp"; term_val ty_privilege User; term_var "mpie"; term_val ty.bool true; term_var "mie"; term_var "sie" ] ∗
+                  asn_counters)
           |}.
+
+        Definition sep_contract_loop_body : SepContractFun loop_body :=
+          sep_contract_step.
 
         Definition sep_contract_fetch : SepContractFun fetch :=
           {{ pc ↦ term_var "i"
@@ -957,21 +1070,25 @@ Module Import RiscvPmpSpecification.
 
         Definition sep_contract_init_model : SepContractFun init_model :=
           {{ ∃ p, cur_privilege ↦ term_var p
-             ∗ ∃ "es", asn_pmp_entries (term_var "es") }}
+             ∗ ∃ "es", asn_pmp_entries (term_var "es")
+             ∗ asn_counters }}
             fn init_model [] ty.unit
           {{ "result_init_model",
              term_var "result_init_model" = term_val ty.unit tt
              ∗ cur_privilege ↦ term_val ty_privilege Machine
-             ∗ ∃ "es", asn_pmp_entries (term_var "es") }}.
+             ∗ ∃ "es", asn_pmp_entries (term_var "es")
+             ∗ asn_counters }}.
 
         Definition sep_contract_init_sys : SepContractFun init_sys :=
           {{ ∃ p, cur_privilege ↦ term_var p
-             ∗ ∃ "es", asn_pmp_entries (term_var "es") }}
+             ∗ ∃ "es", asn_pmp_entries (term_var "es")
+             ∗ asn_counters }}
             fn init_sys [] ty.unit
           {{ "result_init_sys",
              term_var "result_init_sys" = term_val ty.unit tt
              ∗ cur_privilege ↦ term_val ty_privilege Machine
-             ∗ ∃ "es", asn_pmp_entries (term_var "es") }}.
+             ∗ ∃ "es", asn_pmp_entries (term_var "es")
+             ∗ asn_counters }}.
 
         Definition sep_contract_init_pmp : SepContractFun init_pmp :=
           {{ ∃ "cfg0", pmp0cfg ↦ term_var "cfg0" ∗ ∃ "cfg1", pmp1cfg ↦ term_var "cfg1" }}
@@ -1247,6 +1364,14 @@ Module Import RiscvPmpSpecification.
             | privLevel_to_bits       => Some sep_contract_privLevel_to_bits
             | csrAccess               => Some sep_contract_csrAccess
             | csrPriv                 => Some sep_contract_csrPriv
+            | check_Counteren         => Some sep_contract_check_Counteren
+            | Counteren_to_bits       => Some sep_contract_Counteren_to_bits
+            | Counterin_to_bits       => Some sep_contract_Counterin_to_bits
+            | legalize_mcounteren     => Some sep_contract_legalize_mcounteren
+            | legalize_scounteren     => Some sep_contract_legalize_scounteren
+            | legalize_mcountinhibit  => Some sep_contract_legalize_mcountinhibit
+            | retire_instruction      => Some sep_contract_retire_instruction
+            | tick_clock              => Some sep_contract_tick_clock
             | @checked_mem_read bytes H => Some (@sep_contract_checked_mem_read bytes H)
             | @checked_mem_write bytes H => Some (@sep_contract_checked_mem_write bytes H)
             | @pmp_mem_read bytes H   => Some (@sep_contract_pmp_mem_read bytes H)
@@ -1269,6 +1394,7 @@ Module Import RiscvPmpSpecification.
             | fetch                   => Some sep_contract_fetch
             | execute                 => Some sep_contract_execute
             | step                    => Some sep_contract_step
+            | loop_body               => Some sep_contract_loop_body
             | _                       => None
             end.
 
@@ -1541,6 +1667,9 @@ Module RiscvPmpValidContracts.
     apply Symbolic.validcontract_reflect_fuel_sound; vm_reflexivity.
   Qed.
 
+  Lemma valid_contract_loop_body : ValidContract loop_body.
+  Proof. vm_reflexivity. Qed.
+
   Lemma valid_contract_pmpWriteCfgReg : ValidContract pmpWriteCfgReg.
   Proof. vm_reflexivity. Qed.
 
@@ -1658,6 +1787,30 @@ Module RiscvPmpValidContracts.
   Proof. vm_reflexivity. Qed.
 
   Lemma valid_contract_csrPriv : ValidContract csrPriv.
+  Proof. vm_reflexivity. Qed.
+
+  Lemma valid_contract_check_Counteren : ValidContract check_Counteren.
+  Proof. vm_reflexivity. Qed.
+
+  Lemma valid_contract_Counteren_to_bits : ValidContractWithFuel InlineOneLevel Counteren_to_bits.
+  Proof. vm_reflexivity. Qed.
+
+  Lemma valid_contract_Counterin_to_bits : ValidContractWithFuel InlineOneLevel Counterin_to_bits.
+  Proof. vm_reflexivity. Qed.
+
+  Lemma valid_contract_legalize_mcounteren : ValidContract legalize_mcounteren.
+  Proof. vm_reflexivity. Qed.
+
+  Lemma valid_contract_legalize_scounteren : ValidContract legalize_scounteren.
+  Proof. vm_reflexivity. Qed.
+
+  Lemma valid_contract_legalize_mcountinhibit : ValidContract legalize_mcountinhibit.
+  Proof. vm_reflexivity. Qed.
+
+  Lemma valid_contract_retire_instruction : ValidContract retire_instruction.
+  Proof. vm_reflexivity. Qed.
+
+  Lemma valid_contract_tick_clock : ValidContract tick_clock.
   Proof. vm_reflexivity. Qed.
 
   Lemma valid_contract_privLevel_to_bits : ValidContract privLevel_to_bits.
@@ -1859,6 +2012,7 @@ Module RiscvPmpValidContracts.
     - refine (valid_contract _ H (@valid_contract_mem_write_value bytes H0)).
     - refine (valid_contract _ H valid_contract_init_model).
     - refine (valid_contract_debug_with_fuel _ _ H valid_contract_step).
+    - refine (valid_contract _ H valid_contract_loop_body).
     - refine (valid_contract _ H valid_contract_fetch).
     - refine (valid_contract _ H valid_contract_init_sys).
     - refine (valid_contract _ H valid_contract_init_pmp).
@@ -1876,6 +2030,14 @@ Module RiscvPmpValidContracts.
     - refine (valid_contract _ H valid_contract_csrAccess).
     - refine (valid_contract _ H valid_contract_csrPriv).
     - refine (valid_contract _ H valid_contract_check_CSR_access).
+    - refine (valid_contract _ H valid_contract_check_Counteren).
+    - refine (valid_contract_with_fuel _ _ H valid_contract_Counteren_to_bits).
+    - refine (valid_contract_with_fuel _ _ H valid_contract_Counterin_to_bits).
+    - refine (valid_contract _ H valid_contract_legalize_mcounteren).
+    - refine (valid_contract _ H valid_contract_legalize_scounteren).
+    - refine (valid_contract _ H valid_contract_legalize_mcountinhibit).
+    - refine (valid_contract _ H valid_contract_retire_instruction).
+    - refine (valid_contract _ H valid_contract_tick_clock).
     - refine (valid_contract_with_fuel _ _ H valid_contract_readCSR).
     - refine (valid_contract_with_fuel _ _ H valid_contract_writeCSR).
     - refine (valid_contract _ H valid_contract_execute).

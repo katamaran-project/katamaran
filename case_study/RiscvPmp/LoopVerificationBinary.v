@@ -87,16 +87,16 @@ Module Type LoopVerificationBinary
 
   Import RiscvPmpSignature.
 
-  Import ArchState (ArchState, archstate_valuation, archstate_update_pc).
+  Import ArchState (ArchState, archstate_valuation, archstate_update_pc, archstate_update_counters).
 
   Section Loop.
     Context `{sg : sailGS2 Σ}.
 
-    Definition step_sem_contract :=
-      Eval cbn  in ValidContractSemCurried fun_step sep_contract_step.
+    Definition loop_body_sem_contract :=
+      Eval cbn  in ValidContractSemCurried fun_loop_body sep_contract_loop_body.
 
-    Definition Step_pre (archstate : ArchState) : iProp Σ :=
-      asn.interpret (sep_contract_precondition sep_contract_step) (archstate_valuation archstate).
+    Definition LoopBody_pre (archstate : ArchState) : iProp Σ :=
+      asn.interpret (sep_contract_precondition sep_contract_loop_body) (archstate_valuation archstate).
 
     Local Notation "r '↦' val" := (reg_pointsTo21 r val) (at level 70).
     (* Some Iris Proof Mode tactics like (iFrame) try very hard to solve some
@@ -131,9 +131,9 @@ Module Type LoopVerificationBinary
       Definition SRET (archstate : ArchState) : iProp Σ :=
         transition TT_SRET archstate.
 
-      (* Step_post is not a "TransitionTarget" but simply groups the possibilities
+      (* LoopBody_post is not a "TransitionTarget" but simply groups the possibilities
          back together using disjunction. *)
-      Definition Step_post (archstate : ArchState) : iProp Σ :=
+      Definition LoopBody_post (archstate : ArchState) : iProp Σ :=
         Execution archstate
         ∨ M_CSRMod archstate
         ∨ M_Trap archstate
@@ -142,21 +142,21 @@ Module Type LoopVerificationBinary
 
     End TransitionTargets.
 
-    Definition semTriple_step : iProp Σ :=
+    Definition semTriple_loop_body : iProp Σ :=
       (∀ (archstate : ArchState),
-          semTriple env.nil (Step_pre archstate)
-                    (FunDef step)
-                    (fun _ _ => Step_post archstate))%I.
+          semTriple env.nil (LoopBody_pre archstate)
+                    (FunDef loop_body)
+                    (fun _ _ => LoopBody_post archstate))%I.
 
     Definition semTriple_init_model : iProp Σ :=
       semTriple env.nil
-                ((∃ p, reg_pointsTo21 cur_privilege p) ∗ (∃ es, interp_pmp_entries es))%I
+                ((∃ p, reg_pointsTo21 cur_privilege p) ∗ (∃ es, interp_pmp_entries es) ∗ interp_counters)%I
                 (FunDef init_model)
-                (fun _ _ => reg_pointsTo21 cur_privilege Machine ∗ (∃ es, interp_pmp_entries es))%I.
+                (fun _ _ => reg_pointsTo21 cur_privilege Machine ∗ (∃ es, interp_pmp_entries es) ∗ interp_counters)%I.
 
-    Lemma valid_step_contract : ⊢ ValidContractSem fun_step sep_contract_step.
+    Lemma valid_loop_body_contract : ⊢ ValidContractSem fun_loop_body sep_contract_loop_body.
     Proof.
-      iApply (sound $! _ _ step).
+      iApply (sound $! _ _ loop_body).
       exact foreignSem.
       exact lemSem.
       unfold ValidContractCEnv.
@@ -182,12 +182,12 @@ Module Type LoopVerificationBinary
 
     Import env.notations.
 
-    Lemma valid_step_semTriple :
-      ⊢ semTriple_step.
+    Lemma valid_loop_body_semTriple :
+      ⊢ semTriple_loop_body.
     Proof.
       iIntros (archstate) "H".
       iApply (semWP2_mono with "[-]").
-      iApply (valid_step_contract with "H").
+      iApply (valid_loop_body_contract with "H").
       iIntros ([[]|e1] δ1 v2 δ2) "(<- & <- & H)"; last auto.
       iSplit; first done. iSplit; first done. iExact "H".
     Qed.
@@ -196,25 +196,34 @@ Module Type LoopVerificationBinary
     Proof.
       iApply (@iris_rule_consequence _ _ _ _ _ env.nil
                ((∃ p : Privilege, cur_privilege ↦ p) ∗
-                (∃ es : list PmpEntryCfg, interp_pmp_entries es))
+                (∃ es : list PmpEntryCfg, interp_pmp_entries es) ∗ interp_counters)
                _ _ _ fun_init_model _ _)%I.
       iApply valid_init_model_contract.
       Unshelve.
       cbn.
-      iIntros "(Hcp & Hin)".
-      iSplitL "Hcp"; iAssumption.
+      iIntros "H"; iExact "H".
       cbn.
       iIntros (v δ) "H".
-      iDestruct "H" as "([-> _] & Hcp & Hpmp)".
-      iFrame "Hcp Hpmp".
+      iDestruct "H" as "([-> _] & H)".
+      iExact "H".
       constructor.
     Qed.
 
     Lemma transition_update_pc (t : TransitionTarget) (a : ArchState) (pc : Xlenbits) :
       transition t (archstate_update_pc a pc) ⊣⊢ transition t a.
     Proof.
-      destruct a as [m ? ? ?].
+      destruct a as [m ? ? ? ?].
       unfold archstate_update_pc, transition.
+      destruct t, m; reflexivity.
+    Qed.
+
+    (* The transitions only own the counters, with arbitrary new values, so
+       they do not depend on the counter values of the ArchState. *)
+    Lemma transition_update_counters (t : TransitionTarget) (a : ArchState) (cs : ArchState.CountersState) :
+      transition t (archstate_update_counters a cs) ⊣⊢ transition t a.
+    Proof.
+      destruct a as [m ? ? ? ?].
+      unfold archstate_update_counters, transition.
       destruct t, m; reflexivity.
     Qed.
 
@@ -249,7 +258,7 @@ Module Type LoopVerificationBinary
       ArchState.mstate a = ArchState.mstate a' ->
       M_Trap a ⊢ M_Trap a'.
     Proof.
-      destruct a as [m ? ? ?], a' as [m' ? ? ?]; cbn; intros Hm Hm' <-.
+      destruct a as [m ? ? ? ?], a' as [m' ? ? ? ?]; cbn; intros Hm Hm' <-.
       unfold M_Trap, transition; cbn.
       iIntros "(Hpaa & H)".
       iSplitL "Hpaa"; first by iApply (interp_pmp_addr_access_not_machine with "Hpaa").
@@ -264,7 +273,7 @@ Module Type LoopVerificationBinary
        the loop, which lets both executions agree on the power check at the
        start of every iteration. *)
     Definition loop_pre (R : iProp Σ) (archstate : ArchState) : iProp Σ :=
-      (Step_pre archstate ∗
+      (LoopBody_pre archstate ∗
        R ∗
        powered2 true ∗
        ▷ (M_CSRMod archstate ∗ R ∗ powered2 true -∗ WP2_loop R) ∗
@@ -279,43 +288,45 @@ Module Type LoopVerificationBinary
     Lemma valid_semTriple_loop : ⊢ semTriple_loop.
     Proof.
       iLöb as "H".
-      iIntros (R archstate) "(HStep & HR & [Hpl Hpr] & HM_CSRMod & HM_Trap & HMRET & HSRET)".
+      iIntros (R archstate) "(HBody & HR & [Hpl Hpr] & HM_CSRMod & HM_Trap & HMRET & HSRET)".
       unfold WP2_loop at 2.
       iApply (semWP2_fun_loop with "Hpl Hpr").
       iIntros "Hpl Hpr" (Γon1 Γon2 δon1 δon2).
-      iApply (semWP2_seq (call step) (call step) (call loop) (call loop)).
+      iApply (semWP2_seq (call loop_body) (call loop_body) (call loop) (call loop)).
       iApply semWP2_call_inline_later.
-      iApply (semWP2_mono with "[HStep]").
-      iApply (valid_step_semTriple with "HStep").
+      iApply (semWP2_mono with "[HBody]").
+      iApply (valid_loop_body_semTriple with "HBody").
       iModIntro.
       iIntros ([v|e] δ1 v2 δ2) "(<- & <- & HRes)";
         last (iApply semWP2_fail; iModIntro; by iFrame "HR").
       iDestruct "HRes" as "[HRes | [HRes | [HRes | [HRes | HRes]]]]";
         iApply (semWP2_call_inline loop _).
-      - iDestruct "HRes" as "(Hacc & Hgprs & Hpmp & Hmie & Hmip & (%i' & Hpc & Hnpc) & Hmtvec & Hmepc & Hmideleg & Hmedeleg & Hmscratch & Hmcause & [HRes | HRes])".
+      - iDestruct "HRes" as "(Hacc & Hgprs & Hpmp & Hmie & Hmip & (%i' & Hpc & Hnpc) & Hmtvec & Hmepc & Hmideleg & Hmedeleg & Hmscratch & Hmcause & Hcnt & [HRes | HRes])".
         + (* Normal execution in M-mode (only pc changed) *)
           iDestruct "HRes" as "([%Hm _] & Hcp & Hstvec & Hmstatus & Hsepc & Hsscratch & Hscause)".
+          iDestruct "Hcnt" as "([%vmcycle Hmcycle] & [%vmtime Hmtime] & [%vminstret Hminstret] & [%vminstret_written Hminstret_written] & [%vmcounteren Hmcounteren] & [%vscounteren Hscounteren] & [%vmcountinhibit Hmcountinhibit])".
           cbn in Hm.
           iApply (semWP2_mono with "[-]").
-          { iApply ("H" $! R (archstate_update_pc archstate i')).
+          { iApply ("H" $! R (archstate_update_counters (archstate_update_pc archstate i') (ArchState.mkCountersState vmcycle vmtime vminstret vminstret_written vmcounteren vscounteren vmcountinhibit))).
             unfold loop_pre, M_CSRMod, M_Trap, MRET, SRET.
             iSplitR "HR Hpl Hpr HM_CSRMod HM_Trap HMRET HSRET".
-            { unfold Step_pre; cbn.
+            { unfold LoopBody_pre; cbn.
               rewrite ?Hm.
-              now iFrame "Hacc Hgprs Hpmp Hmie Hmip Hcp Hpc Hnpc Hmtvec Hstvec Hmstatus Hmepc Hsepc Hmideleg Hmedeleg Hmscratch Hmcause Hsscratch Hscause". }
-            rewrite !transition_update_pc.
+              now iFrame "Hacc Hgprs Hpmp Hmie Hmip Hcp Hpc Hnpc Hmtvec Hstvec Hmstatus Hmepc Hsepc Hmideleg Hmedeleg Hmscratch Hmcause Hsscratch Hscause Hmcycle Hmtime Hminstret Hminstret_written Hmcounteren Hscounteren Hmcountinhibit". }
+            rewrite !transition_update_counters !transition_update_pc.
             iFrame "HR Hpl Hpr HM_CSRMod HM_Trap HMRET HSRET". }
           iIntros (? ? ? ?) "(<- & _ & $)"; auto.
         + (* S/U-mode: still in S/U-mode, the privilege and S-mode state may have changed *)
           iDestruct "HRes" as "([%Hm _] & [%m' (Hcp & [%Hm' _] & [%stvec' Hstvec] & [%spp' [%spie' [%sie' Hmstatus]]] & [%sepc' Hsepc] & [%sscratch' Hsscratch] & [%scause' Hscause])])".
           cbn in Hm, Hm'.
           iPoseProof (interp_pmp_addr_access_not_machine _ _ _ Hm Hm' with "Hacc") as "Hacc".
-          destruct archstate as [? ms ? ?].
+          iDestruct "Hcnt" as "([%vmcycle Hmcycle] & [%vmtime Hmtime] & [%vminstret Hminstret] & [%vminstret_written Hminstret_written] & [%vmcounteren Hmcounteren] & [%vscounteren Hscounteren] & [%vmcountinhibit Hmcountinhibit])".
+          destruct archstate as [? ms ? ? ?].
           iApply (semWP2_mono with "[-]").
-          { iApply ("H" $! R (ArchState.mkArchState m' ms (ArchState.mkSState stvec' (MkSstatus spp' spie' sie') scause' sscratch' sepc') i')).
+          { iApply ("H" $! R (ArchState.mkArchState m' ms (ArchState.mkSState stvec' (MkSstatus spp' spie' sie') scause' sscratch' sepc') i' (ArchState.mkCountersState vmcycle vmtime vminstret vminstret_written vmcounteren vscounteren vmcountinhibit))).
             iSplitR "HR Hpl Hpr HM_CSRMod HM_Trap HMRET HSRET".
-            { unfold Step_pre; cbn.
-              now iFrame "Hacc Hgprs Hpmp Hmie Hmip Hcp Hpc Hnpc Hmtvec Hstvec Hmstatus Hmepc Hsepc Hmideleg Hmedeleg Hmscratch Hmcause Hsscratch Hscause". }
+            { unfold LoopBody_pre; cbn.
+              now iFrame "Hacc Hgprs Hpmp Hmie Hmip Hcp Hpc Hnpc Hmtvec Hstvec Hmstatus Hmepc Hsepc Hmideleg Hmedeleg Hmscratch Hmcause Hsscratch Hscause Hmcycle Hmtime Hminstret Hminstret_written Hmcounteren Hscounteren Hmcountinhibit". }
             iFrame "HR Hpl Hpr".
             iSplitL "HM_CSRMod".
             { iIntros "!> [H' _]". iDestruct (M_CSRMod_machine with "H'") as %Heq.
