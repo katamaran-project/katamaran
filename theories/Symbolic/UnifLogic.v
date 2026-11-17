@@ -36,6 +36,7 @@ From Stdlib Require Import
 .
 From Equations Require Import
      Equations.
+From Ltac2 Require Ltac2.
 From stdpp Require Import base.
 From Katamaran Require Import
      Prelude
@@ -45,7 +46,7 @@ From Katamaran Require Import
      Symbolic.Worlds
      Syntax.Predicates
 .
-From iris Require bi.derived_connectives bi.interface proofmode.proofmode.
+From iris Require bi.derived_connectives bi.derived_laws bi.interface proofmode.environments proofmode.proofmode.
 
 Declare Scope pred_scope.
 Delimit Scope pred_scope with P.
@@ -587,6 +588,13 @@ Module Type UnifLogicOn
       ⊢ eqₚ vt1 vt2.
     Proof.
       crushPredEntails3.
+    Qed.
+
+    Lemma repₚ_inst_eq {T : LCtx -> Type} `{Inst T A} {a : A} {w : World} {vt1 vt2 : T w} :
+      (∀ ι : Valuation w, inst vt1 ι = inst vt2 ι) ->
+      repₚ a vt1 ⊢ repₚ a vt2.
+    Proof.
+      iIntros (Heq) "H". iApply repₚ_eqₚ. iFrame. iApply (eqₚ_triv Heq).
     Qed.
 
 
@@ -1288,28 +1296,12 @@ Module Type UnifLogicOn
       MkRel (fun fc w fs => ∀ a ta, ℛ⟦ RA ⟧ a ta -∗ ℛ⟦ RB ⟧ (fc a) (fs ta))%I.
     Arguments RImpl {_ _ _ _} RA RB : simpl never.
 
-    Definition intowand_rimpl {A AT B BT} {RA : Rel AT A} {RB : Rel BT B}  {w} {a sa f} {sf} :
-      IntoWand false false (RSat (RImpl RA RB) f sf) (RSat RA a sa) (RSat RB (f a) (w := w) (sf sa)).
-    Proof.
-      unfold IntoWand, RImpl; cbn.
-      iIntros "H".
-      now iApply "H".
-    Qed.
-
     Definition RForall {𝑲}
       {AT : forall K : 𝑲, TYPE} {A : forall K : 𝑲, Type}
       (RA : forall K, Rel (AT K) (A K)) :
       Rel (@W.Forall 𝑲 AT) (forall K : 𝑲, A K) :=
       MkRel (fun fc w fs => ∀ₚ K : 𝑲, ℛ⟦ RA K ⟧ (fc K) (fs K))%P.
     Arguments RForall {_ _ _} RA : simpl never.
-    #[export] Instance intoforall_rforall {𝑲}
-      {AT : forall K : 𝑲, TYPE} {A : forall K : 𝑲, Type}
-      {RA : forall K, Rel (AT K) (A K)} {f w} {sf : forall K, AT K w} :
-      IntoForall (RSat (RForall RA) f sf) (fun K => RSat (RA K) (f K) (sf K)).
-    Proof.
-      unfold IntoForall, RForall.
-      now cbn.
-    Qed.
 
     Definition RVal (σ : Ty) : Rel (fun Σ => Term Σ σ) (Val σ) :=
       RInst (fun Σ => Term Σ σ) (Val σ).
@@ -1394,23 +1386,23 @@ Module Type UnifLogicOn
          Related (RPureSpec RA -> □ᵣ(RA -> RPureSpec RB) -> RPureSpec RB)
            CPureSpec.bind w SPureSpec.bind.
 
-       The solver applies such an instance to related arguments one at a time,
-       so [v] and [vs] are usually unapplied symbols, or
-       symbols applied only to parameters that are not related themselves:
-       types, messages, patterns, variable names. Parameters that only occur
-       on one side are best kept outside the relation, as in
-       [Related (RPathCondition -> RPureSpec RUnit) CPureSpec.assert_pathcondition
-       w (SPureSpec.assert_pathcondition (w := w) msg)].
+       The solver applies such an instance to related arguments one at a time
+       (see [rpeel] below), so [v] and [vs] are usually unapplied symbols, or
+       symbols applied only to parameters that are the same on both sides:
+       types, patterns, variable names. A message is an argument of the
+       symbolic side only; relate it with [RMsg], as in
+       [Related (RMsg _ (RFormula -> RPureSpec RUnit)) CPureSpec.assert_formula
+       w SPureSpec.assert_formula], and the solver peels it.
 
        The class is a singleton class, i.e. a definition rather than a record.
        A lemma stated as [Related R v w vs] is therefore its own instance, and
        it is still an ordinary proof of [⊢ ℛ⟦R⟧ v vs]. Induction hypotheses
        and section variables of a [Related] type are found as local instances,
-       so a solver can use them without a [pose proof].
+       so the solver uses them without a [pose proof].
 
        Mode: [v], [w] and [vs] are inputs, so instance search never guesses
        the related terms, and so is [A], the type of [v]. The relation [R]
-       and the symbolic type [AT] are outputs. The solver looks up [f] versus
+       and the symbolic type [AT] are outputs. [rpeel] looks up [f] versus
        [fs] in [f a] versus [fs sa] at [?RA -> R], where [?RA : Rel ?SA ?CA]
        is still unknown. [?CA] is solved by first-order unification with the
        type of [f]. [?SA : TYPE] only occurs applied to the world, and
@@ -1444,11 +1436,12 @@ Module Type UnifLogicOn
        The premise is typically a separating conjunction of relational goals
        and pure facts, which the solver splits and proves in turn.
 
-       If both sides are applications of related functions to related
-       arguments, state a [Related] instance for the functions instead. The
-       shape of a rule is that of the [From*] classes of the Iris proof mode:
-       [FromSep P Q1 Q2 : Q1 ∗ Q2 ⊢ P] has the input [P] and the outputs [Q1]
-       and [Q2].
+       Rules are only tried on whole goal terms, never in function position,
+       and after the [Related] instances. If both sides are applications of
+       related functions to related arguments, state a [Related] instance for
+       the functions instead. The shape of a rule is that of the [From*]
+       classes of the Iris proof mode: [FromSep P Q1 Q2 : Q1 ∗ Q2 ⊢ P] has
+       the input [P] and the outputs [Q1] and [Q2].
 
        Like [Related], this class is a singleton class, so a lemma
        [Ob ⊢ ℛ⟦R⟧ v vs] is an instance as it is. *)
@@ -1459,161 +1452,6 @@ Module Type UnifLogicOn
     #[global] Arguments RelatedFrom {AT A} R v w vs Ob%_I : simpl never.
   End logicalrelation.
 
-  Section ModalRel.
-    Import logicalrelation logicalrelation.notations iris.bi.interface notations ModalNotations.
-    Lemma forgetting_RImpl {AT A BT B} {RA : Rel AT A} {RB : Rel BT B} {w1 w2 : World} {ω : w1 ⊒ w2} {f sf} :
-      forgetting ω (ℛ⟦ RImpl RA RB ⟧ f sf) ⊣⊢ (∀ a sa, forgetting ω (ℛ⟦ RA ⟧ a sa) -∗ forgetting ω (ℛ⟦ RB ⟧ (f a) (sf sa))).
-    Proof.
-      unfold RImpl at 1. cbn.
-      rewrite <-forgetting_forall.
-      apply derived_laws.bi.forall_proper; intros a.
-      rewrite <-forgetting_forall.
-      apply derived_laws.bi.forall_proper; intros sa.
-      rewrite <-forgetting_wand.
-      now apply derived_laws.bi.wand_proper.
-    Qed.
-  End ModalRel.
-
-
-  Module RSolve.
-    Import logicalrelation logicalrelation.notations iris.bi.interface notations ModalNotations iris.proofmode.proofmode iris.proofmode.environments.
-
-    (* [rsolve] looks up rules, and finds the [Related] instances as rules
-       without premise. *)
-    #[export] Instance related_from_related `{R : Rel AT A} {v w vs} :
-      Related R v w vs → RelatedFrom R v w vs emp | 0 := id.
-
-    Lemma refine_compat_impl `{RA : Rel AT A} `{RB : Rel BT B} {f v w fs vs} {Pf}
-      (compatf : RelatedFrom (RA -> RB) f w fs Pf) : RelatedFrom RB (f v) w (fs vs) (Pf ∗ RSat RA v vs).
-    Proof.
-      unfold RelatedFrom. iIntros "[Hcf Hv]".
-      now iApply (related_from_lemma compatf with "Hcf").
-    Qed.
-
-    (* Outside section because Coq doesn't allow to put it inside (?) *)
-    (* The Hint Resolve used "simple apply", which wasn't instantiating evars sufficiently strongly. Hint Extern with eapply works better. *)
-    #[export] Hint Extern 1 (RelatedFrom ?RB (?f ?v) ?w (?fs ?vs) _) => eapply (refine_compat_impl (RB := RB) (fs := fs) (vs := vs) (f := f) (v := v) (w := w)) : typeclass_instances.
-
-    #[export] Instance refine_compat_forall {𝑲} {AT : forall K : 𝑲, TYPE} {A : forall K : 𝑲, Type} (RA : forall K, Rel (AT K) (A K)) {f w fs k P}
-      (compatf : RelatedFrom (RForall RA) f w fs P) : RelatedFrom (RA k) (f k) w (fs k) P.
-    Proof.
-      unfold RelatedFrom. iIntros "Hcf".
-      now iApply (related_from_lemma compatf with "Hcf").
-    Qed.
-
-    Ltac rsolve_step :=
-      first [
-          (lazymatch goal with
-           | |- envs_entails _ (ℛ⟦□ᵣ _⟧ _ _) => iIntros (? ?) "!>"
-           | |- envs_entails _ (forgetting _ _) => iModIntro
-           | |- envs_entails _ (ℛ⟦_ -> _⟧ _ _) => iIntros (? ?) "#?"
-           end)
-        | lazymatch goal with
-          | |- envs_entails _ (ℛ⟦ ?R ⟧ ?v ?vs) =>
-              (iApply (related_from_lemma (R := R) (vs := vs));
-               lazymatch goal with | |- RelatedFrom _ _ _ _ _ => fail | _ => idtac end
-              )
-          | |- envs_entails _ (_ ∗ _) => iSplit
-          | |- envs_entails _ (unconditionally _) => iIntros (? ?) "!>"
-          end
-        ].
-
-    Ltac rsolve :=
-      iStartProof;
-      repeat rsolve_step; try done;
-      (* After walking through the symbolic computation using the above lemmas,
-       * we try to apply induction hypotheses.
-       * To do this, we determine the right world to apply the IH in by looking at the current goal.
-       *)
-      repeat match goal with
-        | H : (forall (w : World), _) |- @envs_entails (@bi_pred ?w) _ _ => specialize (H w)
-        | H : (forall (w : World), _) |- @envs_entails _ _ (@logicalrelation.RSat _ _ _ _ ?w _) => specialize (H w)
-        | H : ⊢ ?P |- envs_entails _ ?P => (try iApply H); clear H
-        end.
-
-    Class RefineCompatGen (w : World) (P : Pred w) (Ob : Pred w) (withbase : bool):=
-      MkRefineCompatGen {
-          refine_compat_gen_lemma : Ob ⊢ P
-        }.
-    #[global] Arguments RefineCompatGen [w] P%_I Ob%_I withbase.
-    #[global] Arguments MkRefineCompatGen {w} {P} _%_I _ {_}.
-    #[global] Arguments refine_compat_gen_lemma {w} P%_I {Ob} withbase rcg : rename.
-
-    #[export] Program Instance refine_compat_gen_step `(R : Rel AT A) (v : A) (w : World) (vs : AT w) Ob1 Ob2 b
-      (rc : RelatedFrom R v w vs Ob1)
-      (iter : RefineCompatGen Ob1 Ob2 b) :
-      RefineCompatGen (ℛ⟦ R ⟧ v vs) Ob2 b := MkRefineCompatGen Ob2 _.
-    Next Obligation.
-      iIntros (AT A R v w vs Ob1 Ob2 b rc iter) "H".
-      iApply (related_from_lemma with "[H]").
-      now iApply (refine_compat_gen_lemma with "[H]").
-    Qed.
-
-    #[export] Program Instance refine_compat_gen_base_true {w} {b} :
-      RefineCompatGen (w := w) True emp b := MkRefineCompatGen emp _.
-    Next Obligation.
-      now iIntros.
-    Qed.
-
-    #[export] Program Instance refine_compat_gen_base_emp {w} {b} :
-      RefineCompatGen (w := w) emp emp b := MkRefineCompatGen emp _.
-    Next Obligation.
-      now iIntros.
-    Qed.
-
-    #[export] Program Instance refine_compat_gen_base {w} (P : Pred w):
-      RefineCompatGen (w := w) P P true | 10 := MkRefineCompatGen P _.
-    Next Obligation.
-      now iIntros.
-    Qed.
-
-    Class ObSep {w} (P1 P2 P3 : Pred w) : Prop :=
-      obsep_equiv : P1 ∗ P2 ⊣⊢ P3.
-    #[export] Instance obsep_empL {w} {P : Pred w} : ObSep emp%I P P.
-    Proof. apply bi.emp_sep. Qed.
-    #[export] Instance obsep_empR {w} {P : Pred w} : ObSep P emp%I P.
-    Proof. apply bi.sep_emp. Qed.
-    #[export] Instance obsep_sep {w} {P1 P2 : Pred w} : ObSep P1 P2 (P1 ∗ P2)%I | 1.
-    Proof. done. Qed.
-
-    #[export] Program Instance refine_compat_gen_split {w} {P1 P2 : Pred w} {Ob1 Ob2 Ob} {b}
-      (rcg1 : RefineCompatGen P1 Ob1 b) (rcg2 : RefineCompatGen P2 Ob2 b) {_ : ObSep Ob1 Ob2 Ob} :
-      RefineCompatGen (w := w) (P1 ∗ P2) Ob b | 1 := MkRefineCompatGen Ob _.
-    Next Obligation.
-      iIntros (w P1 P2 Ob1 Ob2 Ob b rcg1 rcg2 obsep) "H".
-      rewrite -(obsep_equiv (ObSep := obsep)).
-      iDestruct "H" as "(H1 & H2)".
-      iSplitL "H1".
-      - iApply (refine_compat_gen_lemma with "H1").
-      - iApply (refine_compat_gen_lemma with "H2").
-    Qed.
-
-    Ltac rsolve2_step :=
-      first [
-          (lazymatch goal with
-           | |- envs_entails _ (ℛ⟦□ᵣ _⟧ _ _) => iIntros (? ?) "!>"
-           | |- envs_entails _ (ℛ⟦_ -> _⟧ _ _) => iIntros (? ?) "#?"
-           end)
-        | lazymatch goal with
-          | |- envs_entails _ ?P => iApply (refine_compat_gen_lemma P true)
-          | |- envs_entails _ (unconditionally _) => iIntros (? ?) "!>"
-          end
-        ].
-
-    Ltac rsolve2 :=
-      iStartProof;
-      progress rsolve2_step; try done;
-      (* After walking through the symbolic computation using the above lemmas,
-       * we try to apply induction hypotheses.
-       * To do this, we determine the right world to apply the IH in by looking at the current goal.
-       *)
-      repeat match goal with
-        | H : (forall (w : World), _) |- @envs_entails (@bi_pred ?w) _ _ => specialize (H w)
-        | H : (forall (w : World), _) |- @envs_entails _ _ (@logicalrelation.RSat _ _ _ _ ?w _) => specialize (H w)
-        | H : ⊢ ?P |- envs_entails _ ?P => (try iApply H); clear H
-        end.
-  End RSolve.
-
 
   Section LRCompat.
     Import notations.
@@ -1621,7 +1459,6 @@ Module Type UnifLogicOn
     Import logicalrelation.notations.
     (* Import ModalNotations. *)
     Import iris.proofmode.proofmode.
-    Import RSolve.
     
     Lemma refine_RMatchResult_existT_eq {N σ} {p : Pattern (N:=N) σ} {w} {pc args1 args2}:
       ℛ⟦RNEnv _ (PatternCaseCtx pc)⟧ args1 args2 ⊢
@@ -1650,9 +1487,9 @@ Module Type UnifLogicOn
     Proof. destruct u, su. now crushPredEntails3. Qed.
     Hint Resolve refine_unit : core.
 
-    Lemma RProd_pair {AT A} {RA : Rel AT A} {BT B} {RB : Rel BT B} {w} {v1 v2 sv1} {sv2 : BT w}:
-      ℛ⟦ RProd RA RB ⟧ (v1, v2) (sv1 , sv2) ⊣⊢ ℛ⟦ RA ⟧ v1 sv1 ∗ ℛ⟦ RB ⟧ v2 sv2.
-    Proof. now crushPredEntails3. Qed.
+    #[export] Instance refine_compat_unit {w} {u su} :
+      Related RUnit u w su :=
+      refine_unit.
 
     #[export] Instance refine_pair {AT A} {RA : Rel AT A} {BT B} {RB : Rel BT B} {w} :
       Related (RA -> RB -> RProd RA RB) pair w (@pair (AT w) (BT w)).
@@ -1663,7 +1500,7 @@ Module Type UnifLogicOn
     Qed.
 
     #[export] Instance refine_RHeap_nil {w} :
-      Related RHeap nil w (nil : SHeap (wctx w)).
+      Related (RHeap) nil w (nil : SHeap (wctx w)).
     Proof.
       iApply repₚ_triv.
       now intros.
@@ -1687,7 +1524,7 @@ Module Type UnifLogicOn
     Hint Resolve refine_nil : core.
 
     Definition refine_compat_nil {AT A} {R : Rel AT A} {w} :
-      RelatedFrom (RList R) nil w (nil : list (AT w)) emp :=
+      Related (RList R) nil w (nil : list (AT w)) :=
       refine_nil.
 
     #[export] Instance refine_cons {AT A} {R : Rel AT A} {w} :
@@ -1763,11 +1600,6 @@ Module Type UnifLogicOn
       now iMod "Hvt".
     Qed.
 
-    Lemma refine_apply {AT A BT B} (RA : Rel AT A) (RB : Rel BT B) :
-      forall v f (w : World),
-        (⊢ ∀ F (t : AT w), ℛ⟦RA -> RB⟧ f F → ℛ⟦RA⟧ v t → ℛ⟦RB⟧ (f v) (F t))%I.
-    Proof. iIntros (v f w F t) "#Hf #Hv". now iApply "Hf". Qed.
-
     Lemma refine_inst_persist {AT A} `{InstSubst AT A, @SubstLaws AT _}
       {v : A} {w1 w2 : World} {ω : Acc w1 w2} (t : AT w1) :
         forgetting ω (ℛ⟦RInst AT A⟧ v t) ⊢ ℛ⟦RInst AT A⟧ v (persist t ω).
@@ -1779,6 +1611,10 @@ Module Type UnifLogicOn
     Lemma refine_formula_bool {w : World} {v} {sv : Term w ty.bool} :
       ℛ⟦RVal ty.bool⟧ v sv ⊢ ℛ⟦RFormula⟧ (v = true) (formula_bool sv).
     Proof. unfold RVal, RInst. crushPredEntails3; cbn in *; now subst. Qed.
+
+    #[export] Instance refine_formula_true {w : World} :
+      Related (RFormula) True%type w (formula_true : Formula w).
+    Proof. unfold Related. unfold RFormula. crushPredEntails3. Qed.
 
     Lemma refine_formula_relop {w : World} {σ v1 v2} {sv1 sv2 : Term w σ}  {relop : RelOp σ}:
       ℛ⟦ RVal σ ⟧ v1 sv1 ∗ ℛ⟦ RVal σ ⟧ v2 sv2 ⊢
@@ -1804,7 +1640,7 @@ Module Type UnifLogicOn
     Qed.
 
     Definition refine_compat_inst_subst {Σ} {T : LCtx -> Type} `{InstSubst T A} (vs : T Σ) {w : World} :
-      RelatedFrom (RInst (Sub Σ) (Valuation Σ) -> RInst T A) (inst vs) w (subst vs) _ :=
+      Related (RInst (Sub Σ) (Valuation Σ) -> RInst T A) (inst vs) w (subst vs) :=
       (refine_inst_subst vs).
 
     Lemma refine_instprop_subst {Σ} {T : LCtx -> Type} `{InstPredSubst T}
@@ -1821,12 +1657,12 @@ Module Type UnifLogicOn
 
     #[export] Instance refine_compat_instprop_subst {Σ} {T : LCtx -> Type} `{InstPredSubst T}
       {vs : T Σ} {w : World} :
-      RelatedFrom ((RInst (Sub Σ) (Valuation Σ) -> RInstPropIff T)) (instprop vs) w (subst vs : Sub Σ w -> T w)%I emp :=
+      Related ((RInst (Sub Σ) (Valuation Σ) -> RInstPropIff T)) (instprop vs) w (subst vs : Sub Σ w -> T w)%I :=
       (refine_instprop_subst _).
 
     #[export] Instance refine_lift {AT A} `{InstLift AT A} {w : World} (a : A) :
       Related (RInst AT A) a w (lift a : AT w).
-    Proof. iApply lift_repₚ. Qed.
+    Proof. unfold Related. iApply lift_repₚ. Qed.
 
     Import ModalNotations. 
     Section WithNotations.
@@ -1880,12 +1716,6 @@ Module Type UnifLogicOn
         now intros.
       Qed.
 
-      Lemma refine_namedenv_singleton {N : Set} {x : N} {σ : Ty} {w : World} {v : Val σ} {sv : Term w σ} :
-        ℛ⟦RVal σ⟧ v sv ⊢ ℛ⟦RNEnv N (ctx.nil ▻ x∷σ)⟧ ([env].[x∷σ ↦ v])%env ([env].[x∷σ ↦ sv])%env.
-      Proof.
-        iIntros "Hv"; rsolve.
-      Qed.
-
       Lemma refine_namedenv_sub_acc_trans {Σ : LCtx} {w1 w2 : World} {ι : Valuation Σ} { ω1 : wlctx Σ ⊒ w1} {ω2 : w1 ⊒ w2}:
         forgetting ω2 (repₚ (w := w1) ι (sub_acc ω1)) ⊢
           ℛ⟦RNEnv LVar (wlctx Σ)⟧ ι (sub_acc (acc_trans ω1 ω2)).
@@ -1904,7 +1734,7 @@ Module Type UnifLogicOn
       Qed.
 
       #[export] Instance refine_compat_namedenv_cat {N} {Δ : NCtx N Ty} {Γ} {w : World} :
-        RelatedFrom (RNEnv N Δ -> RNEnv N Γ -> RNEnv N (Δ ▻▻ Γ)) env.cat w env.cat emp :=
+        Related (RNEnv N Δ -> RNEnv N Γ -> RNEnv N (Δ ▻▻ Γ)) env.cat w env.cat :=
         refine_namedenv_cat.
 
       Lemma refine_namedenv_sub_acc {Σ : LCtx} {w : World} {ι : Valuation Σ} {ω : wlctx Σ ⊒ w}:
@@ -1949,20 +1779,15 @@ Module Type UnifLogicOn
         inst_pattern_match_term_reverse inst_sub_cat_right eq.
     Qed.
 
-    Lemma refine_pattern_match_val_term_reverse {N} {w : World} {σ}
+    #[export] Instance refine_pattern_match_val_term_reverse {N} {w : World} {σ}
       {pat : Pattern (N:=N) σ} {ι} :
-      ⊢ ℛ⟦RNEnv N (PatternCaseCtx ι) -> RVal σ⟧ (pattern_match_val_reverse pat ι) (pattern_match_term_reverse pat ι : _ -> STerm σ w).
+      Related (RNEnv N (PatternCaseCtx ι) -> RVal σ) (pattern_match_val_reverse pat ι) w (pattern_match_term_reverse pat ι : _ -> STerm σ w).
     Proof.
-      unfold RSat, RNEnv, RVal, RInst, RImpl, repₚ.
+      unfold Related, RSat, RNEnv, RVal, RInst, RImpl, repₚ.
       intros; crushPredEntails3.
       rewrite inst_pattern_match_term_reverse.
       now subst.
     Qed.
-
-    #[export] Instance refine_compat_pattern_match_val_term_reverse {N} {w : World} {σ}
-      {pat : Pattern (N:=N) σ} {ι} :
-        RelatedFrom (RNEnv N (PatternCaseCtx ι) -> RVal σ) (pattern_match_val_reverse pat ι) w (pattern_match_term_reverse pat ι) _ :=
-      refine_pattern_match_val_term_reverse.
 
     Import ctx.notations.
     Lemma refine_pattern_match_var {w : World} {σ} {v : Val σ} {x : LVar} {xIn : ctx.In (x∷σ) w}
@@ -2014,6 +1839,11 @@ Module Type UnifLogicOn
       now subst.
     Qed.
 
+    Lemma RVal_inst_eq {σ v} {w : World} {sv1 sv2 : Term w σ} :
+      (∀ ι : Valuation w, inst sv1 ι = inst sv2 ι) ->
+      ℛ⟦ RVal σ ⟧ v sv1 ⊢ ℛ⟦ RVal σ ⟧ v sv2.
+    Proof. apply repₚ_inst_eq. Qed.
+
     Lemma RVal_pair {σ1 σ2 v1 v2} {w : World} {sv1 : Term w σ1} {sv2 : Term w σ2}:
       ℛ⟦ RVal σ1 ⟧ v1 sv1 ∗ ℛ⟦ RVal σ2 ⟧ v2 sv2 ⊣⊢ ℛ⟦ RVal (ty.prod σ1 σ2) ⟧ (v1 , v2) (term_binop bop.pair sv1 sv2).
     Proof.
@@ -2041,10 +1871,11 @@ Module Type UnifLogicOn
       now apply inj_right_pair in H0.
     Qed.
 
-    Lemma refine_tuple_pattern_match_env {N Δ σs} {p : TuplePat σs Δ} {w : World} :
-      ⊢ ℛ⟦REnv σs -> RNEnv N Δ⟧ (tuple_pattern_match_env p) (tuple_pattern_match_env (T := Term w) p).
+    #[export] Instance refine_tuple_pattern_match_env {N Δ σs} {p : TuplePat σs Δ} {w : World} :
+      Related (REnv σs -> RNEnv N Δ) (tuple_pattern_match_env p) w
+        (tuple_pattern_match_env (T := Term w) p).
     Proof.
-      iIntros (e se) "He". iStopProof.
+      unfold Related. iIntros (e se) "He". iStopProof.
       unfold RNEnv, REnv, RInst, repₚ.
       crushPredEntails3; subst.
       now rewrite inst_tuple_pattern_match.
@@ -2082,6 +1913,25 @@ Module Type UnifLogicOn
       now rewrite !recordv_unfold_fold in H0.
     Qed.
 
+    #[export] Instance refine_compat_tuple_pattern_match_val {N Δ σs} {p : TuplePat σs Δ}
+      {w : World} {v} {a : Env (Term w) σs} :
+      RelatedFrom (RNEnv N Δ) (tuple_pattern_match_val p v) w (tuple_pattern_match_env p a)
+        (ℛ⟦RVal (ty.tuple σs)⟧ v (term_tuple a)).
+    Proof.
+      unfold RelatedFrom. rewrite RVal_tuple. iIntros "H".
+      iApply (refine_tuple_pattern_match_env with "H").
+    Qed.
+
+    #[export] Instance refine_compat_record_pattern_match_val {N R Δ}
+      {p : RecordPat (recordf_ty R) Δ} {w : World} {v} {a : NamedEnv (Term w) (recordf_ty R)} :
+      RelatedFrom (RNEnv N Δ) (record_pattern_match_val p v) w (record_pattern_match_env p a)
+        (ℛ⟦RVal (ty.record R)⟧ v (term_record R a)).
+    Proof.
+      unfold RelatedFrom. unfold record_pattern_match_val.
+      rewrite <-refine_record_pattern_match_env.
+      now rewrite RVal_record recordv_fold_unfold.
+    Qed.
+
     Lemma RVal_invert_inl {σ τ} {v} {w : World} {sl : Term w σ} : 
       ℛ⟦RVal (ty.sum σ τ)⟧ v (term_inl sl) ⊢ ∃ (vl : Val σ), bi_pure (v = inl vl) ∗ ℛ⟦RVal σ⟧ vl sl.
     Proof.
@@ -2100,14 +1950,14 @@ Module Type UnifLogicOn
 
   End LRCompat.
 
-  Import logicalrelation RSolve.
+  Import logicalrelation.
   Import env.notations.
   Import ctx.notations.
   Import ModalNotations.
   
-  #[export] Hint Extern 0 (RelatedFrom _ (inst ?vs) ?w (subst ?vs) _) => refine (refine_compat_inst_subst vs (w := w)) : typeclass_instances.
-  #[export] Hint Extern 0 (RelatedFrom (RList ?R) nil _ _ _) => refine (refine_compat_nil (R := R)) : typeclass_instances.
-  #[export] Hint Extern 0 (RelatedFrom RHeap nil _ _ _) => refine (refine_compat_nil (R := RChunk)) : typeclass_instances.
+  #[export] Hint Extern 0 (Related _ (inst ?vs) ?w (subst ?vs)) => refine (refine_compat_inst_subst vs (w := w)) : typeclass_instances.
+  #[export] Hint Extern 0 (Related (RList ?R) nil _ _) => refine (refine_compat_nil (R := R)) : typeclass_instances.
+  #[export] Hint Extern 0 (Related RHeap nil _ _) => refine (refine_compat_nil (R := RChunk)) : typeclass_instances.
 
 
   (* Outside the LRCompat section because of Coq restriction *)
@@ -2116,13 +1966,17 @@ Module Type UnifLogicOn
 
   Definition refine_compat_inst_persist {AT A} `{InstSubst AT A, @SubstLaws AT _} {v} {w1 w2} {ω : Acc w1 w2} {t} :
     RelatedFrom (RInst AT A) v w2 (persist t ω) _ :=
-    (refine_inst_persist _).
+    refine_inst_persist _.
   #[global] Opaque refine_compat_inst_persist.
   #[export] Hint Extern 0 (RelatedFrom _ ?v _ (persist ?t ?ω) _) => refine (refine_compat_inst_persist (v := v) (t := t) (ω := ω)) : typeclass_instances.
 
   #[export] Instance refine_compat_inst_persist_term {σ} {v} {w1 w2} {ω : Acc w1 w2} {t} :
     RelatedFrom (RVal σ) v w2 (persist__term t ω) _ :=
-    (refine_inst_persist _).
+    refine_inst_persist _.
+
+  #[export] Instance refine_compat_formula_persist {w1 w2} {ω : Acc w1 w2} {f : Formula w1} {p : Prop} :
+    RelatedFrom RFormula p w2 (persist f ω) (forgetting ω (RSat RFormula p f)).
+  Proof. unfold RelatedFrom. apply iris.bi.derived_laws.bi.wand_entails, refine_formula_persist. Qed.
 
   Definition refine_compat_term_binop {w τ1 τ2 τ3} {op : BinOp τ1 τ2 τ3} {a1 sa1 a2 sa2} :
     RelatedFrom (RVal τ3) (bop.eval op a1 a2)  w (term_binop op sa1 sa2) _ :=
@@ -2139,10 +1993,6 @@ Module Type UnifLogicOn
     refine_formula_relop.
   #[global] Opaque refine_compat_formula_relop.
   #[export] Hint Extern 0 (RelatedFrom RFormula _ _ (formula_relop ?relop _ _) _) => ( refine (refine_compat_formula_relop (relop := relop)) ) : typeclass_instances.
-
-  #[export] Instance refine_compat_chunk_ptsreg {w σ} {pc a ta} :
-    RelatedFrom RChunk (chunk_ptsreg pc a) w(chunk_ptsreg (σ := σ) pc ta) _ :=
-    refine_chunk_ptsreg.
 
   #[export] Instance refine_compat_env_snoc {Δ : Ctx Ty} {τ} {w : World} {vs : Env Val Δ} {svs : Env (Term w) Δ} {v : Val τ} {sv : Term w τ} :
     RelatedFrom (REnv (Δ ▻ τ)) (vs ► ( τ ↦ v ))%env w (svs ► (τ ↦ sv ))%env _ :=
@@ -2163,11 +2013,15 @@ Module Type UnifLogicOn
     refine_namedenv_sub_acc_trans.
 
   (* #[export] Instance refine_compat_named_env_sub_acc {Σ : LCtx} {w : World} {ι : Valuation Σ} {ω : wlctx Σ ⊒ w} : *)
-  (*   RelatedFrom (RNEnv LVar (wlctx Σ)) ι w (sub_acc ω) _ | 10 := *)
+  (*   Related (RNEnv LVar (wlctx Σ)) ι w (sub_acc ω) | 10 := *)
   (*   refine_namedenv_sub_acc. *)
 
 
   Import notations logicalrelation.notations logicalrelation iris.proofmode.proofmode.
+
+  #[export] Instance refine_compat_chunk_ptsreg {w σ} {pc} :
+    Related (RVal σ -> RChunk) (chunk_ptsreg pc) w (chunk_ptsreg (σ := σ) pc).
+  Proof. iIntros (a ta) "Ha". now iApply refine_chunk_ptsreg. Qed.
 
   #[export] Instance refine_compat_chunk_user {w c} :
     Related (REnv (𝑯_Ty c) -> RChunk) (chunk_user c) w (chunk_user c).
@@ -2184,6 +2038,499 @@ Module Type UnifLogicOn
            change (instpred_ctx ?P) with (instpred P).
            now rewrite IHx instpred_subst.
   Qed.
+
+  (* * The solver [solve_related]
+
+     [solve_related] proves goals [⊢ ℛ⟦R⟧ v vs] that relate a concrete term [v]
+     to a symbolic term [vs], typically [Related] instances for monad
+     operations. It leaves the goals it cannot prove to the user: pure side
+     conditions, facts about [inst] and [subst], and pairs of terms for which
+     it knows no lemma.
+
+     Logical relations. Proving [ℛ⟦R⟧ v vs] by recursion on [R], [v] and [vs]
+     is proving the fundamental lemma of the logical relation for this one
+     pair of terms. Each case of that proof is a step of the solver:
+     - at [RA -> RB], [□ᵣ R] and [∀ᵣ], introduce related arguments, a future
+       world, or a value ([rimpl_intro], [rbox_intro], [rforall_intro]);
+     - a pair of applications [f a] versus [fs sa] is related if [f] and [fs]
+       are related at some [RA -> R], and [a] and [sa] at [RA] ([rpeel]);
+     - a pair of constants is related by a [Related] instance, like [Proper]
+       in generalized rewriting, or by a [RelatedFrom] rule, whose premise
+       becomes the next goal;
+     - a pair of variables, the arguments introduced earlier, is related by
+       hypothesis.
+
+     Proof search. The solver searches backwards from the goal, in the style
+     of uniform proofs and focusing. Introduction rules are invertible: they
+     never turn a provable goal into an unprovable one, so they are applied
+     as soon as nothing cheaper closes the goal. At the other goals, the
+     solver commits to the first step that applies and never backtracks over
+     it. This makes it incomplete but fast, and its leftover goals
+     predictable. Application is handled as in bidirectional type checking:
+     the function's relation [?RA -> R] is synthesized, from a hypothesis or
+     an instance ([rfun]), and the argument is then checked against [RA]
+     ([rstep]).
+
+     Representation. A goal has the form [Γ ⊢ P], where the context
+     [Γ : Pred w] is a universally quantified variable, and hypotheses are
+     Rocq hypotheses [H : Γ ⊢ Q]. A hypothesis is used with [exact H], and
+     goals change only by applying the kernel lemmas below, the only lemmas
+     that look inside [Pred] and the relations. The tactics never unfold
+     anything, which keeps the steps fast and the proof terms small. The
+     Iris proof mode would offer nothing here: [Pred w] is persistent and
+     affine, so [∗] is [∧] and hypotheses can be duplicated and dropped.
+
+     Context chain. Each binder creates a new context, linked to the old one
+     ([rext], [rextf]), and older hypotheses stay where they are. Under
+     [RA -> RB] the new context [Γ'] satisfies [Γ' ⊢ Γ], so hypotheses about
+     [Γ] can be used. Under [□ᵣ R] it lives in a later world, [ω : w ⊒ w2],
+     and satisfies [Γ2 ⊢ forgetting ω Γ]: hypotheses about [Γ] only prove
+     goals [forgetting ω P]. This is a Kripke model, and the [rextf] link is
+     the lock of Fitch-style modal type theories. [rhyp_walk] closes a goal
+     with a hypothesis from an older context by walking up the chain.
+
+     Example: peeling. With [H : Γ ⊢ ℛ⟦RFormula⟧ P fml], the goal
+       [Γ ⊢ ℛ⟦RHeapSpec RUnit⟧
+              (CHeapSpec.lift_purespec (CPureSpec.assert_formula P))
+              (SHeapSpec.lift_purespec (SPureSpec.assert_formula msg fml))]
+     takes three calls of [rstep]:
+     1. No tactic before the lookups applies; [RHeapSpec] is not
+        syntactically [_ -> _], so [rintro] does not. Instance search fails on
+          [Related (RHeapSpec RUnit) (CHeapSpec.lift_purespec …) w (…)]
+        and on [RelatedFrom … ?Ob]: instances are about unapplied symbols,
+        and [Typeclasses Opaque] stops the search from unfolding the goal.
+        [rpeel] splits off the argument with [rimpl_elim], leaving
+          [ℛ⟦?RA -> RHeapSpec RUnit⟧ CHeapSpec.lift_purespec SHeapSpec.lift_purespec]
+        and [ℛ⟦?RA⟧ (CPureSpec.assert_formula P) (…)]. [rfun] proves the
+        first by the query
+          [Related (?RA -> RHeapSpec RUnit) CHeapSpec.lift_purespec w
+             SHeapSpec.lift_purespec],
+        which [refine_lift_purespec] solves with [?RA := RPureSpec RUnit].
+     2. At [ℛ⟦RPureSpec RUnit⟧ (CPureSpec.assert_formula P)
+        (SPureSpec.assert_formula msg fml)] the lookups fail as before, and
+        [rpeel] splits off [P] versus [fml]. In [rfun], the query
+          [Related (?RA -> RPureSpec RUnit) CPureSpec.assert_formula w
+             (SPureSpec.assert_formula msg)]
+        fails, since the instance is stated without the message. Only the
+        symbolic side is an application, so [rpeel] peels [msg] alone with
+        [rmsg_elim], and the query
+          [Related (RMsg AMessage (?RA -> RPureSpec RUnit))
+             CPureSpec.assert_formula w SPureSpec.assert_formula]
+        is solved by [refine_assert_formula] with [?RA := RFormula].
+     3. At [ℛ⟦RFormula⟧ P fml], [rhyp_rel] finds a hypothesis about [P], and
+        [rhyp_walk] closes the goal with [H].
+     The proof term is
+       [rimpl_elim (rrelated refine_lift_purespec)
+          (rimpl_elim (rmsg_elim (rrelated refine_assert_formula)) H)].
+
+     Example: binders. [refine_bind] relates
+       [CPureSpec.bind = λ m f Φ, m (λ a, f a Φ)] and
+       [SPureSpec.bind = λ m f Φ, m (λ w1 ω a, f w1 ω a (four Φ ω))]
+     at [RPureSpec RA -> □ᵣ(RA -> RPureSpec RB) -> RPureSpec RB], where
+     [RPureSpec RA = □ᵣ(RA -> ℙ) -> ℙ]. The solver takes ten steps:
+     1-3. [rimpl_intro] three times gives contexts [Γ0], [Γ1], [Γ2] with
+          [Hm : Γ0 ⊢ ℛ⟦RPureSpec RA⟧ m sm], [Hf] and [HΦ], and the goal
+            [Γ2 ⊢ ℛ⟦ℙ⟧ (m (λ a, f a Φ)) (sm (λ w1 ω a, sf w1 ω a (four sΦ ω)))].
+     4.   [rpeel] peels the continuation. [rfun] proves [m] versus [sm] at
+          [?RA -> ℙ] with [Hm], two links up the chain, which fixes [?RA].
+          The goal is now [ℛ⟦□ᵣ(RA -> ℙ)⟧ (λ a, f a Φ) (λ w1 ω a, …)].
+     5-6. [rbox_intro] and [rimpl_intro] give a world [w1], with [ω : w ⊒ w1]
+          and the link [rextf ω Γ3 Γ2], and related [a] and [sa] in [Γ4]:
+            [Γ4 ⊢ ℛ⟦ℙ⟧ (f a Φ) (sf w1 ω sa (four sΦ ω))].
+     7.   [rpeel] peels [Φ] and, inside [rfun], [a]. [rfun] proves [f] versus
+          [sf w1 ω] with [rbox_elim], and the resulting goal
+          [forgetting ω (ℛ⟦□ᵣ …⟧ f sf)] with [Hf] across the [ω] link. Left
+          are [ℛ⟦RA⟧ a sa] and [ℛ⟦□ᵣ(RB -> ℙ)⟧ Φ (four sΦ ω)].
+     8.   [Ha] closes the first.
+     9.   [rbox_four] turns the second into [forgetting ω (ℛ⟦…⟧ Φ sΦ)].
+     10.  [HΦ] closes it, across [ω]. *)
+  Module RefineSolver.
+    Import ModalNotations logicalrelation logicalrelation.notations.
+    Import iris.bi.interface iris.bi.derived_laws iris.proofmode.environments.
+
+    (* The links of the context chain. They are definitions rather than plain
+       entailments, so that the tactics can tell them from hypotheses. *)
+    Definition rext {w} (Γ' Γ : Pred w) : Prop := Γ' ⊢ Γ.
+    Definition rextf {w1 w2} (ω : w1 ⊒ w2) (Γ2 : Pred w2) (Γ : Pred w1) : Prop :=
+      Γ2 ⊢ forgetting ω Γ.
+
+    (* ---------------------------------------------------------------------- *)
+    (* Kernel: proof rules for goals [Γ ⊢ P]. Introduction rules that bind
+       something take a continuation that receives the new context and its
+       link to the old one. *)
+
+    (* Entry from [⊢ P], and from the proof mode, where [Γ] stands for the
+       whole proof-mode context. *)
+    Lemma rentry_valid {w} {P : Pred w} :
+      (∀ Γ : Pred w, Γ ⊢ P) → ⊢ P.
+    Proof. intros H. apply H. Qed.
+
+    Lemma rentry_envs {w} {Δ : envs (Pred w)} {Q : Pred w} :
+      (∀ Γ : Pred w, (Γ ⊢ of_envs Δ) → Γ ⊢ Q) → envs_entails Δ Q.
+    Proof. rewrite envs_entails_unseal. intros H. now apply H. Qed.
+
+    Lemma renvs_lookup {w} {Δ : envs (Pred w)} {Γ : Pred w} {i p P} :
+      (Γ ⊢ of_envs Δ) → envs_lookup i Δ = Some (p, P) → Γ ⊢ P.
+    Proof.
+      intros H Hl. rewrite H envs_lookup_sound // bi.intuitionistically_if_elim.
+      apply: bi.sep_elim_l.
+    Qed.
+
+    (* Walking up the chain. *)
+    Lemma rweaken {w} {Γ Γ' P : Pred w} :
+      rext Γ' Γ → (Γ ⊢ P) → Γ' ⊢ P.
+    Proof. unfold rext. intros H1 H2. etrans; [exact H1|exact H2]. Qed.
+
+    Lemma rforget {w1 w2} {ω : w1 ⊒ w2} {Γ : Pred w1} {Γ2 : Pred w2} {P : Pred w1} :
+      rextf ω Γ2 Γ → (Γ ⊢ P) → Γ2 ⊢ forgetting ω P.
+    Proof.
+      unfold rextf. intros H1 H2. etrans; [exact H1|].
+      now apply forgetting_proper.
+    Qed.
+
+    Lemma rforget_trans {w1 w2 w3} {ω12 : w1 ⊒ w2} {ω23 : w2 ⊒ w3}
+      {Γ : Pred w3} {P : Pred w1} :
+      (Γ ⊢ forgetting ω23 (forgetting ω12 P)) →
+      Γ ⊢ forgetting (acc_trans ω12 ω23) P.
+    Proof. intros H. now rewrite forgetting_trans. Qed.
+
+    Lemma rforget_refl {w} {Γ P : Pred w} :
+      (Γ ⊢ P) → Γ ⊢ forgetting acc_refl P.
+    Proof. intros H. now rewrite forgetting_id. Qed.
+
+    (* Connectives of premises. *)
+    Lemma remp {w} {Γ : Pred w} : Γ ⊢ emp.
+    Proof. apply: affine. Qed.
+
+    Lemma rpure_intro {w} {Γ : Pred w} {φ : Prop} : φ → Γ ⊢ ⌜φ⌝.
+    Proof. apply bi.pure_intro. Qed.
+
+    Lemma rsep_intro {w} {Γ P Q : Pred w} :
+      (Γ ⊢ P) → (Γ ⊢ Q) → Γ ⊢ P ∗ Q.
+    Proof. intros HP HQ. rewrite sep_is_and. now apply bi.and_intro. Qed.
+
+    (* Instances and rules. *)
+    Lemma rrelated `{R : Rel SA CA} {v w} {vs : SA w} {Γ : Pred w} :
+      Related R v w vs → Γ ⊢ ℛ⟦R⟧ v vs.
+    Proof. intros H. rewrite -H. apply: affine. Qed.
+
+    Lemma rrelated_from `{R : Rel SA CA} {v w} {vs : SA w} {Ob} {Γ : Pred w} :
+      RelatedFrom R v w vs Ob → (Γ ⊢ Ob) → Γ ⊢ ℛ⟦R⟧ v vs.
+    Proof. intros H HΓ. etrans; [exact HΓ|exact H]. Qed.
+
+    (* [RA -> RB]. *)
+    Lemma rimpl_intro `{RA : Rel SA CA} `{RB : Rel SB CB} {w} {Γ : Pred w}
+      {f : CA → CB} {fs : Impl SA SB w} :
+      (∀ a sa (Γ' : Pred w), rext Γ' Γ → (Γ' ⊢ ℛ⟦RA⟧ a sa) →
+                             Γ' ⊢ ℛ⟦RB⟧ (f a) (fs sa)) →
+      Γ ⊢ ℛ⟦RA -> RB⟧ f fs.
+    Proof.
+      intros H. unfold RImpl; cbn [RSat].
+      apply bi.forall_intro => a. apply bi.forall_intro => sa.
+      apply bi.wand_intro_r. apply H; [apply: bi.sep_elim_l|apply: bi.sep_elim_r].
+    Qed.
+
+    Lemma rimpl_elim `{RA : Rel SA CA} `{RB : Rel SB CB} {w} {Γ : Pred w}
+      {f : CA → CB} {fs : Impl SA SB w} {a sa} :
+      (Γ ⊢ ℛ⟦RA -> RB⟧ f fs) → (Γ ⊢ ℛ⟦RA⟧ a sa) → Γ ⊢ ℛ⟦RB⟧ (f a) (fs sa).
+    Proof.
+      intros Hf Ha. etrans; [exact (rsep_intro Hf Ha)|]. apply bi.wand_elim_l'.
+      unfold RImpl; cbn [RSat]. now rewrite (bi.forall_elim a) (bi.forall_elim sa).
+    Qed.
+
+    (* Boxes: introduction moves to a future world, elimination opens a box
+       from an older context ([rbox_elim]), at the current world ([rbox_T]),
+       or moves it to a later world ([rbox_four]). *)
+    Lemma unconditionally_intro {w} {Γ : Pred w} {P : Box Pred w} :
+      (∀ w2 (ω : w ⊒ w2) (Γ2 : Pred w2), rextf ω Γ2 Γ → Γ2 ⊢ P w2 ω) →
+      Γ ⊢ unconditionally P.
+    Proof.
+      intros H. unfold unconditionally.
+      apply bi.forall_intro => w2. apply bi.forall_intro => ω.
+      apply forgetting_assuming_adjoint. now apply H.
+    Qed.
+
+    Lemma rbox_intro `{R : Rel SA CA} {w} {Γ : Pred w} {v} {vs : Box SA w} :
+      (∀ w2 (ω : w ⊒ w2) (Γ2 : Pred w2), rextf ω Γ2 Γ → Γ2 ⊢ ℛ⟦R⟧ v (vs w2 ω)) →
+      Γ ⊢ ℛ⟦□ᵣ R⟧ v vs.
+    Proof. intros H. unfold RBox; cbn [RSat]. now apply unconditionally_intro. Qed.
+
+    Lemma rbox_elim `{R : Rel SA CA} {w w2} {ω : w ⊒ w2} {Γ2 : Pred w2} {v}
+      {vs : Box SA w} :
+      (Γ2 ⊢ forgetting ω (ℛ⟦□ᵣ R⟧ v vs)) → Γ2 ⊢ ℛ⟦R⟧ v (vs w2 ω).
+    Proof.
+      intros H. etrans; [exact H|]. unfold RBox; cbn [RSat]. unfold unconditionally.
+      etrans; [|apply (forgetting_assuming (ω := ω))].
+      apply forgetting_proper.
+      etrans; [apply (bi.forall_elim w2)|].
+      exact (bi.forall_elim (Ψ := fun ω' => assuming ω' (ℛ⟦R⟧ v (vs w2 ω'))) ω).
+    Qed.
+
+    Lemma rbox_T `{R : Rel SA CA} {w} {Γ : Pred w} {v} {vs : Box SA w} :
+      (Γ ⊢ ℛ⟦□ᵣ R⟧ v vs) → Γ ⊢ ℛ⟦R⟧ v (T vs).
+    Proof. intros H. unfold T. apply rbox_elim. now apply rforget_refl. Qed.
+
+    Lemma rbox_four `{R : Rel SA CA} {w1 w2} {ω : w1 ⊒ w2} {Γ2 : Pred w2} {v}
+      {vs : Box SA w1} :
+      (Γ2 ⊢ forgetting ω (ℛ⟦□ᵣ R⟧ v vs)) → Γ2 ⊢ ℛ⟦□ᵣ R⟧ v (four vs ω).
+    Proof.
+      intros H. rewrite H. unfold RBox; cbn [RSat].
+      exact (forgetting_unconditionally (λ w0 ω0, ℛ⟦R⟧ v (vs w0 ω0))).
+    Qed.
+
+    (* [∀ᵣ] quantifies over a value that is the same on both sides, [RMsg]
+       over a message that only the symbolic side takes. *)
+    Lemma rforall_intro {𝑲} {AT : 𝑲 → TYPE} {A : 𝑲 → Type}
+      {RA : ∀ K, Rel (AT K) (A K)} {w} {Γ : Pred w} {f : ∀ K, A K}
+      {fs : ∀ K, AT K w} :
+      (∀ K, Γ ⊢ ℛ⟦RA K⟧ (f K) (fs K)) → Γ ⊢ ℛ⟦RForall RA⟧ f fs.
+    Proof.
+      intros H. unfold RForall; cbn [RSat].
+      apply bi.forall_intro => K. apply H.
+    Qed.
+
+    Lemma rforall_elim {𝑲} {AT : 𝑲 → TYPE} {A : 𝑲 → Type}
+      {RA : ∀ K, Rel (AT K) (A K)} {w} {Γ : Pred w} {f : ∀ K, A K}
+      {fs : ∀ K, AT K w} {K} :
+      (Γ ⊢ ℛ⟦RForall RA⟧ f fs) → Γ ⊢ ℛ⟦RA K⟧ (f K) (fs K).
+    Proof.
+      intros H. etrans; [exact H|]. unfold RForall; cbn [RSat].
+      exact (bi.forall_elim (Ψ := fun K => ℛ⟦RA K⟧ (f K) (fs K)) K).
+    Qed.
+
+    Lemma rmsg_elim {M : TYPE} `{R : Rel SA CA} {w} {Γ : Pred w} {v} {vs : Impl M SA w} {m} :
+      (Γ ⊢ ℛ⟦RMsg M R⟧ v vs) → Γ ⊢ ℛ⟦R⟧ v (vs m).
+    Proof.
+      intros H. etrans; [exact H|]. unfold RMsg; cbn [RSat].
+      exact (bi.forall_elim (Ψ := fun m => ℛ⟦R⟧ v (vs m)) m).
+    Qed.
+
+    (* Related pattern match results have the same pattern case. *)
+    Lemma rmatchresult_elim {N σ} {p : Pattern (N:=N) σ} {w} {Γ Q : Pred w}
+      {pc args spc} {sargs : NamedEnv (Term w) (PatternCaseCtx spc)} :
+      (Γ ⊢ ℛ⟦RMatchResult p⟧ (existT pc args) (existT spc sargs)) →
+      (∀ (e : spc = pc) (Γ' : Pred w), rext Γ' Γ →
+         (Γ' ⊢ ℛ⟦RNEnv N (PatternCaseCtx pc)⟧ args
+                 (eq_rect spc (fun pc => NamedEnv (Term w) (PatternCaseCtx pc))
+                    sargs pc e)) →
+         Γ' ⊢ Q) →
+      Γ ⊢ Q.
+    Proof.
+      intros H HQ. unfold RMatchResult in H; cbn [RSat] in H.
+      etrans; [apply bi.and_intro; [reflexivity|exact H]|].
+      rewrite bi.and_exist_l. apply bi.exist_elim => e.
+      apply (HQ e); unfold rext; [apply bi.and_elim_l|apply bi.and_elim_r].
+    Qed.
+
+    (* ---------------------------------------------------------------------- *)
+    (* Tactics, in Ltac2. Each acts on one focused goal [Γ ⊢ P] and fails if
+       it does not apply, so that [rstep] can try them in order. *)
+    Import Ltac2.Ltac2.
+    (* The tactics refer to the lemmas above, which functor application
+       substitutes; there is nothing else to check. *)
+    Local Set Warnings "-ltac2-in-modtype".
+
+    (* Ltac1's [notypeclasses refine]: no instance search, the new goals are
+       beta-iota reduced, and holes that occur in the types of other holes are
+       shelved. Ltac2's [refine] re-checks the term and made the solver about
+       twice as slow. *)
+    Ltac2 nrefine0 (c : preterm) : unit :=
+      ltac1:(c |- notypeclasses refine c) (Ltac1.of_preterm c).
+    Ltac2 Notation "nrefine" c(preterm) := nrefine0 c.
+
+    Ltac2 tc_solve () : unit :=
+      solve [ Control.once (fun () => Std.typeclasses_eauto None None None) ].
+
+    Ltac2 guard (b : bool) : unit :=
+      if b then () else Control.zero Match_failure.
+
+    Ltac2 rec head (c : constr) : constr :=
+      match Constr.Unsafe.kind c with
+      | Constr.Unsafe.App h _ => head h
+      | _ => c
+      end.
+
+    Ltac2 is_rsat (p : constr) : bool :=
+      lazy_match! p with @RSat _ _ _ _ _ _ => true | _ => false end.
+
+    (* Close [Γ ⊢ P] with a hypothesis about the same [Γ]. For [ℛ⟦R⟧ v vs],
+       first one about the same [v] and [vs], whatever its relation, since [R]
+       may still be an evar; then any one that unifies, but a relational one
+       [ℛ⟦_⟧ v' _] only if [v'] has the head of [v]: a failing unification of
+       two variables of the same type unfolds both relations, which is slow
+       for big monads. *)
+    Ltac2 rhyp_here () : unit :=
+      match! goal with
+      | [ h : ?_g ⊢ @RSat _ _ _ ?_v _ ?_vs |- ?_g ⊢ @RSat _ _ _ ?_v _ ?_vs ] =>
+          exact $hyp:h
+      | [ h : ?_g ⊢ @RSat _ _ _ ?v' _ _ |- ?_g ⊢ @RSat _ _ _ ?v _ _ ] =>
+          guard (Constr.equal (head v) (head v')); exact $hyp:h
+      | [ h : ?_g ⊢ ?q |- ?_g ⊢ ?p ] =>
+          guard (Bool.neg (Bool.and (is_rsat q) (is_rsat p))); exact $hyp:h
+      end.
+
+    (* Move the goal one link up the chain, and say whether that removed a
+       [forgetting]. A goal crosses a world change [ω] only as
+       [forgetting ω P]. *)
+    Ltac2 rup () : bool :=
+      lazy_match! goal with
+      | [ |- _ ⊢ forgetting (acc_trans _ _) _ ] => nrefine (rforget_trans _); false
+      | [ |- _ ⊢ forgetting acc_refl _ ] => nrefine (rforget_refl _); true
+      | [ h : rextf ?_om ?_g _ |- ?_g ⊢ forgetting ?_om _ ] =>
+          nrefine (rforget $hyp:h _); true
+      | [ h : rext ?_g _ |- ?_g ⊢ _ ] => nrefine (rweaken $hyp:h _); false
+      end.
+
+    (* Close the goal with a hypothesis from this or an older context. *)
+    Ltac2 rec rhyp_walk () : unit :=
+      first [ rhyp_here () | let _ := rup () in rhyp_walk () ].
+
+    (* Move [forgetting ω P] back to the context before [ω], e.g. to find an
+       instance for [P]. *)
+    Ltac2 rec rforget_goal () : unit :=
+      if rup () then () else rforget_goal ().
+
+    (* [rhyp_walk] for relational goals, if some relational hypothesis has a
+       concrete side with the goal's head. Most hypotheses are about variables,
+       so goals about operations fail this test at once. *)
+    Ltac2 rhyp_rel () : unit :=
+      lazy_match! goal with
+      | [ |- _ ⊢ @RSat _ _ _ ?v _ _ ] =>
+          match! goal with
+          | [ _ : _ ⊢ @RSat _ _ _ ?v' _ _ |- _ ] => guard (Constr.equal (head v) (head v'))
+          end;
+          rhyp_walk ()
+      end.
+
+    Ltac2 rlookup_related () : unit :=
+      lazy_match! goal with
+      | [ |- _ ⊢ @RSat _ _ _ _ _ _ ] => nrefine (rrelated _); tc_solve ()
+      end.
+
+    (* The premise of the rule is the next goal. *)
+    Ltac2 rlookup_rule () : unit :=
+      lazy_match! goal with
+      | [ |- _ ⊢ @RSat _ _ _ _ _ _ ] => nrefine (rrelated_from _ _) > [ tc_solve () | ]
+      end.
+
+    (* A symbolic side [four vs ω], [T vs], or [vs w2 ω] for a box variable
+       [vs]. The first and last leave a goal [forgetting ω (ℛ⟦□ᵣ R⟧ v vs)]. *)
+    Ltac2 rtransport () : unit :=
+      lazy_match! goal with
+      | [ |- _ ⊢ @RSat _ _ _ _ _ (four _ _) ] => nrefine (rbox_four _)
+      | [ |- _ ⊢ @RSat _ _ _ _ _ (T _) ] => nrefine (rbox_T _)
+      | [ |- _ ⊢ @RSat _ _ _ _ _ (?vs _ ?om) ] =>
+          guard (Constr.is_var vs);
+          lazy_match! Constr.type om with Acc _ _ => nrefine (rbox_elim _) end
+      end.
+
+    (* Invertible steps. *)
+    Ltac2 rintro () : unit :=
+      lazy_match! goal with
+      | [ |- _ ⊢ @RSat _ _ (RImpl _ _) _ _ _ ] =>
+          nrefine (rimpl_intro _); intros ?a ?sa ?Γ ?Hle ?Ha
+      | [ |- _ ⊢ @RSat _ _ (RBox _) _ _ _ ] =>
+          nrefine (rbox_intro _); intros ?w ?ω ?Γ ?Hle
+      | [ |- _ ⊢ @RSat _ _ (RForall _) _ _ _ ] =>
+          nrefine (rforall_intro _); intro; cbv beta
+      end.
+
+    (* [rfun] synthesizes the relation [?RA -> R] of a function [f] versus
+       [fs], so it only uses steps that determine [?RA]: a hypothesis, a box
+       transport, a [Related] instance, or peeling a further argument. *)
+    Ltac2 rec rfun () : unit :=
+      first
+        [ rhyp_rel () | (rtransport (); rfun ()) | rlookup_related () | rpeel ()
+        | lazy_match! goal with [ |- _ ⊢ forgetting _ _ ] => rhyp_walk () end ]
+    (* [rpeel] splits [f a] versus [fs sa] at [R] into [f] versus [fs] at
+       [?RA -> R], proved by [rfun], and [a] versus [sa] at [RA], left to
+       [rstep]. Alternatively the argument is the same on both sides ([∀ᵣ]),
+       or a message on the symbolic side only ([RMsg]). *)
+    with rpeel () : unit :=
+      lazy_match! goal with
+      | [ |- _ ⊢ @RSat _ _ _ (?f ?a) _ (?fs ?sa) ] =>
+          first
+            [ nrefine (rimpl_elim (f := $f) (fs := $fs) _ _) > [ rfun () | ]
+            | nrefine (rforall_elim (K := $a) _); rfun ()
+            | nrefine (rmsg_elim (m := $sa) _); rfun () ]
+      | [ |- _ ⊢ @RSat _ _ _ _ _ (_ ?m) ] => nrefine (rmsg_elim (m := $m) _); rfun ()
+      end.
+
+    (* Matches on both sides: on the same closed term [x], [destruct x]; on
+       variables [x] and [sx] related at [RMatchResult p], destruct both and
+       relate the matched values. *)
+    Ltac2 rdestruct () : unit :=
+      lazy_match! goal with
+      | [ |- _ ⊢ @RSat _ _ _ (match ?x with _ => _ end) _ (match ?x with _ => _ end) ] =>
+          lazy_match! x with
+          | match _ with _ => _ end => fail
+          | _ => if Constr.has_evar x then fail else destruct $x
+          end
+      | [ _ : _ ⊢ @RSat _ _ (RMatchResult ?p) ?x _ ?sx
+          |- ?g ⊢ @RSat _ _ _ (match ?x with _ => _ end) _ (match ?sx with _ => _ end) ] =>
+          guard (Bool.and (Constr.is_var x) (Constr.is_var sx));
+          let hm := Fresh.in_goal @Hm in
+          assert ($hm : $g ⊢ ℛ⟦RMatchResult $p⟧ $x $sx) by (rhyp_walk ());
+          destruct $x as [?pc ?args], $sx as [?spc ?sargs];
+          nrefine (rmatchresult_elim $hyp:hm _);
+          let ha := Fresh.in_goal @Ha in
+          intros ?e ?Γ ?Hle $ha; subst; cbn [eq_rect] in $ha
+      end.
+
+    (* One step. At a relational goal: cheap closing steps first, then an
+       introduction, which makes a related continuation be used as is rather
+       than expanded; then instances and rules for the whole terms, before
+       peeling, so that they win over the instance for the head; and at last
+       any hypothesis, e.g. one stated with [repₚ]. *)
+    Ltac2 rstep () : unit :=
+      lazy_match! goal with
+      | [ |- _ ⊢ @RSat _ _ _ _ _ _ ] =>
+          first
+            [ rdestruct () | rhyp_rel () | rtransport () | rintro ()
+            | rlookup_related () | rlookup_rule () | rpeel () | rhyp_walk () ]
+      | [ |- _ ⊢ unconditionally _ ] =>
+          nrefine (unconditionally_intro _); intros ?w ?ω ?Γ ?Hle
+      | [ |- _ ⊢ _ ∗ _ ] => nrefine (rsep_intro _ _)
+      | [ |- _ ⊢ emp ] => exact remp
+      | [ |- _ ⊢ ⌜True⌝ ] => exact (rpure_intro I)
+      | [ |- _ ⊢ forgetting _ _ ] => first [ rhyp_walk () | rforget_goal () ]
+      end.
+
+    (* Add [H : Γ ⊢ P] for each hypothesis [P] of the proof-mode environment
+       [e], given [hd : Γ ⊢ of_envs Δ]. *)
+    Ltac2 rec renvs_hyps (hd : constr) (e : constr) (p : constr) : unit :=
+      lazy_match! e with
+      | Enil => ()
+      | Esnoc ?e ?i ?q =>
+          let h := Fresh.in_goal @H in
+          assert ($h := renvs_lookup (i := $i) (p := $p) (P := $q) $hd eq_refl);
+          renvs_hyps hd e p
+      end.
+
+    (* Bring a goal [⊢ P], [Related …] or a proof-mode goal into the form
+       [Γ ⊢ P]. *)
+    Ltac2 rentry () : unit :=
+      lazy_match! goal with
+      | [ |- _ ⊢ _ ] => ()
+      | [ |- envs_entails (Envs ?gp ?gs _) _ ] =>
+          nrefine (rentry_envs _);
+          let hd := Fresh.in_goal @HΔ in
+          intros ?Γ $hd;
+          renvs_hyps (Control.hyp hd) gp 'true;
+          renvs_hyps (Control.hyp hd) gs 'false;
+          clear $hd
+      | [ |- _ ] => nrefine (rentry_valid _); intros ?Γ
+      end.
+
+    (* If not even one step applies, the goal is left unchanged, also in the
+       proof mode, whose context [rentry] would have replaced. Hence
+       [solve_related] can be tried on any goal. *)
+    Ltac2 solve_related () : unit :=
+      try (rentry (); rstep (); repeat (rstep ())).
+
+  End RefineSolver.
+
+  Ltac solve_related := ltac2:(RefineSolver.solve_related ()).
 
   Module AutorewriteUnifLogic.
     Import DList.
