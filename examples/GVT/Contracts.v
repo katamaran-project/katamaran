@@ -1071,24 +1071,56 @@ Module Import RiscvPmpSpecification.
         Definition sep_contract_init_model : SepContractFun init_model :=
           {{ ∃ p, cur_privilege ↦ term_var p
              ∗ ∃ "es", asn_pmp_entries (term_var "es")
-             ∗ asn_counters }}
+             ∗ asn_counters
+             ∗ ∃ "v_mip", mip ↦ term_var "v_mip"
+             ∗ ∃ "v_mie", mie ↦ term_var "v_mie"
+             ∗ ∃ "v_mideleg", mideleg ↦ term_var "v_mideleg"
+             ∗ ∃ "v_medeleg", medeleg ↦ term_var "v_medeleg"
+             ∗ ∃ "v_mtvec", mtvec ↦ term_var "v_mtvec"
+             ∗ ∃ "v_mcause", mcause ↦ term_var "v_mcause"
+             ∗ ∃ "v_mepc", mepc ↦ term_var "v_mepc"
+             ∗ ∃ "v_mscratch", mscratch ↦ term_var "v_mscratch" }}
             fn init_model [] ty.unit
           {{ "result_init_model",
              term_var "result_init_model" = term_val ty.unit tt
              ∗ cur_privilege ↦ term_val ty_privilege Machine
              ∗ ∃ "es", asn_pmp_entries (term_var "es")
-             ∗ asn_counters }}.
+             ∗ asn_counters
+             ∗ mip      ↦ term_val ty_Minterrupts Minterrupts_zero
+             ∗ mie      ↦ term_val ty_Minterrupts Minterrupts_zero
+             ∗ mideleg  ↦ term_val ty_Minterrupts Minterrupts_zero
+             ∗ medeleg  ↦ term_val ty_Medeleg Medeleg_zero
+             ∗ mtvec    ↦ term_val ty_xlenbits Bitvector.bv.zero
+             ∗ mcause   ↦ term_val ty_mcause Bitvector.bv.zero
+             ∗ mepc     ↦ term_val ty_xlenbits Bitvector.bv.zero
+             ∗ mscratch ↦ term_val ty_xlenbits Bitvector.bv.zero }}.
 
         Definition sep_contract_init_sys : SepContractFun init_sys :=
           {{ ∃ p, cur_privilege ↦ term_var p
              ∗ ∃ "es", asn_pmp_entries (term_var "es")
-             ∗ asn_counters }}
+             ∗ asn_counters
+             ∗ ∃ "v_mip", mip ↦ term_var "v_mip"
+             ∗ ∃ "v_mie", mie ↦ term_var "v_mie"
+             ∗ ∃ "v_mideleg", mideleg ↦ term_var "v_mideleg"
+             ∗ ∃ "v_medeleg", medeleg ↦ term_var "v_medeleg"
+             ∗ ∃ "v_mtvec", mtvec ↦ term_var "v_mtvec"
+             ∗ ∃ "v_mcause", mcause ↦ term_var "v_mcause"
+             ∗ ∃ "v_mepc", mepc ↦ term_var "v_mepc"
+             ∗ ∃ "v_mscratch", mscratch ↦ term_var "v_mscratch" }}
             fn init_sys [] ty.unit
           {{ "result_init_sys",
              term_var "result_init_sys" = term_val ty.unit tt
              ∗ cur_privilege ↦ term_val ty_privilege Machine
              ∗ ∃ "es", asn_pmp_entries (term_var "es")
-             ∗ asn_counters }}.
+             ∗ asn_counters
+             ∗ mip      ↦ term_val ty_Minterrupts Minterrupts_zero
+             ∗ mie      ↦ term_val ty_Minterrupts Minterrupts_zero
+             ∗ mideleg  ↦ term_val ty_Minterrupts Minterrupts_zero
+             ∗ medeleg  ↦ term_val ty_Medeleg Medeleg_zero
+             ∗ mtvec    ↦ term_val ty_xlenbits Bitvector.bv.zero
+             ∗ mcause   ↦ term_val ty_mcause Bitvector.bv.zero
+             ∗ mepc     ↦ term_val ty_xlenbits Bitvector.bv.zero
+             ∗ mscratch ↦ term_val ty_xlenbits Bitvector.bv.zero }}.
 
         Definition sep_contract_init_pmp : SepContractFun init_pmp :=
           {{ ∃ "cfg0", pmp0cfg ↦ term_var "cfg0" ∗ ∃ "cfg1", pmp1cfg ↦ term_var "cfg1" }}

@@ -150,9 +150,27 @@ Module Type LoopVerificationBinary
 
     Definition semTriple_init_model : iProp Σ :=
       semTriple env.nil
-                ((∃ p, reg_pointsTo21 cur_privilege p) ∗ (∃ es, interp_pmp_entries es) ∗ interp_counters)%I
+                ((∃ p, reg_pointsTo21 cur_privilege p) ∗ (∃ es, interp_pmp_entries es) ∗
+                 interp_counters ∗
+                 (∃ v, reg_pointsTo21 mip v) ∗
+                 (∃ v, reg_pointsTo21 mie v) ∗
+                 (∃ v, reg_pointsTo21 mideleg v) ∗
+                 (∃ v, reg_pointsTo21 medeleg v) ∗
+                 (∃ v, reg_pointsTo21 mtvec v) ∗
+                 (∃ v, reg_pointsTo21 mcause v) ∗
+                 (∃ v, reg_pointsTo21 mepc v) ∗
+                 (∃ v, reg_pointsTo21 mscratch v))%I
                 (FunDef init_model)
-                (fun _ _ => reg_pointsTo21 cur_privilege Machine ∗ (∃ es, interp_pmp_entries es) ∗ interp_counters)%I.
+                (fun _ _ => reg_pointsTo21 cur_privilege Machine ∗ (∃ es, interp_pmp_entries es) ∗
+                            interp_counters ∗
+                            reg_pointsTo21 mip Minterrupts_zero ∗
+                            reg_pointsTo21 mie Minterrupts_zero ∗
+                            reg_pointsTo21 mideleg Minterrupts_zero ∗
+                            reg_pointsTo21 medeleg Medeleg_zero ∗
+                            reg_pointsTo21 mtvec bv.zero ∗
+                            reg_pointsTo21 mcause bv.zero ∗
+                            reg_pointsTo21 mepc bv.zero ∗
+                            reg_pointsTo21 mscratch bv.zero)%I.
 
     Lemma valid_loop_body_contract : ⊢ ValidContractSem fun_loop_body sep_contract_loop_body.
     Proof.
@@ -196,7 +214,15 @@ Module Type LoopVerificationBinary
     Proof.
       iApply (@iris_rule_consequence _ _ _ _ _ env.nil
                ((∃ p : Privilege, cur_privilege ↦ p) ∗
-                (∃ es : list PmpEntryCfg, interp_pmp_entries es) ∗ interp_counters)
+                (∃ es : list PmpEntryCfg, interp_pmp_entries es) ∗ interp_counters ∗
+                (∃ v, mip ↦ v) ∗
+                (∃ v, mie ↦ v) ∗
+                (∃ v, mideleg ↦ v) ∗
+                (∃ v, medeleg ↦ v) ∗
+                (∃ v, mtvec ↦ v) ∗
+                (∃ v, mcause ↦ v) ∗
+                (∃ v, mepc ↦ v) ∗
+                (∃ v, mscratch ↦ v))
                _ _ _ fun_init_model _ _)%I.
       iApply valid_init_model_contract.
       Unshelve.

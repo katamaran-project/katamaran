@@ -1008,8 +1008,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     call init_model ;;
     call loop.
 
-  (* NOTE: simplified init_model function, just calls init_sys which just calls
-           init_pmp *)
+  (* NOTE: simplified init_model function, which only calls init_sys. *)
   Definition fun_init_model : Stm ctx.nil ty.unit :=
     call init_sys.
 
@@ -1097,6 +1096,14 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
 
   Definition fun_init_sys : Stm ctx.nil ty.unit :=
     stm_write_register cur_privilege (exp_val ty_privilege Machine) ;;
+    stm_write_register mip (exp_val ty_Minterrupts Minterrupts_zero) ;;
+    stm_write_register mie (exp_val ty_Minterrupts Minterrupts_zero) ;;
+    stm_write_register mideleg (exp_val ty_Minterrupts Minterrupts_zero) ;;
+    stm_write_register medeleg (exp_val ty_Medeleg Medeleg_zero) ;;
+    stm_write_register mtvec (exp_val ty_xlenbits Bitvector.bv.zero) ;;
+    stm_write_register mcause (exp_val ty_mcause Bitvector.bv.zero) ;;
+    stm_write_register mepc (exp_val ty_xlenbits Bitvector.bv.zero) ;;
+    stm_write_register mscratch (exp_val ty_xlenbits Bitvector.bv.zero) ;;
     stm_write_register mcycle (exp_val (ty.bvec 64) Bitvector.bv.zero) ;;
     stm_write_register mtime (exp_val (ty.bvec 64) Bitvector.bv.zero) ;;
     stm_write_register mcounteren (exp_record rcounteren [nenv exp_val ty.bool false; exp_val ty.bool false; exp_val ty.bool false]) ;;

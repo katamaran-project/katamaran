@@ -260,9 +260,27 @@ Section Loop.
 
   Definition semTriple_init_model : iProp Σ :=
     semTriple env.nil
-              ((∃ p, reg_pointsTo cur_privilege p) ∗ (∃ es, interp_pmp_entries es) ∗ interp_counters)%I
+              ((∃ p, reg_pointsTo cur_privilege p) ∗ (∃ es, interp_pmp_entries es) ∗
+               interp_counters ∗
+               (∃ v, reg_pointsTo mip v) ∗
+               (∃ v, reg_pointsTo mie v) ∗
+               (∃ v, reg_pointsTo mideleg v) ∗
+               (∃ v, reg_pointsTo medeleg v) ∗
+               (∃ v, reg_pointsTo mtvec v) ∗
+               (∃ v, reg_pointsTo mcause v) ∗
+               (∃ v, reg_pointsTo mepc v) ∗
+               (∃ v, reg_pointsTo mscratch v))%I
               (FunDef init_model)
-              (fun _ _ => reg_pointsTo cur_privilege Machine ∗ (∃ es, interp_pmp_entries es) ∗ interp_counters)%I.
+              (fun _ _ => reg_pointsTo cur_privilege Machine ∗ (∃ es, interp_pmp_entries es) ∗
+                          interp_counters ∗
+                          reg_pointsTo mip Minterrupts_zero ∗
+                          reg_pointsTo mie Minterrupts_zero ∗
+                          reg_pointsTo mideleg Minterrupts_zero ∗
+                          reg_pointsTo medeleg Medeleg_zero ∗
+                          reg_pointsTo mtvec bv.zero ∗
+                          reg_pointsTo mcause bv.zero ∗
+                          reg_pointsTo mepc bv.zero ∗
+                          reg_pointsTo mscratch bv.zero)%I.
 
   Lemma valid_loop_body_contract : ⊢ ValidContractSem fun_loop_body sep_contract_loop_body.
   Proof.
@@ -304,7 +322,15 @@ Section Loop.
   Proof.
     iApply (@iris_rule_consequence _ _ _ _ _ env.nil
              ((∃ p : Privilege, cur_privilege ↦ p) ∗
-              (∃ es : list PmpEntryCfg, interp_pmp_entries es) ∗ interp_counters)
+              (∃ es : list PmpEntryCfg, interp_pmp_entries es) ∗ interp_counters ∗
+              (∃ v, mip ↦ v) ∗
+              (∃ v, mie ↦ v) ∗
+              (∃ v, mideleg ↦ v) ∗
+              (∃ v, medeleg ↦ v) ∗
+              (∃ v, mtvec ↦ v) ∗
+              (∃ v, mcause ↦ v) ∗
+              (∃ v, mepc ↦ v) ∗
+              (∃ v, mscratch ↦ v))
              _ _ _ fun_init_model _ _)%I.
     iApply valid_init_model_contract.
     Unshelve.
