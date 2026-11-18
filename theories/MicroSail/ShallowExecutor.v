@@ -63,13 +63,13 @@ Module Type ShallowExecOn
   (* The main specification monad that we use for execution. It is indexed by
      two program variable contexts Γ1 Γ2 that encode the shape of the program
      variable store before and after execution. *)
-  Definition CStoreSpec (Γ1 Γ2 : PCtx) (A : Type) : Type :=
+  Definition CStoreT (Γ1 Γ2 : PCtx) (A : Type) : Type :=
     (A -> CStore Γ2 -> SCHeap -> Prop) -> CStore Γ1 -> SCHeap -> Prop.
 
-  Definition MStoreSpec (Γ1 Γ2 : PCtx) [A] (MA : relation A) :
-    relation (CStoreSpec Γ1 Γ2 A) :=
+  Definition MStoreT (Γ1 Γ2 : PCtx) [A] (MA : relation A) :
+    relation (CStoreT Γ1 Γ2 A) :=
     (MA ==> CStore Γ2 ::> SCHeap ::> impl) ==> CStore Γ1 ::> SCHeap ::> impl.
-  #[global] Arguments MStoreSpec Γ1 Γ2 [A] MA.
+  #[global] Arguments MStoreT Γ1 Γ2 [A] MA.
 
   (* The paper discusses the case that a function call is replaced by
      interpreting the contract instead. However, this is not always
@@ -79,8 +79,8 @@ Module Type ShallowExecOn
   Definition ExecCall := forall Δ τ, 𝑭 Δ τ -> CStore Δ -> CHeapSpec (Val τ).
   Definition ExecCallForeign := forall Δ τ, 𝑭𝑿 Δ τ -> CStore Δ -> CHeapSpec (Val τ).
   Definition ExecLemma := forall Δ, 𝑳 Δ -> CStore Δ -> CHeapSpec unit.
-  Definition ExecFail := forall Γ τ (s : Val ty.string), CStoreSpec Γ Γ (Val τ).
-  Definition Exec := forall Γ τ (s : Stm Γ τ), CStoreSpec Γ Γ (Val τ).
+  Definition ExecFail := forall Γ τ (s : Val ty.string), CStoreT Γ Γ (Val τ).
+  Definition Exec := forall Γ τ (s : Stm Γ τ), CStoreT Γ Γ (Val τ).
 
   Abbreviation MonotonicExecCall exec_call :=
     (forall Δ τ (f : 𝑭 Δ τ) (δ : CStore Δ),
@@ -93,85 +93,85 @@ Module Type ShallowExecOn
        Proper (MHeapSpec eq) (exec_lemma Δ l δ)).
   Abbreviation MonotonicExecFail exec_fail :=
     (forall Γ τ (s : Val ty.string),
-       Proper (MStoreSpec Γ Γ eq) (exec_fail Γ τ s)).
+       Proper (MStoreT Γ Γ eq) (exec_fail Γ τ s)).
   Abbreviation MonotonicExec exec :=
     (forall Γ τ (s : Stm Γ τ),
-       Proper (MStoreSpec Γ Γ eq) (exec Γ τ s)).
+       Proper (MStoreT Γ Γ eq) (exec Γ τ s)).
 
-  Module CStoreSpec.
+  Module CStoreT.
 
     Import (hints) CHeapSpec.
 
     Section Basic.
 
       Definition lift_purespec {Γ} {A : Type} :
-        CPureSpec A -> CStoreSpec Γ Γ A :=
+        CPureSpec A -> CStoreT Γ Γ A :=
         fun m POST δ h => m (fun a => POST a δ h).
       Definition lift_heapspec {Γ} {A : Type} :
-        CHeapSpec A -> CStoreSpec Γ Γ A :=
+        CHeapSpec A -> CStoreT Γ Γ A :=
         fun m POST δ => m (fun a => POST a δ).
 
-      Definition evalStoreSpec {Γ1 Γ2 A} :
-        CStoreSpec Γ1 Γ2 A -> CStore Γ1 -> CHeapSpec A :=
+      Definition evalStoreT {Γ1 Γ2 A} :
+        CStoreT Γ1 Γ2 A -> CStore Γ1 -> CHeapSpec A :=
         fun m δ Φ => m (fun a1 _ => Φ a1) δ.
 
-      Definition pure {Γ A} (a : A) : CStoreSpec Γ Γ A :=
+      Definition pure {Γ A} (a : A) : CStoreT Γ Γ A :=
         fun POST => POST a.
-      Definition bind {Γ1 Γ2 Γ3 A B} (ma : CStoreSpec Γ1 Γ2 A) (f : A -> CStoreSpec Γ2 Γ3 B) : CStoreSpec Γ1 Γ3 B :=
+      Definition bind {Γ1 Γ2 Γ3 A B} (ma : CStoreT Γ1 Γ2 A) (f : A -> CStoreT Γ2 Γ3 B) : CStoreT Γ1 Γ3 B :=
         fun POST => ma (fun a => f a POST).
 
-      Definition error {Γ1 Γ2 A} : CStoreSpec Γ1 Γ2 A :=
+      Definition error {Γ1 Γ2 A} : CStoreT Γ1 Γ2 A :=
         fun POST δ h => FALSE.
-      Definition block {Γ1 Γ2 A} : CStoreSpec Γ1 Γ2 A :=
+      Definition block {Γ1 Γ2 A} : CStoreT Γ1 Γ2 A :=
         fun POST δ h => TRUE.
 
-      Definition demonic_binary {Γ1 Γ2 A} (m1 m2 : CStoreSpec Γ1 Γ2 A) : CStoreSpec Γ1 Γ2 A :=
+      Definition demonic_binary {Γ1 Γ2 A} (m1 m2 : CStoreT Γ1 Γ2 A) : CStoreT Γ1 Γ2 A :=
         fun POST δ h => m1 POST δ h /\ m2 POST δ h.
-      Definition angelic_binary {Γ1 Γ2 A} (m1 m2 : CStoreSpec Γ1 Γ2 A) : CStoreSpec Γ1 Γ2 A :=
+      Definition angelic_binary {Γ1 Γ2 A} (m1 m2 : CStoreT Γ1 Γ2 A) : CStoreT Γ1 Γ2 A :=
         fun POST δ h => m1 POST δ h \/ m2 POST δ h.
 
-      Definition demonic {Γ} (σ : Ty) : CStoreSpec Γ Γ (Val σ) :=
+      Definition demonic {Γ} (σ : Ty) : CStoreT Γ Γ (Val σ) :=
         lift_purespec (CPureSpec.demonic σ).
-      Definition angelic {Γ} (σ : Ty) : CStoreSpec Γ Γ (Val σ) :=
+      Definition angelic {Γ} (σ : Ty) : CStoreT Γ Γ (Val σ) :=
         lift_purespec (CPureSpec.angelic σ).
 
       Definition angelic_ctx {N : Set} {Γ} :
-        forall Δ : NCtx N Ty, CStoreSpec Γ Γ (NamedEnv Val Δ) :=
+        forall Δ : NCtx N Ty, CStoreT Γ Γ (NamedEnv Val Δ) :=
         fun Δ => lift_purespec (CPureSpec.angelic_ctx Δ).
       #[global] Arguments angelic_ctx {N Γ} Δ.
 
       Definition demonic_ctx {N : Set} {Γ} :
-        forall Δ : NCtx N Ty, CStoreSpec Γ Γ (NamedEnv Val Δ) :=
+        forall Δ : NCtx N Ty, CStoreT Γ Γ (NamedEnv Val Δ) :=
         fun Δ => lift_purespec (CPureSpec.demonic_ctx Δ).
       #[global] Arguments demonic_ctx {N Γ} Δ.
 
       Definition demonic_pattern_match {N : Set} {Γ σ} (pat : Pattern (N:=N) σ) (v : Val σ) :
-        CStoreSpec Γ Γ (MatchResult pat) :=
+        CStoreT Γ Γ (MatchResult pat) :=
         lift_purespec (CPureSpec.demonic_pattern_match pat v).
       #[global] Arguments demonic_pattern_match {N Γ σ} pat v.
 
       Definition pushpop {A Γ1 Γ2 x σ} (v : Val σ)
-        (d : CStoreSpec (Γ1 ▻ x∷σ) (Γ2 ▻ x∷σ) A) : CStoreSpec Γ1 Γ2 A :=
+        (d : CStoreT (Γ1 ▻ x∷σ) (Γ2 ▻ x∷σ) A) : CStoreT Γ1 Γ2 A :=
         fun POST δ0 => d (fun a δ1 => POST a (env.tail δ1)) (δ0 ► (x∷σ ↦ v)).
       Definition pushspops {A} {Γ1 Γ2 Δ} (δΔ : CStore Δ)
-        (d : CStoreSpec (Γ1 ▻▻ Δ) (Γ2 ▻▻ Δ) A) : CStoreSpec Γ1 Γ2 A :=
+        (d : CStoreT (Γ1 ▻▻ Δ) (Γ2 ▻▻ Δ) A) : CStoreT Γ1 Γ2 A :=
         fun POST δ0 => d (fun a δ1 => POST a (env.drop Δ δ1)) (δ0 ►► δΔ).
-      Definition get_local {Γ} : CStoreSpec Γ Γ (CStore Γ) :=
+      Definition get_local {Γ} : CStoreT Γ Γ (CStore Γ) :=
         fun POST δ => POST δ δ.
-      Definition put_local {Γ1 Γ2} (δ : CStore Γ2) : CStoreSpec Γ1 Γ2 unit :=
+      Definition put_local {Γ1 Γ2} (δ : CStore Γ2) : CStoreT Γ1 Γ2 unit :=
         fun POST _ => POST tt δ.
 
-      Definition eval_exp {Γ σ} (e : Exp Γ σ) : CStoreSpec Γ Γ (Val σ) :=
+      Definition eval_exp {Γ σ} (e : Exp Γ σ) : CStoreT Γ Γ (Val σ) :=
         fun POST δ => POST (eval e δ) δ.
-      Definition eval_exps {Γ} {σs : PCtx} (es : NamedEnv (Exp Γ) σs) : CStoreSpec Γ Γ (CStore σs) :=
+      Definition eval_exps {Γ} {σs : PCtx} (es : NamedEnv (Exp Γ) σs) : CStoreT Γ Γ (CStore σs) :=
         fun POST δ => POST (evals es δ) δ.
-      Definition assign {Γ} x {σ} {xIn : x∷σ ∈ Γ} (v : Val σ) : CStoreSpec Γ Γ unit :=
+      Definition assign {Γ} x {σ} {xIn : x∷σ ∈ Γ} (v : Val σ) : CStoreT Γ Γ unit :=
         fun POST δ => POST tt (δ ⟪ x ↦ v ⟫).
       Global Arguments assign {Γ} x {σ xIn} v.
 
     End Basic.
 
-    Module CStoreSpecNotations.
+    Module CStoreTNotations.
 
       Infix "⊗" := demonic_binary (at level 40, left associativity) : mut_scope.
       Infix "⊕" := angelic_binary (at level 50, left associativity) : mut_scope.
@@ -185,8 +185,8 @@ Module Type ShallowExecOn
           (at level 20, ma at next level, mb at level 200, right associativity) : mut_scope.
       Notation "ma ;; mb" := (bind ma (fun _ => mb)) : mut_scope.
 
-    End CStoreSpecNotations.
-    Import CStoreSpecNotations.
+    End CStoreTNotations.
+    Import CStoreTNotations.
     Local Open Scope mut_scope.
 
     Section ExecAux.
@@ -199,7 +199,7 @@ Module Type ShallowExecOn
 
       (* The openly-recursive executor. *)
       Definition exec_aux : Exec :=
-        fix exec_aux {Γ τ} (s : Stm Γ τ) : CStoreSpec Γ Γ (Val τ) :=
+        fix exec_aux {Γ τ} (s : Stm Γ τ) : CStoreT Γ Γ (Val τ) :=
           match s with
           | stm_val _ l => pure l
           | stm_exp e => eval_exp e
@@ -258,34 +258,34 @@ Module Type ShallowExecOn
     Section Monotonicity.
 
       #[export] Instance mon_lift_purespec `{MA : relation A} {Γ} :
-        Proper (MPureSpec MA ==> MStoreSpec Γ Γ MA) lift_purespec.
+        Proper (MPureSpec MA ==> MStoreT Γ Γ MA) lift_purespec.
       Proof. intros ? ? rm ? ? rΦ ? ?. apply rm. intros ? ? ?. now apply rΦ. Qed.
 
       #[export] Instance mon_lift_heapspec `{MA : relation A} {Γ} :
-        Proper (MHeapSpec MA ==> MStoreSpec Γ Γ MA) lift_heapspec.
+        Proper (MHeapSpec MA ==> MStoreT Γ Γ MA) lift_heapspec.
       Proof. intros ? ? rm ? ? rΦ ?. apply rm. intros ? ? ?. now apply rΦ. Qed.
 
-      #[export] Instance mon_evalStoreSpec {Γ1 Γ2} `{MA : relation A} :
-        Proper (MStoreSpec Γ1 Γ2 MA ==> CStore Γ1 ::> MHeapSpec MA) evalStoreSpec.
+      #[export] Instance mon_evalStoreT {Γ1 Γ2} `{MA : relation A} :
+        Proper (MStoreT Γ1 Γ2 MA ==> CStore Γ1 ::> MHeapSpec MA) evalStoreT.
       Proof. intros ? ? rm δ ? ? rΦ. apply rm. intros ? ? ? _. now apply rΦ. Qed.
 
       #[export] Instance mon_pure `{MA : relation A} {Γ} :
-        Proper (MA ==> MStoreSpec Γ Γ MA) pure.
+        Proper (MA ==> MStoreT Γ Γ MA) pure.
       Proof. unfold pure. firstorder. Qed.
 
       #[export] Instance mon_bind `{MA : relation A, RB : relation B} {Γ1 Γ2 Γ3} :
-        Proper (MStoreSpec Γ1 Γ2 MA ==> (MA ==> MStoreSpec Γ2 Γ3 RB) ==> MStoreSpec Γ1 Γ3 RB) bind.
+        Proper (MStoreT Γ1 Γ2 MA ==> (MA ==> MStoreT Γ2 Γ3 RB) ==> MStoreT Γ1 Γ3 RB) bind.
       Proof.
         intros ? ? rm ? ? rf ? ? rΦ. apply rm.
         intros ? ? ra. apply rf. apply ra. apply rΦ.
       Qed.
 
       #[export] Instance mon_error `{MA : relation A} {Γ1 Γ2} :
-        Proper (MStoreSpec Γ1 Γ2 MA) error.
+        Proper (MStoreT Γ1 Γ2 MA) error.
       Proof. easy. Qed.
 
       #[export] Instance mon_block `{MA : relation A} {Γ1 Γ2} :
-        Proper (MStoreSpec Γ1 Γ2 MA) block.
+        Proper (MStoreT Γ1 Γ2 MA) block.
       Proof. easy. Qed.
 
       Lemma wp_demonic_pattern_match {N : Set} {Γ σ} (pat : Pattern (N:=N) σ) (v : Val σ)
@@ -298,37 +298,37 @@ Module Type ShallowExecOn
 
       #[export] Instance mon_demonic_pattern_match {N : Set} {Γ σ}
         (pat : Pattern (N:=N) σ) (v : Val σ) :
-        Proper (MStoreSpec Γ Γ eq) (demonic_pattern_match pat v).
+        Proper (MStoreT Γ Γ eq) (demonic_pattern_match pat v).
       Proof. unfold demonic_pattern_match. solve_monotonic. Qed.
 
       #[export] Instance mon_pushpop `{MA : relation A} {Γ1 Γ2 x σ} (v : Val σ) :
-        Proper (MStoreSpec (Γ1 ▻ x∷σ) (Γ2 ▻ x∷σ) MA ==> MStoreSpec Γ1 Γ2 MA)
+        Proper (MStoreT (Γ1 ▻ x∷σ) (Γ2 ▻ x∷σ) MA ==> MStoreT Γ1 Γ2 MA)
           (pushpop v).
       Proof. intros ? ? md P Q PQ ?. apply md. intros ? ? ma ?. now apply PQ. Qed.
 
       #[export] Instance mon_pushspops `{MA : relation A} {Γ1 Γ2 Δ} (δΔ : CStore Δ) :
-        Proper (MStoreSpec (Γ1 ▻▻ Δ) (Γ2 ▻▻ Δ) MA ==> MStoreSpec Γ1 Γ2 MA)
+        Proper (MStoreT (Γ1 ▻▻ Δ) (Γ2 ▻▻ Δ) MA ==> MStoreT Γ1 Γ2 MA)
           (pushspops δΔ).
       Proof. intros ? ? md P Q PQ ?. apply md. intros ? ? ma ?. now apply PQ. Qed.
 
       #[export] Instance mon_get_local {Γ} :
-        Proper (MStoreSpec Γ Γ eq) get_local.
+        Proper (MStoreT Γ Γ eq) get_local.
       Proof. intros P Q PQ ?. now apply PQ. Qed.
 
       #[export] Instance mon_put_local {Γ1 Γ2} (δ : CStore Γ2) :
-        Proper (MStoreSpec Γ1 Γ2 eq) (put_local δ).
+        Proper (MStoreT Γ1 Γ2 eq) (put_local δ).
       Proof. intros P Q PQ ?. now apply PQ. Qed.
 
       #[export] Instance mon_eval_exp {Γ σ} (e : Exp Γ σ) :
-        Proper (MStoreSpec Γ Γ eq) (eval_exp e).
+        Proper (MStoreT Γ Γ eq) (eval_exp e).
       Proof. intros P Q PQ ?. now apply PQ. Qed.
 
       #[export] Instance mon_eval_exps {Γ} {σs : PCtx} (es : NamedEnv (Exp Γ) σs) :
-        Proper (MStoreSpec Γ Γ eq) (eval_exps es).
+        Proper (MStoreT Γ Γ eq) (eval_exps es).
       Proof. intros P Q PQ ?. now apply PQ. Qed.
 
       #[export] Instance mon_assign {Γ} x {σ} {xIn : x∷σ ∈ Γ} (v : Val σ) :
-        Proper (MStoreSpec Γ Γ eq) (assign x v).
+        Proper (MStoreT Γ Γ eq) (assign x v).
       Proof. intros P Q PQ ?. now apply PQ. Qed.
 
     Section ExecAux.
@@ -353,7 +353,7 @@ Module Type ShallowExecOn
 
     End Monotonicity.
 
-  End CStoreSpec.
+  End CStoreT.
 
   Section WithSpec.
 
@@ -364,7 +364,7 @@ Module Type ShallowExecOn
       | MkSepContract _ _ lvars pats req result ens =>
           lenv <- CHeapSpec.demonic_ctx lvars ;;
           _    <- CHeapSpec.produce req lenv ;;
-          v    <- CStoreSpec.evalStoreSpec (exec _ _ s) (inst pats lenv) ;;
+          v    <- CStoreT.evalStoreT (exec _ _ s) (inst pats lenv) ;;
           CHeapSpec.consume ens (env.snoc lenv (result∷τ) v)
       end.
 
@@ -387,7 +387,7 @@ Module Type ShallowExecOn
       CHeapSpec.pure tt.
 
     Definition cexec_fail {SPEC : Specification} : ExecFail :=
-      fun Γ τ s => if fail_rule_pre then CStoreSpec.block else CStoreSpec.error.
+      fun Γ τ s => if fail_rule_pre then CStoreT.block else CStoreT.error.
 
     (* If a function does not have a contract, we continue executing the body of
        the called function. A parameter [inline_fuel] bounds the number of
@@ -405,13 +405,13 @@ Module Type ShallowExecOn
             (* Out of fuel *)
             exec_call_error_no_fuel f args
         | None   , S n =>
-            CStoreSpec.evalStoreSpec
-              (CStoreSpec.exec_aux cexec_call_foreign cexec_lemma (cexec_call n) cexec_fail (FunDef f))
+            CStoreT.evalStoreT
+              (CStoreT.exec_aux cexec_call_foreign cexec_lemma (cexec_call n) cexec_fail (FunDef f))
               args
         end.
 
     Definition cexec {SPEC : Specification} (inline_fuel : nat) : Exec :=
-      @CStoreSpec.exec_aux SPEC cexec_call_foreign cexec_lemma
+      @CStoreT.exec_aux SPEC cexec_call_foreign cexec_lemma
         (cexec_call inline_fuel) cexec_fail.
     #[global] Arguments cexec {_} _ [_ _] s _ _ _ : simpl never.
 
@@ -419,7 +419,7 @@ Module Type ShallowExecOn
 
   Section Monotonicity.
 
-    Import (hints) CStoreSpec.
+    Import (hints) CStoreT.
 
     #[export] Instance mon_exec_contract (exec : Exec) (mexec : MonotonicExec exec)
       {Δ τ} (c : SepContract Δ τ) (s : Stm Δ τ) :

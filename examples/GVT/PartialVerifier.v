@@ -98,7 +98,7 @@ Section BlockVerificationDerived.
   Section Symbolic.
 
     Import ModalNotations.
-    Import SStoreSpec (evalStoreSpec).
+    Import SStoreT (evalStoreT).
     Import SHeapSpec SHeapSpec.notations.
     Import asn.notations.
 
@@ -126,7 +126,7 @@ Section BlockVerificationDerived.
         ⟨ θ1 ⟩ _  <- produce
                        (exec_instruction_prologue i)
                        [env].["a"∷_ ↦ a] ;;
-        ⟨ θ2 ⟩ _  <- evalStoreSpec (sexec default_config inline_fuel (FunDef loop_body) _) [env] ;;
+        ⟨ θ2 ⟩ _  <- evalStoreT (sexec default_config inline_fuel (FunDef loop_body) _) [env] ;;
         ⟨ θ3 ⟩ na <- angelic None _ ;;
         let a3 := persist__term a (θ1 ∘ θ2 ∘ θ3) in
         ⟨ θ4 ⟩ _  <- consume
@@ -190,7 +190,7 @@ Section BlockVerificationDerived.
 
   Section Shallow.
 
-    Import CStoreSpec (evalStoreSpec).
+    Import CStoreT (evalStoreT).
     Import CHeapSpec CHeapSpec.notations.
 
     Definition cexec_instruction (i : AST) :
@@ -200,7 +200,7 @@ Section BlockVerificationDerived.
         _ <- produce
                (exec_instruction_prologue i)
                [env].["a"∷_ ↦ a] ;;
-        _ <- evalStoreSpec (cexec inline_fuel (FunDef loop_body)) [env] ;;
+        _ <- evalStoreT (cexec inline_fuel (FunDef loop_body)) [env] ;;
         na <- angelic _ ;;
         _ <- consume
                (exec_instruction_epilogue i)
@@ -234,7 +234,7 @@ Section BlockVerificationDerived.
       (* CHeapSpec.run does not perform a leakcheck. We could include one here. *)
       CHeapSpec.run (cexec_triple_addr req b ens).
 
-    Import (hints) CStoreSpec.
+    Import (hints) CStoreT.
 
     #[export] Instance mon_cexec_instruction {i a} :
       Proper (MHeapSpec eq) (cexec_instruction i a).
@@ -250,7 +250,7 @@ Section BlockVerificationDerived.
 
     Import iris.proofmode.proofmode logicalrelation logicalrelation.notations.
     Import RiscvPmpSymbolicSoundness.
-    Import RiscvPmpSymbolicSoundness.StoreSpec.
+    Import RiscvPmpSymbolicSoundness.StoreT.
     Import RiscvPmpShallowSoundness.
     Import RiscvPmpIrisInstanceWithContracts.
     Import RiscvPmpSignature.HeapSpec.
@@ -343,7 +343,7 @@ Section BlockVerificationDerived.
     Proof.
       cbv [cexec_instruction exec_instruction_prologue bind produce demonic
              produce_chunk lift_purespec CPureSpec.produce_chunk CPureSpec.pure
-             CPureSpec.demonic CStoreSpec.evalStoreSpec].
+             CPureSpec.demonic CStoreT.evalStoreT].
       cbn - [consume].
       iIntros (Hverif) "(Hheap & (Hpc & [%npc Hnpc]) & Hinstrs)".
       specialize (Hverif npc). apply sound_cexec in Hverif.
@@ -625,7 +625,7 @@ Section AnnotatedBlockVerification.
   Section Relational.
 
     Import RiscvPmpSymbolicSoundness.
-    Import RiscvPmpSymbolicSoundness.StoreSpec.
+    Import RiscvPmpSymbolicSoundness.StoreT.
     Import RiscvPmpShallowSoundness.
     Import RiscvPmpIrisInstanceWithContracts.
     Import logicalrelation logicalrelation.notations.

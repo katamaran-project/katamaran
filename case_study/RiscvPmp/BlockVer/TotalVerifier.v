@@ -108,7 +108,7 @@ Module Type RiscvPmpBlockVerifTotalVerifier
     Section Symbolic.
 
       Import ModalNotations.
-      Import SStoreSpec (evalStoreSpec).
+      Import SStoreT (evalStoreT).
       Import SHeapSpec SHeapSpec.notations.
       Import asn.notations.
 
@@ -131,7 +131,7 @@ Module Type RiscvPmpBlockVerifTotalVerifier
           ⟨ θ1 ⟩ _  <- produce
                          (exec_instruction_prologue i)
                          [env].["a"∷_ ↦ a] ;;
-          ⟨ θ2 ⟩ _  <- evalStoreSpec (sexec default_config inline_fuel (FunDef loop_body) _) [env] ;;
+          ⟨ θ2 ⟩ _  <- evalStoreT (sexec default_config inline_fuel (FunDef loop_body) _) [env] ;;
           ⟨ θ3 ⟩ na <- angelic None _ ;;
           let a3 := persist__term a (θ1 ∘ θ2 ∘ θ3) in
           ⟨ θ4 ⟩ _  <- consume
@@ -182,7 +182,7 @@ Module Type RiscvPmpBlockVerifTotalVerifier
 
     Section Shallow.
 
-      Import CStoreSpec (evalStoreSpec).
+      Import CStoreT (evalStoreT).
       Import CHeapSpec CHeapSpec.notations.
 
       Definition cexec_instruction (i : AST) :
@@ -192,7 +192,7 @@ Module Type RiscvPmpBlockVerifTotalVerifier
           _ <- produce
                  (exec_instruction_prologue i)
                  [env].["a"∷_ ↦ a] ;;
-          _ <- evalStoreSpec (cexec inline_fuel (FunDef loop_body)) [env] ;;
+          _ <- evalStoreT (cexec inline_fuel (FunDef loop_body)) [env] ;;
           na <- angelic _ ;;
           _ <- consume
                  (exec_instruction_epilogue i)
@@ -226,7 +226,7 @@ Module Type RiscvPmpBlockVerifTotalVerifier
         (* CHeapSpec.run does not perform a leakcheck. We could include one here. *)
         CHeapSpec.run (cexec_triple_addr req b ens).
 
-      Import (hints) CStoreSpec.
+      Import (hints) CStoreT.
 
       #[export] Instance mon_cexec_instruction {i a} :
         Proper (MHeapSpec eq) (cexec_instruction i a).
@@ -241,7 +241,7 @@ Module Type RiscvPmpBlockVerifTotalVerifier
     Section Relational.
 
       Import iris.proofmode.proofmode logicalrelation logicalrelation.notations.
-      Import RiscvPmpSymbolicSoundness RiscvPmpSymbolicSoundness.StoreSpec.
+      Import RiscvPmpSymbolicSoundness RiscvPmpSymbolicSoundness.StoreT.
       Import RiscvPmpSignature.HeapSpec.
       Import HeapSpec.
 
@@ -362,7 +362,7 @@ Module Type RiscvPmpBlockVerifTotalVerifier
       Proof.
         cbv [cexec_instruction exec_instruction_prologue bind produce demonic
                produce_chunk lift_purespec CPureSpec.produce_chunk CPureSpec.pure
-               CPureSpec.demonic CStoreSpec.evalStoreSpec].
+               CPureSpec.demonic CStoreT.evalStoreT].
         cbn - [consume].
         iIntros (Hverif) "Hheap". iSplitR; first auto.
         iIntros "(Hpc & Hinstr & [%npc Hnpc])". cbn.
@@ -718,7 +718,7 @@ Module Type RiscvPmpBlockVerifTotalVerifier
       Import RiscvPmpSymbolicSoundness.
 
       Import RiscvPmpShallowSoundness.
-      Import StoreSpec.
+      Import StoreT.
       Import logicalrelation logicalrelation.notations.
       Import proofmode.
       Import iris.proofmode.proofmode.

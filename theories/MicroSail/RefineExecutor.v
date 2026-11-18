@@ -76,22 +76,22 @@ Module RefineExecOn
   Definition RStore (Γ : PCtx) : Rel (SStore Γ) (CStore Γ) :=
     RInst (SStore Γ) (CStore Γ).
 
-  Module StoreSpec.
+  Module StoreT.
     Import PureSpec.
     Import HeapSpec.
 
     (* Instance search does not unfold the concrete operations, so their
        instances are indexed, and tried, by their head. *)
-    #[export] Typeclasses Opaque CStoreSpec.angelic CStoreSpec.angelic_binary
-      CStoreSpec.angelic_ctx CStoreSpec.assign CStoreSpec.bind
-      CStoreSpec.block CStoreSpec.demonic CStoreSpec.demonic_binary
-      CStoreSpec.demonic_ctx CStoreSpec.eval_exp CStoreSpec.eval_exps
-      CStoreSpec.evalStoreSpec CStoreSpec.get_local CStoreSpec.lift_heapspec
-      CStoreSpec.lift_purespec CStoreSpec.pure CStoreSpec.pushpop
-      CStoreSpec.pushspops CStoreSpec.put_local.
+    #[export] Typeclasses Opaque CStoreT.angelic CStoreT.angelic_binary
+      CStoreT.angelic_ctx CStoreT.assign CStoreT.bind
+      CStoreT.block CStoreT.demonic CStoreT.demonic_binary
+      CStoreT.demonic_ctx CStoreT.eval_exp CStoreT.eval_exps
+      CStoreT.evalStoreT CStoreT.get_local CStoreT.lift_heapspec
+      CStoreT.lift_purespec CStoreT.pure CStoreT.pushpop
+      CStoreT.pushspops CStoreT.put_local.
 
-    Definition RStoreSpec Γ1 Γ2 `(R : Rel AT A) :
-      Rel (SStoreSpec Γ1 Γ2 AT) (CStoreSpec Γ1 Γ2 A) :=
+    Definition RStoreT Γ1 Γ2 `(R : Rel AT A) :
+      Rel (SStoreT Γ1 Γ2 AT) (CStoreT Γ1 Γ2 A) :=
       □ᵣ (R -> RStore Γ2 -> RHeap -> ℙ) -> RStore Γ1 -> RHeap -> ℙ.
 
     (* Abbreviations, so that hypotheses are local [Related] instances. *)
@@ -110,18 +110,18 @@ Module RefineExecOn
           ((cexec_lemma : SHAL.ExecLemma) Δ l) w ((sexec_lemma : SYMB.ExecLemma) Δ l w)).
     Abbreviation RefineExecFail cexec_fail sexec_fail :=
       (forall Γ τ (s : Val ty.string) w,
-        Related (RStoreSpec Γ Γ (RVal τ))
+        Related (RStoreT Γ Γ (RVal τ))
           ((cexec_fail : SHAL.ExecFail) Γ τ s) w ((sexec_fail : SYMB.ExecFail) Γ τ s w)).
     Abbreviation RefineExec cexec sexec :=
       (forall Γ τ (s : Stm Γ τ) w,
-        Related (RStoreSpec Γ Γ (RVal τ))
+        Related (RStoreT Γ Γ (RVal τ))
           ((cexec : SHAL.Exec) Γ τ s) w ((sexec : SYMB.Exec) Γ τ s w)).
 
-    #[export] Instance refine_evalStoreSpec {Γ1 Γ2} `{RA : Rel SA CA} {w : World} :
-      Related (RStoreSpec Γ1 Γ2 RA -> RStore Γ1 -> RHeapSpec RA)
-        CStoreSpec.evalStoreSpec w (SStoreSpec.evalStoreSpec (w := w)).
+    #[export] Instance refine_evalStoreT {Γ1 Γ2} `{RA : Rel SA CA} {w : World} :
+      Related (RStoreT Γ1 Γ2 RA -> RStore Γ1 -> RHeapSpec RA)
+        CStoreT.evalStoreT w (SStoreT.evalStoreT (w := w)).
     Proof.
-      unfold SStoreSpec.evalStoreSpec, CStoreSpec.evalStoreSpec.
+      unfold SStoreT.evalStoreT, CStoreT.evalStoreT.
       iIntros (ss tss) "Hss %s %ts Hs %k %ks Hk %h %hs Hh Hsym".
       iApply ("Hss" with "[Hk] Hs Hh Hsym").
       iIntros (w' ω).
@@ -132,63 +132,63 @@ Module RefineExecOn
     Qed.
 
     #[export] Instance refine_lift_purespec {Γ} `(R : Rel AT A) {w : World}:
-      Related (RPureSpec R -> RStoreSpec Γ Γ R)
-        CStoreSpec.lift_purespec w (SStoreSpec.lift_purespec (w := w)).
-    Proof. unfold Related. unfold CStoreSpec.lift_purespec, SStoreSpec.lift_purespec, RStoreSpec; solve_related. Qed.
+      Related (RPureSpec R -> RStoreT Γ Γ R)
+        CStoreT.lift_purespec w (SStoreT.lift_purespec (w := w)).
+    Proof. unfold Related. unfold CStoreT.lift_purespec, SStoreT.lift_purespec, RStoreT; solve_related. Qed.
 
     #[export] Instance refine_lift_heapspec {Γ} `(R : Rel AT A) {w : World}:
-      Related (RHeapSpec R -> RStoreSpec Γ Γ R)
-          CStoreSpec.lift_heapspec w (SStoreSpec.lift_heapspec (w := w)).
-    Proof. unfold CStoreSpec.lift_heapspec, SStoreSpec.lift_heapspec, RStoreSpec; solve_related. Qed.
+      Related (RHeapSpec R -> RStoreT Γ Γ R)
+          CStoreT.lift_heapspec w (SStoreT.lift_heapspec (w := w)).
+    Proof. unfold CStoreT.lift_heapspec, SStoreT.lift_heapspec, RStoreT; solve_related. Qed.
 
     #[export] Instance refine_pure `{R : Rel AT A} {Γ} {w : World} :
-      Related (R -> RStoreSpec Γ Γ R) CStoreSpec.pure w (SStoreSpec.pure (w := w)).
-    Proof. unfold CStoreSpec.pure, SStoreSpec.pure, RStoreSpec; solve_related. Qed.
+      Related (R -> RStoreT Γ Γ R) CStoreT.pure w (SStoreT.pure (w := w)).
+    Proof. unfold CStoreT.pure, SStoreT.pure, RStoreT; solve_related. Qed.
 
     Lemma refine_bind `{RA : Rel AT A, RB : Rel BT B} {Γ1 Γ2 Γ3} {w : World} :
-      ⊢ ℛ⟦RStoreSpec Γ1 Γ2 RA -> □ᵣ(RA -> RStoreSpec Γ2 Γ3 RB) -> RStoreSpec Γ1 Γ3 RB⟧
-        CStoreSpec.bind (SStoreSpec.bind (w := w)).
-    Proof. unfold CStoreSpec.bind, SStoreSpec.bind, RStoreSpec; solve_related. Qed.
+      ⊢ ℛ⟦RStoreT Γ1 Γ2 RA -> □ᵣ(RA -> RStoreT Γ2 Γ3 RB) -> RStoreT Γ1 Γ3 RB⟧
+        CStoreT.bind (SStoreT.bind (w := w)).
+    Proof. unfold CStoreT.bind, SStoreT.bind, RStoreT; solve_related. Qed.
 
-    #[export] Instance refine_compat_bind {Γ1 Γ2 Γ3 : PCtx} `{RA : Rel AT A} `{RB : Rel BT B} {w} : Related (RStoreSpec Γ1 Γ2 RA -> (□ᵣ (RA -> RStoreSpec Γ2 Γ3 RB)) -> RStoreSpec Γ1 Γ3 RB) CStoreSpec.bind w (SStoreSpec.bind (w := w)) | (Related _ _ _ SStoreSpec.bind) :=
+    #[export] Instance refine_compat_bind {Γ1 Γ2 Γ3 : PCtx} `{RA : Rel AT A} `{RB : Rel BT B} {w} : Related (RStoreT Γ1 Γ2 RA -> (□ᵣ (RA -> RStoreT Γ2 Γ3 RB)) -> RStoreT Γ1 Γ3 RB) CStoreT.bind w (SStoreT.bind (w := w)) | (Related _ _ _ SStoreT.bind) :=
       refine_bind.
 
     #[export] Instance refine_block {Γ1 Γ2} `{R : Rel AT A} {w : World} :
-      Related (RStoreSpec Γ1 Γ2 R) CStoreSpec.block w (SStoreSpec.block (w := w)).
+      Related (RStoreT Γ1 Γ2 R) CStoreT.block w (SStoreT.block (w := w)).
     Proof.
       iIntros (k ks) "Hk %s %ss Hs %h %hs Hh _".
       now iPureIntro.
     Qed.
 
     #[export] Instance refine_error `{Subst M, OccursCheck M, R : Rel AT A} {Γ1 Γ2} {w : World}
-      (cm : CStoreSpec Γ1 Γ2 A) :
-      Related (RMsg _ (RStoreSpec Γ1 Γ2 R)) cm w (SStoreSpec.error (w := w)).
+      (cm : CStoreT Γ1 Γ2 A) :
+      Related (RMsg _ (RStoreT Γ1 Γ2 R)) cm w (SStoreT.error (w := w)).
     Proof.
       iIntros (msg k ks) "Hk %s %ss Hs %h %hs Hh []".
     Qed.
 
     #[export] Instance refine_angelic (x : option LVar) {Γ} σ {w : World} :
-      Related (RStoreSpec Γ Γ (RVal σ)) (CStoreSpec.angelic σ) w (SStoreSpec.angelic (w := w) x σ).
-    Proof. unfold CStoreSpec.angelic, SStoreSpec.angelic; solve_related. Qed.
+      Related (RStoreT Γ Γ (RVal σ)) (CStoreT.angelic σ) w (SStoreT.angelic (w := w) x σ).
+    Proof. unfold CStoreT.angelic, SStoreT.angelic; solve_related. Qed.
 
     #[export] Instance refine_demonic (x : option LVar) {Γ} σ {w : World} :
-      Related (RStoreSpec Γ Γ (RVal σ)) (CStoreSpec.demonic σ) w (SStoreSpec.demonic (w := w) x σ).
-    Proof. unfold CStoreSpec.demonic, SStoreSpec.demonic; solve_related. Qed.
+      Related (RStoreT Γ Γ (RVal σ)) (CStoreT.demonic σ) w (SStoreT.demonic (w := w) x σ).
+    Proof. unfold CStoreT.demonic, SStoreT.demonic; solve_related. Qed.
 
     #[export] Instance refine_angelic_ctx {N : Set} {n : N -> LVar} {Γ} Δ {w} :
-      Related (RStoreSpec Γ Γ (RNEnv N Δ))
-        (CStoreSpec.angelic_ctx Δ) w (SStoreSpec.angelic_ctx (w := w) n Δ).
-    Proof. unfold CStoreSpec.angelic_ctx, SStoreSpec.angelic_ctx; solve_related. Qed.
+      Related (RStoreT Γ Γ (RNEnv N Δ))
+        (CStoreT.angelic_ctx Δ) w (SStoreT.angelic_ctx (w := w) n Δ).
+    Proof. unfold CStoreT.angelic_ctx, SStoreT.angelic_ctx; solve_related. Qed.
 
     #[export] Instance refine_demonic_ctx {N : Set} {n : N -> LVar} {Γ} Δ {w} :
-      Related (RStoreSpec Γ Γ (RNEnv N Δ))
-        (CStoreSpec.demonic_ctx Δ) w (SStoreSpec.demonic_ctx (w := w) n Δ).
-    Proof. unfold CStoreSpec.demonic_ctx, SStoreSpec.demonic_ctx; solve_related. Qed.
+      Related (RStoreT Γ Γ (RNEnv N Δ))
+        (CStoreT.demonic_ctx Δ) w (SStoreT.demonic_ctx (w := w) n Δ).
+    Proof. unfold CStoreT.demonic_ctx, SStoreT.demonic_ctx; solve_related. Qed.
 
     Lemma refine_debug `{R : Rel AT A}
       {Γ1 Γ2} {w0 : World} {f ms mc} :
-      ℛ⟦RStoreSpec Γ1 Γ2 R⟧ mc ms ⊢
-                   ℛ⟦RStoreSpec Γ1 Γ2 R⟧ mc (@SStoreSpec.debug AT Γ1 Γ2 w0 f ms).
+      ℛ⟦RStoreT Γ1 Γ2 R⟧ mc ms ⊢
+                   ℛ⟦RStoreT Γ1 Γ2 R⟧ mc (@SStoreT.debug AT Γ1 Γ2 w0 f ms).
     Proof.
       iIntros "Hm %K %Ks HK %s %ss Hs %h %hs Hh HSP".
       iApply ("Hm" with "HK Hs Hh [HSP]").
@@ -196,26 +196,26 @@ Module RefineExecOn
     Qed.
 
     #[export] Instance refine_compat_debug `{R : Rel AT A} {Γ1 Γ2} {w0 : World} {f} {mc ms} :
-      RelatedFrom (RStoreSpec Γ1 Γ2 R) mc w0 (@SStoreSpec.debug AT Γ1 Γ2 w0 f ms) _ :=
+      RelatedFrom (RStoreT Γ1 Γ2 R) mc w0 (@SStoreT.debug AT Γ1 Γ2 w0 f ms) _ :=
       refine_debug.
 
     #[export] Instance refine_angelic_binary {AT A} `{R : Rel AT A} {Γ1 Γ2} {w} :
-      Related (RStoreSpec Γ1 Γ2 R -> RStoreSpec Γ1 Γ2 R -> RStoreSpec Γ1 Γ2 R)
-        CStoreSpec.angelic_binary w (SStoreSpec.angelic_binary (w := w)).
-    Proof. unfold CStoreSpec.angelic_binary, SStoreSpec.angelic_binary, RStoreSpec; solve_related. Qed.
+      Related (RStoreT Γ1 Γ2 R -> RStoreT Γ1 Γ2 R -> RStoreT Γ1 Γ2 R)
+        CStoreT.angelic_binary w (SStoreT.angelic_binary (w := w)).
+    Proof. unfold CStoreT.angelic_binary, SStoreT.angelic_binary, RStoreT; solve_related. Qed.
 
     #[export] Instance refine_demonic_binary {AT A} `{R : Rel AT A} {Γ1 Γ2} {w} :
-      Related (RStoreSpec Γ1 Γ2 R -> RStoreSpec Γ1 Γ2 R -> RStoreSpec Γ1 Γ2 R)
-        CStoreSpec.demonic_binary w (SStoreSpec.demonic_binary (w := w)).
-    Proof. unfold CStoreSpec.demonic_binary, SStoreSpec.demonic_binary, RStoreSpec; solve_related. Qed.
+      Related (RStoreT Γ1 Γ2 R -> RStoreT Γ1 Γ2 R -> RStoreT Γ1 Γ2 R)
+        CStoreT.demonic_binary w (SStoreT.demonic_binary (w := w)).
+    Proof. unfold CStoreT.demonic_binary, SStoreT.demonic_binary, RStoreT; solve_related. Qed.
 
     #[export] Instance refine_demonic_pattern_match {N : Set} (n : N -> LVar) {Γ σ} (pat : Pattern (N:=N) σ) {w} :
-      Related (RVal σ -> RStoreSpec Γ Γ (RMatchResult pat))
-        (CStoreSpec.demonic_pattern_match pat) w (SStoreSpec.demonic_pattern_match (w := w) n pat).
+      Related (RVal σ -> RStoreT Γ Γ (RMatchResult pat))
+        (CStoreT.demonic_pattern_match pat) w (SStoreT.demonic_pattern_match (w := w) n pat).
     Proof.
       iIntros (v sv) "rv %Φ %sΦ rΦ %δ %sδ rδ %h %sh rh".
-      unfold SStoreSpec.demonic_pattern_match, CStoreSpec.demonic_pattern_match,
-               CStoreSpec.lift_purespec.
+      unfold SStoreT.demonic_pattern_match, CStoreT.demonic_pattern_match,
+               CStoreT.lift_purespec.
       iApply (PureSpec.refine_demonic_pattern_match with "rv").
       iIntros (w1 θ1) "!> %mr %smr rmr".
       iApply ("rΦ" with "rmr [rδ] [rh]"); solve_related.
@@ -239,27 +239,27 @@ Module RefineExecOn
     Qed.
 
     #[export] Instance refine_pushpop `{R : Rel AT A} {Γ1 Γ2 x σ} {w} :
-      Related (RVal σ -> RStoreSpec (Γ1 ▻ x∷σ) (Γ2 ▻ x∷σ) R -> RStoreSpec Γ1 Γ2 R)
-        CStoreSpec.pushpop w (SStoreSpec.pushpop (w := w)).
+      Related (RVal σ -> RStoreT (Γ1 ▻ x∷σ) (Γ2 ▻ x∷σ) R -> RStoreT Γ1 Γ2 R)
+        CStoreT.pushpop w (SStoreT.pushpop (w := w)).
     Proof.
-      unfold SStoreSpec.pushpop, CStoreSpec.pushpop, RStoreSpec. solve_related.
+      unfold SStoreT.pushpop, CStoreT.pushpop, RStoreT. solve_related.
     Qed.
 
     #[export] Instance refine_pushspops `{R : Rel AT A} {Γ1 Γ2 Δ} {w} :
-      Related (RStore Δ -> RStoreSpec (Γ1 ▻▻ Δ) (Γ2 ▻▻ Δ) R -> RStoreSpec Γ1 Γ2 R)
-        CStoreSpec.pushspops w (SStoreSpec.pushspops (w := w)).
+      Related (RStore Δ -> RStoreT (Γ1 ▻▻ Δ) (Γ2 ▻▻ Δ) R -> RStoreT Γ1 Γ2 R)
+        CStoreT.pushspops w (SStoreT.pushspops (w := w)).
     Proof.
-      unfold SStoreSpec.pushspops, CStoreSpec.pushspops, RStoreSpec. solve_related.
+      unfold SStoreT.pushspops, CStoreT.pushspops, RStoreT. solve_related.
     Qed.
 
     #[export] Instance refine_get_local {Γ} {w} :
-      Related (RStoreSpec Γ Γ (RStore Γ)) CStoreSpec.get_local w (SStoreSpec.get_local (w := w)).
-    Proof. unfold CStoreSpec.get_local, SStoreSpec.get_local, RStoreSpec; solve_related. Qed.
+      Related (RStoreT Γ Γ (RStore Γ)) CStoreT.get_local w (SStoreT.get_local (w := w)).
+    Proof. unfold CStoreT.get_local, SStoreT.get_local, RStoreT; solve_related. Qed.
 
     #[export] Instance refine_put_local {Γ1 Γ2} {w} :
-      Related (RStore Γ2 -> RStoreSpec Γ1 Γ2 RUnit)
-        CStoreSpec.put_local w (SStoreSpec.put_local (w := w)).
-    Proof. unfold CStoreSpec.put_local, SStoreSpec.put_local, RStoreSpec; solve_related. Qed.
+      Related (RStore Γ2 -> RStoreT Γ1 Γ2 RUnit)
+        CStoreT.put_local w (SStoreT.put_local (w := w)).
+    Proof. unfold CStoreT.put_local, SStoreT.put_local, RStoreT; solve_related. Qed.
 
     Lemma refine_peval {w : World} {σ} (t : STerm σ w) v :
       ℛ⟦RVal σ⟧ v t ⊢ ℛ⟦RVal σ⟧ v (peval t).
@@ -297,22 +297,22 @@ Module RefineExecOn
       refine_seval_exps.
 
     #[export] Instance refine_eval_exp {Γ σ} (e : Exp Γ σ) {w} :
-      Related (RStoreSpec Γ Γ (RVal σ))
-        (CStoreSpec.eval_exp e) w (SStoreSpec.eval_exp (w := w) e).
+      Related (RStoreT Γ Γ (RVal σ))
+        (CStoreT.eval_exp e) w (SStoreT.eval_exp (w := w) e).
     Proof.
       iIntros (K sK) "HK %δ0 %sδ0 #Hδ0 %h0 %sh0 Hh0".
-      unfold SStoreSpec.eval_exp, CStoreSpec.eval_exp.
+      unfold SStoreT.eval_exp, CStoreT.eval_exp.
       iApply (refine_T with "HK [Hδ0] Hδ0 Hh0").
       iApply refine_peval.
       now iApply refine_seval_exp.
     Qed.
 
     #[export] Instance refine_eval_exps {Γ Δ} (es : NamedEnv (Exp Γ) Δ) {w} :
-      Related (RStoreSpec Γ Γ (RStore Δ))
-        (CStoreSpec.eval_exps es) w (SStoreSpec.eval_exps (w := w) es).
+      Related (RStoreT Γ Γ (RStore Δ))
+        (CStoreT.eval_exps es) w (SStoreT.eval_exps (w := w) es).
     Proof.
       iIntros (K sK) "HK %δ0 %sδ0 #Hδ0 %h0 %sh0 Hh0".
-      unfold SStoreSpec.eval_exps, CStoreSpec.eval_exps.
+      unfold SStoreT.eval_exps, CStoreT.eval_exps.
       iApply (refine_T with "HK [Hδ0] Hδ0 Hh0").
       now iApply refine_seval_exps.
     Qed.
@@ -333,11 +333,11 @@ Module RefineExecOn
       refine_env_update xIn w t v δs δc.
 
     #[export] Instance refine_assign {Γ x σ} {xIn : (x∷σ ∈ Γ)%katamaran} {w} :
-      Related (RVal σ -> RStoreSpec Γ Γ RUnit)
-        (CStoreSpec.assign x) w (SStoreSpec.assign (w := w) x).
+      Related (RVal σ -> RStoreT Γ Γ RUnit)
+        (CStoreT.assign x) w (SStoreT.assign (w := w) x).
     Proof.
       iIntros (v sv) "Hv %K %sK HK %δ %sδ Hδ %h %sh Hh".
-      unfold SStoreSpec.assign, CStoreSpec.assign.
+      unfold SStoreT.assign, CStoreT.assign.
       iApply (refine_T with "HK [//] [Hv Hδ] Hh").
       now iApply (refine_env_update with "[$Hv $Hδ]").
     Qed.
@@ -350,7 +350,7 @@ Module RefineExecOn
       Context `(rexec_fail : RefineExecFail c_exec_fail s_exec_fail).
 
       #[export] Instance refine_exec_aux {SPEC : Specification} :
-        RefineExec (@CStoreSpec.exec_aux _ c_exec_call_foreign c_exec_lemma c_exec_call c_exec_fail) (@SStoreSpec.exec_aux _ s_exec_call_foreign s_exec_lemma s_exec_call s_exec_fail).
+        RefineExec (@CStoreT.exec_aux _ c_exec_call_foreign c_exec_lemma c_exec_call c_exec_fail) (@SStoreT.exec_aux _ s_exec_call_foreign s_exec_lemma s_exec_call s_exec_fail).
       Proof.
         intros ? ? s. induction s; cbn; intros w; solve_related.
       Qed.
@@ -432,8 +432,8 @@ Module RefineExecOn
 
     End WithSpec.
 
-  End StoreSpec.
-  Export (hints) StoreSpec.
+  End StoreT.
+  Export (hints) StoreT.
 
   Section WithSpec.
 
@@ -445,7 +445,7 @@ Module RefineExecOn
       Related (RProp) (SHAL.vcgen fuel c body) w (SYMB.vcgen cfg fuel c body w).
     Proof.
       iApply HeapSpec.refine_run.
-      iApply StoreSpec.refine_exec_contract.
+      iApply StoreT.refine_exec_contract.
     Qed.
 
   End WithSpec.

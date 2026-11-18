@@ -48,7 +48,7 @@ Module Type Soundness
   (Import PLOG : ProgramLogic B SIG PROG)
   (Import EXEC : ShallowExecOn B SIG PROG PLOG).
 
-  Import CStoreSpec.
+  Import CStoreT.
   Import ProgLog.
 
   Section Soundness.
@@ -316,7 +316,7 @@ Module Type Soundness
       Proof.
         destruct c as [Σ δΣ req result ens]; cbn.
         cbv [CHeapSpec.bind CHeapSpec.demonic_ctx
-               CHeapSpec.lift_purespec evalStoreSpec].
+               CHeapSpec.lift_purespec evalStoreT].
         intros HYP ι.
         rewrite CPureSpec.wp_demonic_ctx in HYP.
         specialize (HYP ι). remember (inst δΣ ι) as δ.
@@ -372,7 +372,7 @@ Module Type Soundness
 
     Lemma sound_cexec_call (fuel : nat) : SoundExecCall (cexec_call fuel).
     Proof.
-      induction fuel; unfold SoundExecCall, evalStoreSpec; cbn; intros.
+      induction fuel; unfold SoundExecCall, evalStoreT; cbn; intros.
       - destruct (CEnv f) as [c|] eqn:?.
         + apply call_contract_sound in H.
           apply rule_stm_call with c; auto. clear Heqo.

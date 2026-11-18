@@ -411,7 +411,7 @@ Module Type SymbolicExecOn
 
   End Configuration.
 
-  Definition SStoreSpec (Γ1 Γ2 : PCtx) (A : TYPE) : TYPE :=
+  Definition SStoreT (Γ1 Γ2 : PCtx) (A : TYPE) : TYPE :=
     □(A -> SStore Γ2 -> SHeap -> 𝕊) -> SStore Γ1 -> SHeap -> 𝕊.
 
   (* The paper discusses the case that a function call is replaced by
@@ -422,10 +422,10 @@ Module Type SymbolicExecOn
   Definition ExecCall := forall Δ τ, 𝑭 Δ τ -> ⊢ SStore Δ -> SHeapSpec (WTerm τ).
   Definition ExecCallForeign := forall Δ τ, 𝑭𝑿 Δ τ -> ⊢ SStore Δ -> SHeapSpec (WTerm τ).
   Definition ExecLemma := forall Δ, 𝑳 Δ -> ⊢ SStore Δ -> SHeapSpec Unit.
-  Definition ExecFail := forall Γ τ (s : Val ty.string), ⊢ SStoreSpec Γ Γ (WTerm τ).
-  Definition Exec := forall Γ τ (s : Stm Γ τ), ⊢ SStoreSpec Γ Γ (WTerm τ).
+  Definition ExecFail := forall Γ τ (s : Val ty.string), ⊢ SStoreT Γ Γ (WTerm τ).
+  Definition Exec := forall Γ τ (s : Stm Γ τ), ⊢ SStoreT Γ Γ (WTerm τ).
 
-  Module SStoreSpec.
+  Module SStoreT.
 
     Local Hint Extern 2 (Persistent (WTerm ?σ)) =>
       refine (@persistent_subst (STerm σ) (@SubstTerm σ)) : typeclass_instances.
@@ -433,63 +433,63 @@ Module Type SymbolicExecOn
     Section Basic.
 
       Definition lift_purespec {Γ} {A : TYPE} :
-        ⊢ SPureSpec A -> SStoreSpec Γ Γ A :=
+        ⊢ SPureSpec A -> SStoreT Γ Γ A :=
         fun w0 m POST δ0 h0 =>
           m (fun w1 ω01 a1 => POST w1 ω01 a1 (persist δ0 ω01) (persist h0 ω01)).
 
       Definition lift_heapspec {Γ} {A : TYPE} :
-        ⊢ SHeapSpec A -> SStoreSpec Γ Γ A :=
+        ⊢ SHeapSpec A -> SStoreT Γ Γ A :=
         fun w0 m Φ δ0 =>
           m (fun w1 θ1 a1 => Φ w1 θ1 a1 (persist δ0 θ1)).
 
-      Definition evalStoreSpec {Γ1 Γ2 A} :
-        ⊢ SStoreSpec Γ1 Γ2 A -> SStore Γ1 -> SHeapSpec A :=
+      Definition evalStoreT {Γ1 Γ2 A} :
+        ⊢ SStoreT Γ1 Γ2 A -> SStore Γ1 -> SHeapSpec A :=
         fun w m δ Φ => m (fun w1 θ1 a1 _ => Φ w1 θ1 a1) δ.
 
       Definition pure {Γ} {A : TYPE} :
-        ⊢ A -> SStoreSpec Γ Γ A := fun _ a k => T k a.
+        ⊢ A -> SStoreT Γ Γ A := fun _ a k => T k a.
 
       Definition bind {Γ1 Γ2 Γ3 A B} :
-        ⊢ SStoreSpec Γ1 Γ2 A -> □(A -> SStoreSpec Γ2 Γ3 B) -> SStoreSpec Γ1 Γ3 B :=
+        ⊢ SStoreT Γ1 Γ2 A -> □(A -> SStoreT Γ2 Γ3 B) -> SStoreT Γ1 Γ3 B :=
         fun w0 ma f k => ma (fun w1 ω01 a1 => f w1 ω01 a1 (four k ω01)).
 
       Definition error {Γ1 Γ2 A} :
-        ⊢ (SStore Γ1 -> SHeap -> AMessage) -> SStoreSpec Γ1 Γ2 A :=
+        ⊢ (SStore Γ1 -> SHeap -> AMessage) -> SStoreT Γ1 Γ2 A :=
         fun w msg _ δ h => SymProp.error (msg δ h).
 
       Definition block {Γ1 Γ2 A} :
-        ⊢ SStoreSpec Γ1 Γ2 A := fun _ POST δ h => block.
+        ⊢ SStoreT Γ1 Γ2 A := fun _ POST δ h => block.
 
       Definition angelic_binary {Γ1 Γ2 A} :
-        ⊢ SStoreSpec Γ1 Γ2 A -> SStoreSpec Γ1 Γ2 A -> SStoreSpec Γ1 Γ2 A :=
+        ⊢ SStoreT Γ1 Γ2 A -> SStoreT Γ1 Γ2 A -> SStoreT Γ1 Γ2 A :=
         fun w m1 m2 POST δ1 h1 =>
           angelic_binary (m1 POST δ1 h1) (m2 POST δ1 h1).
       Definition demonic_binary {Γ1 Γ2 A} :
-        ⊢ SStoreSpec Γ1 Γ2 A -> SStoreSpec Γ1 Γ2 A -> SStoreSpec Γ1 Γ2 A :=
+        ⊢ SStoreT Γ1 Γ2 A -> SStoreT Γ1 Γ2 A -> SStoreT Γ1 Γ2 A :=
         fun w m1 m2 POST δ1 h1 =>
           demonic_binary (m1 POST δ1 h1) (m2 POST δ1 h1).
 
       Definition angelic {Γ} (x : option LVar) :
-        ⊢ ∀ σ, SStoreSpec Γ Γ (STerm σ) :=
+        ⊢ ∀ σ, SStoreT Γ Γ (STerm σ) :=
         fun w σ => lift_purespec (SPureSpec.angelic x σ).
       Global Arguments angelic {Γ} x [w] σ : rename.
 
       Definition demonic {Γ} (x : option LVar) :
-        ⊢ ∀ σ, SStoreSpec Γ Γ (STerm σ) :=
+        ⊢ ∀ σ, SStoreT Γ Γ (STerm σ) :=
         fun w σ => lift_purespec (SPureSpec.demonic x σ).
       Global Arguments demonic {Γ} x [w] σ : rename.
 
       Definition debug {AT} {Γ1 Γ2} :
-        ⊢ (SStore Γ1 -> SHeap -> AMessage) -> (SStoreSpec Γ1 Γ2 AT) -> (SStoreSpec Γ1 Γ2 AT) :=
+        ⊢ (SStore Γ1 -> SHeap -> AMessage) -> (SStoreT Γ1 Γ2 AT) -> (SStoreT Γ1 Γ2 AT) :=
         fun _ d m POST δ h => SymProp.debug (d δ h) (m POST δ h).
 
       Definition angelic_ctx {N : Set} (n : N -> LVar) {Γ} :
-        ⊢ ∀ Δ : NCtx N Ty, SStoreSpec Γ Γ (fun w => NamedEnv (Term w) Δ) :=
+        ⊢ ∀ Δ : NCtx N Ty, SStoreT Γ Γ (fun w => NamedEnv (Term w) Δ) :=
         fun w Δ => lift_purespec (SPureSpec.angelic_ctx n Δ).
       Global Arguments angelic_ctx {N} n {Γ} [w] Δ : rename.
 
       Definition demonic_ctx {N : Set} (n : N -> LVar) {Γ} :
-        ⊢ ∀ Δ : NCtx N Ty, SStoreSpec Γ Γ (fun w => NamedEnv (Term w) Δ) :=
+        ⊢ ∀ Δ : NCtx N Ty, SStoreT Γ Γ (fun w => NamedEnv (Term w) Δ) :=
         fun w Δ => lift_purespec (SPureSpec.demonic_ctx n Δ).
       Global Arguments demonic_ctx {N} n {Γ} [w] Δ : rename.
 
@@ -523,7 +523,7 @@ Module Type SymbolicExecOn
     Section PatternMatching.
 
       Definition demonic_pattern_match {N : Set} (n : N -> LVar) {Γ σ} (pat : Pattern (N:=N) σ) :
-        ⊢ STerm σ -> SStoreSpec Γ Γ (SMatchResult pat) :=
+        ⊢ STerm σ -> SStoreT Γ Γ (SMatchResult pat) :=
         fun w0 t Φ δ h =>
           SPureSpec.demonic_pattern_match n pat t
             (fun w1 θ1 mr => Φ w1 θ1 mr δ⟨θ1⟩ h⟨θ1⟩).
@@ -534,30 +534,30 @@ Module Type SymbolicExecOn
     Section State.
 
       Definition pushpop {AT Γ1 Γ2 x σ} :
-        ⊢ STerm σ -> SStoreSpec (Γ1 ▻ x∷σ) (Γ2 ▻ x∷σ) AT -> SStoreSpec Γ1 Γ2 AT :=
+        ⊢ STerm σ -> SStoreT (Γ1 ▻ x∷σ) (Γ2 ▻ x∷σ) AT -> SStoreT Γ1 Γ2 AT :=
         fun w0 t m POST δ h =>
           m (fun w1 ω01 a1 δ1 => POST w1 ω01 a1 (env.tail δ1)) δ.[x∷σ↦t] h.
 
       Definition pushspops {AT Γ1 Γ2 Δ} :
-        ⊢ SStore Δ -> SStoreSpec (Γ1 ▻▻ Δ) (Γ2 ▻▻ Δ) AT -> SStoreSpec Γ1 Γ2 AT :=
+        ⊢ SStore Δ -> SStoreT (Γ1 ▻▻ Δ) (Γ2 ▻▻ Δ) AT -> SStoreT Γ1 Γ2 AT :=
         fun w0 δΔ m POST δ h =>
           m (fun w1 ω01 a1 δ1 => POST w1 ω01 a1 (env.drop Δ δ1)) (δ ►► δΔ) h.
 
-      Definition get_local {Γ} : ⊢ SStoreSpec Γ Γ (SStore Γ) :=
+      Definition get_local {Γ} : ⊢ SStoreT Γ Γ (SStore Γ) :=
         fun w0 POST δ => T POST δ δ.
-      Definition put_local {Γ1 Γ2} : ⊢ SStore Γ2 -> SStoreSpec Γ1 Γ2 Unit :=
+      Definition put_local {Γ1 Γ2} : ⊢ SStore Γ2 -> SStoreT Γ1 Γ2 Unit :=
         fun w0 δ POST _ => T POST tt δ.
 
       Definition eval_exp {Γ σ} (e : Exp Γ σ) :
-        ⊢ SStoreSpec Γ Γ (STerm σ) :=
+        ⊢ SStoreT Γ Γ (STerm σ) :=
         fun w POST δ => T POST (peval (seval_exp δ e)) δ.
 
       Definition eval_exps {Γ} {σs : PCtx} (es : NamedEnv (Exp Γ) σs) :
-        ⊢ SStoreSpec Γ Γ (SStore σs) :=
+        ⊢ SStoreT Γ Γ (SStore σs) :=
         fun w POST δ =>
           T POST (seval_exps δ es) δ.
 
-      Definition assign {Γ} x {σ} {xIn : x∷σ ∈ Γ} : ⊢ STerm σ -> SStoreSpec Γ Γ Unit :=
+      Definition assign {Γ} x {σ} {xIn : x∷σ ∈ Γ} : ⊢ STerm σ -> SStoreT Γ Γ Unit :=
         fun w0 t POST δ => T POST tt (δ ⟪ x ↦ t ⟫).
       Global Arguments assign {Γ} x {σ xIn} [w] v.
 
@@ -572,7 +572,7 @@ Module Type SymbolicExecOn
       Variable exec_fail : ExecFail.
 
       (* The openly-recursive executor. *)
-      Definition exec_aux : forall {Γ τ} (s : Stm Γ τ), ⊢ SStoreSpec Γ Γ (STerm τ) :=
+      Definition exec_aux : forall {Γ τ} (s : Stm Γ τ), ⊢ SStoreT Γ Γ (STerm τ) :=
       fix exec_aux {Γ τ} s {w0} :=
         match s with
         | stm_val _ v => pure (term_val τ v)
@@ -653,7 +653,7 @@ Module Type SymbolicExecOn
 
     End ExecAux.
 
-  End SStoreSpec.
+  End SStoreT.
 
   Section WithSpec.
 
@@ -667,7 +667,7 @@ Module Type SymbolicExecOn
             ⟨ θ1 ⟩ lenv  <- SHeapSpec.demonic_ctx id lvars ;;
             ⟨ θ2 ⟩ _     <- SHeapSpec.produce req lenv ;;
             let lenv2 := persist (A := Sub _) lenv θ2 in
-            ⟨ θ3 ⟩ res   <- SStoreSpec.evalStoreSpec (exec _ _ s _) (subst pats lenv2) ;;
+            ⟨ θ3 ⟩ res   <- SStoreT.evalStoreT (exec _ _ s _) (subst pats lenv2) ;;
             let lenv3 := persist (A := Sub _) lenv2 θ3 in
             SHeapSpec.consume ens (sub_snoc lenv3 (result∷τ) res)
         end.
@@ -729,8 +729,8 @@ Module Type SymbolicExecOn
     Definition sexec_fail {SPEC : Specification} : ExecFail :=
       fun Γ τ s {w0} =>
         if fail_rule_pre
-        then @SStoreSpec.block _ _ _ w0
-        else SStoreSpec.error (fun δ h =>
+        then @SStoreT.block _ _ _ w0
+        else SStoreT.error (fun δ h =>
                  amsg.mk
                    {| msg_function := "sexec_fail";
                      msg_message := "Encountered fail";
@@ -756,13 +756,13 @@ Module Type SymbolicExecOn
             (* Out of fuel *)
             exec_call_error_no_fuel f (persist args0 θ1)
         | None   , S n =>
-            SStoreSpec.evalStoreSpec
-              (SStoreSpec.exec_aux sexec_call_foreign sexec_lemma (sexec_call n) sexec_fail (FunDef f) (w := _))
+            SStoreT.evalStoreT
+              (SStoreT.exec_aux sexec_call_foreign sexec_lemma (sexec_call n) sexec_fail (FunDef f) (w := _))
               (persist args0 θ1)
         end.
 
     Definition sexec {SPEC : Specification} (inline_fuel : nat) : Exec :=
-      @SStoreSpec.exec_aux SPEC sexec_call_foreign sexec_lemma
+      @SStoreT.exec_aux SPEC sexec_call_foreign sexec_lemma
         (sexec_call inline_fuel) sexec_fail.
     #[global] Arguments sexec {_} _ [_ _] s _ _ _ _ : simpl never.
 
