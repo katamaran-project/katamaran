@@ -432,11 +432,6 @@ Module Type SymbolicExecOn
 
     Section Basic.
 
-      Definition lift_purespec {Γ} {A : TYPE} :
-        ⊢ SPureSpec A -> SStoreT Γ Γ A :=
-        fun w0 m POST δ0 h0 =>
-          m (fun w1 ω01 a1 => POST w1 ω01 a1 (persist δ0 ω01) (persist h0 ω01)).
-
       Definition lift_heapspec {Γ} {A : TYPE} :
         ⊢ SHeapSpec A -> SStoreT Γ Γ A :=
         fun w0 m Φ δ0 =>
@@ -460,45 +455,13 @@ Module Type SymbolicExecOn
       Definition block {Γ1 Γ2 A} :
         ⊢ SStoreT Γ1 Γ2 A := fun _ POST δ h => block.
 
-      Definition angelic_binary {Γ1 Γ2 A} :
-        ⊢ SStoreT Γ1 Γ2 A -> SStoreT Γ1 Γ2 A -> SStoreT Γ1 Γ2 A :=
-        fun w m1 m2 POST δ1 h1 =>
-          angelic_binary (m1 POST δ1 h1) (m2 POST δ1 h1).
-      Definition demonic_binary {Γ1 Γ2 A} :
-        ⊢ SStoreT Γ1 Γ2 A -> SStoreT Γ1 Γ2 A -> SStoreT Γ1 Γ2 A :=
-        fun w m1 m2 POST δ1 h1 =>
-          demonic_binary (m1 POST δ1 h1) (m2 POST δ1 h1).
-
-      Definition angelic {Γ} (x : option LVar) :
-        ⊢ ∀ σ, SStoreT Γ Γ (STerm σ) :=
-        fun w σ => lift_purespec (SPureSpec.angelic x σ).
-      Global Arguments angelic {Γ} x [w] σ : rename.
-
-      Definition demonic {Γ} (x : option LVar) :
-        ⊢ ∀ σ, SStoreT Γ Γ (STerm σ) :=
-        fun w σ => lift_purespec (SPureSpec.demonic x σ).
-      Global Arguments demonic {Γ} x [w] σ : rename.
-
       Definition debug {AT} {Γ1 Γ2} :
         ⊢ (SStore Γ1 -> SHeap -> AMessage) -> (SStoreT Γ1 Γ2 AT) -> (SStoreT Γ1 Γ2 AT) :=
         fun _ d m POST δ h => SymProp.debug (d δ h) (m POST δ h).
 
-      Definition angelic_ctx {N : Set} (n : N -> LVar) {Γ} :
-        ⊢ ∀ Δ : NCtx N Ty, SStoreT Γ Γ (fun w => NamedEnv (Term w) Δ) :=
-        fun w Δ => lift_purespec (SPureSpec.angelic_ctx n Δ).
-      Global Arguments angelic_ctx {N} n {Γ} [w] Δ : rename.
-
-      Definition demonic_ctx {N : Set} (n : N -> LVar) {Γ} :
-        ⊢ ∀ Δ : NCtx N Ty, SStoreT Γ Γ (fun w => NamedEnv (Term w) Δ) :=
-        fun w Δ => lift_purespec (SPureSpec.demonic_ctx n Δ).
-      Global Arguments demonic_ctx {N} n {Γ} [w] Δ : rename.
-
     End Basic.
 
     Module Import notations.
-
-      (* Infix "⊗" := demonic_binary (at level 40, left associativity) : mut_scope. *)
-      (* Infix "⊕" := angelic_binary (at level 50, left associativity) : mut_scope. *)
 
       (* Notation "x <- ma ;; mb" := (bind ma (fun _ _ x => mb)) (at level 80, ma at level 90, mb at level 200, right associativity) : mut_scope. *)
       (* Notation "ma >>= f" := (bind ma f) (at level 50, left associativity, only parsing) : mut_scope. *)

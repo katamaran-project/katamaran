@@ -125,26 +125,6 @@ Module Type ShallowExecOn
       Definition block {Γ1 Γ2 A} : CStoreT Γ1 Γ2 A :=
         fun POST δ h => TRUE.
 
-      Definition demonic_binary {Γ1 Γ2 A} (m1 m2 : CStoreT Γ1 Γ2 A) : CStoreT Γ1 Γ2 A :=
-        fun POST δ h => m1 POST δ h /\ m2 POST δ h.
-      Definition angelic_binary {Γ1 Γ2 A} (m1 m2 : CStoreT Γ1 Γ2 A) : CStoreT Γ1 Γ2 A :=
-        fun POST δ h => m1 POST δ h \/ m2 POST δ h.
-
-      Definition demonic {Γ} (σ : Ty) : CStoreT Γ Γ (Val σ) :=
-        lift_purespec (CPureSpec.demonic σ).
-      Definition angelic {Γ} (σ : Ty) : CStoreT Γ Γ (Val σ) :=
-        lift_purespec (CPureSpec.angelic σ).
-
-      Definition angelic_ctx {N : Set} {Γ} :
-        forall Δ : NCtx N Ty, CStoreT Γ Γ (NamedEnv Val Δ) :=
-        fun Δ => lift_purespec (CPureSpec.angelic_ctx Δ).
-      #[global] Arguments angelic_ctx {N Γ} Δ.
-
-      Definition demonic_ctx {N : Set} {Γ} :
-        forall Δ : NCtx N Ty, CStoreT Γ Γ (NamedEnv Val Δ) :=
-        fun Δ => lift_purespec (CPureSpec.demonic_ctx Δ).
-      #[global] Arguments demonic_ctx {N Γ} Δ.
-
       Definition demonic_pattern_match {N : Set} {Γ σ} (pat : Pattern (N:=N) σ) (v : Val σ) :
         CStoreT Γ Γ (MatchResult pat) :=
         lift_purespec (CPureSpec.demonic_pattern_match pat v).
@@ -172,9 +152,6 @@ Module Type ShallowExecOn
     End Basic.
 
     Module CStoreTNotations.
-
-      Infix "⊗" := demonic_binary (at level 40, left associativity) : mut_scope.
-      Infix "⊕" := angelic_binary (at level 50, left associativity) : mut_scope.
 
       Notation "' x <- ma ;; mb" :=
         (bind ma (fun x => mb))

@@ -82,10 +82,8 @@ Module RefineExecOn
 
     (* Instance search does not unfold the concrete operations, so their
        instances are indexed, and tried, by their head. *)
-    #[export] Typeclasses Opaque CStoreT.angelic CStoreT.angelic_binary
-      CStoreT.angelic_ctx CStoreT.assign CStoreT.bind
-      CStoreT.block CStoreT.demonic CStoreT.demonic_binary
-      CStoreT.demonic_ctx CStoreT.eval_exp CStoreT.eval_exps
+    #[export] Typeclasses Opaque CStoreT.assign CStoreT.bind
+      CStoreT.block CStoreT.eval_exp CStoreT.eval_exps
       CStoreT.evalStoreT CStoreT.get_local CStoreT.lift_heapspec
       CStoreT.lift_purespec CStoreT.pure CStoreT.pushpop
       CStoreT.pushspops CStoreT.put_local.
@@ -131,11 +129,6 @@ Module RefineExecOn
       now iApply ("Hk" with "Ha Hh2").
     Qed.
 
-    #[export] Instance refine_lift_purespec {Γ} `(R : Rel AT A) {w : World}:
-      Related (RPureSpec R -> RStoreT Γ Γ R)
-        CStoreT.lift_purespec w (SStoreT.lift_purespec (w := w)).
-    Proof. unfold Related. unfold CStoreT.lift_purespec, SStoreT.lift_purespec, RStoreT; solve_related. Qed.
-
     #[export] Instance refine_lift_heapspec {Γ} `(R : Rel AT A) {w : World}:
       Related (RHeapSpec R -> RStoreT Γ Γ R)
           CStoreT.lift_heapspec w (SStoreT.lift_heapspec (w := w)).
@@ -167,24 +160,6 @@ Module RefineExecOn
       iIntros (msg k ks) "Hk %s %ss Hs %h %hs Hh []".
     Qed.
 
-    #[export] Instance refine_angelic (x : option LVar) {Γ} σ {w : World} :
-      Related (RStoreT Γ Γ (RVal σ)) (CStoreT.angelic σ) w (SStoreT.angelic (w := w) x σ).
-    Proof. unfold CStoreT.angelic, SStoreT.angelic; solve_related. Qed.
-
-    #[export] Instance refine_demonic (x : option LVar) {Γ} σ {w : World} :
-      Related (RStoreT Γ Γ (RVal σ)) (CStoreT.demonic σ) w (SStoreT.demonic (w := w) x σ).
-    Proof. unfold CStoreT.demonic, SStoreT.demonic; solve_related. Qed.
-
-    #[export] Instance refine_angelic_ctx {N : Set} {n : N -> LVar} {Γ} Δ {w} :
-      Related (RStoreT Γ Γ (RNEnv N Δ))
-        (CStoreT.angelic_ctx Δ) w (SStoreT.angelic_ctx (w := w) n Δ).
-    Proof. unfold CStoreT.angelic_ctx, SStoreT.angelic_ctx; solve_related. Qed.
-
-    #[export] Instance refine_demonic_ctx {N : Set} {n : N -> LVar} {Γ} Δ {w} :
-      Related (RStoreT Γ Γ (RNEnv N Δ))
-        (CStoreT.demonic_ctx Δ) w (SStoreT.demonic_ctx (w := w) n Δ).
-    Proof. unfold CStoreT.demonic_ctx, SStoreT.demonic_ctx; solve_related. Qed.
-
     Lemma refine_debug `{R : Rel AT A}
       {Γ1 Γ2} {w0 : World} {f ms mc} :
       ℛ⟦RStoreT Γ1 Γ2 R⟧ mc ms ⊢
@@ -198,16 +173,6 @@ Module RefineExecOn
     #[export] Instance refine_compat_debug `{R : Rel AT A} {Γ1 Γ2} {w0 : World} {f} {mc ms} :
       RelatedFrom (RStoreT Γ1 Γ2 R) mc w0 (@SStoreT.debug AT Γ1 Γ2 w0 f ms) _ :=
       refine_debug.
-
-    #[export] Instance refine_angelic_binary {AT A} `{R : Rel AT A} {Γ1 Γ2} {w} :
-      Related (RStoreT Γ1 Γ2 R -> RStoreT Γ1 Γ2 R -> RStoreT Γ1 Γ2 R)
-        CStoreT.angelic_binary w (SStoreT.angelic_binary (w := w)).
-    Proof. unfold CStoreT.angelic_binary, SStoreT.angelic_binary, RStoreT; solve_related. Qed.
-
-    #[export] Instance refine_demonic_binary {AT A} `{R : Rel AT A} {Γ1 Γ2} {w} :
-      Related (RStoreT Γ1 Γ2 R -> RStoreT Γ1 Γ2 R -> RStoreT Γ1 Γ2 R)
-        CStoreT.demonic_binary w (SStoreT.demonic_binary (w := w)).
-    Proof. unfold CStoreT.demonic_binary, SStoreT.demonic_binary, RStoreT; solve_related. Qed.
 
     #[export] Instance refine_demonic_pattern_match {N : Set} (n : N -> LVar) {Γ σ} (pat : Pattern (N:=N) σ) {w} :
       Related (RVal σ -> RStoreT Γ Γ (RMatchResult pat))
