@@ -432,10 +432,6 @@ Module Type SymbolicExecOn
 
     Section Basic.
 
-      Definition evalStoreSpec {Γ1 Γ2 A} :
-        ⊢ SStoreSpec Γ1 Γ2 A -> SStore Γ1 -> SHeapSpec A :=
-        fun w m δ Φ => m (fun w1 θ1 a1 _ => Φ w1 θ1 a1) δ.
-
       Definition lift_purespec {Γ} {A : TYPE} :
         ⊢ SPureSpec A -> SStoreSpec Γ Γ A :=
         fun w0 m POST δ0 h0 =>
@@ -445,6 +441,10 @@ Module Type SymbolicExecOn
         ⊢ SHeapSpec A -> SStoreSpec Γ Γ A :=
         fun w0 m Φ δ0 =>
           m (fun w1 θ1 a1 => Φ w1 θ1 a1 (persist δ0 θ1)).
+
+      Definition evalStoreSpec {Γ1 Γ2 A} :
+        ⊢ SStoreSpec Γ1 Γ2 A -> SStore Γ1 -> SHeapSpec A :=
+        fun w m δ Φ => m (fun w1 θ1 a1 _ => Φ w1 θ1 a1) δ.
 
       Definition pure {Γ} {A : TYPE} :
         ⊢ A -> SStoreSpec Γ Γ A := fun _ a k => T k a.
@@ -655,13 +655,11 @@ Module Type SymbolicExecOn
 
   End SStoreSpec.
 
-  Section WithExec.
-
-    Context (exec : Exec).
+  Section WithSpec.
 
     Import SHeapSpec.notations.
 
-    Definition exec_contract {Δ τ} (c : SepContract Δ τ) (s : Stm Δ τ) :
+    Definition exec_contract (exec : Exec) {Δ τ} (c : SepContract Δ τ) (s : Stm Δ τ) :
       ⊢ SHeapSpec Unit :=
       fun w =>
         match c with
@@ -669,14 +667,10 @@ Module Type SymbolicExecOn
             ⟨ θ1 ⟩ lenv  <- SHeapSpec.demonic_ctx id lvars ;;
             ⟨ θ2 ⟩ _     <- SHeapSpec.produce req lenv ;;
             let lenv2 := persist (A := Sub _) lenv θ2 in
-            ⟨ θ3 ⟩ res   <- SStoreSpec.evalStoreSpec (exec s (w := _)) (subst pats lenv2) ;;
+            ⟨ θ3 ⟩ res   <- SStoreSpec.evalStoreSpec (exec _ _ s _) (subst pats lenv2) ;;
             let lenv3 := persist (A := Sub _) lenv2 θ3 in
             SHeapSpec.consume ens (sub_snoc lenv3 (result∷τ) res)
         end.
-
-  End WithExec.
-
-  Section WithSpec.
 
     Definition exec_call_error_no_fuel : ExecCall :=
       fun Δ τ f w args _ h =>
@@ -691,10 +685,7 @@ Module Type SymbolicExecOn
       fun Δ τ f w args =>
         SHeapSpec.call_contract (CEnvEx f) args.
 
-    Import SHeapSpec.notations.
-
     Variable cfg : Config.
-
 
     Definition debug_lemma {SPEC : Specification} [Δ] (l : 𝑳 Δ) :
       ⊢ SStore Δ -> SHeapSpec Unit :=
@@ -775,11 +766,11 @@ Module Type SymbolicExecOn
         (sexec_call inline_fuel) sexec_fail.
     #[global] Arguments sexec {_} _ [_ _] s _ _ _ _ : simpl never.
 
-    Definition vcgen {SPEC : Specification} (inline_fuel : nat) {Δ τ}
-      (c : SepContract Δ τ) (s : Stm Δ τ) : ⊢ 𝕊 :=
-      fun w => SHeapSpec.run (exec_contract (sexec inline_fuel) c s (w := w)).
-
   End WithSpec.
+
+  Definition vcgen {SPEC : Specification} (cfg : Config) (inline_fuel : nat) {Δ τ}
+    (c : SepContract Δ τ) (s : Stm Δ τ) : ⊢ 𝕊 :=
+    fun w => SHeapSpec.run (exec_contract (sexec cfg inline_fuel) c s (w := w)).
 
   Module Symbolic.
 
