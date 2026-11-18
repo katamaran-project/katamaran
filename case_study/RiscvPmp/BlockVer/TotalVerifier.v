@@ -124,8 +124,12 @@ Module Type RiscvPmpBlockVerifTotalVerifier
         asn.chunk (chunk_user ptstoinstr [term_var "a"; term_val ty_ast i]) ∗
         nextpc ↦ term_var "an".
 
+      Section Generic.
+
+      Context {M : TYPE -> TYPE} {sm : SHeapSpecM M}.
+
       Definition sexec_instruction (i : AST) :
-        ⊢ STerm ty_xlenbits -> SHeapSpec (STerm ty_xlenbits) :=
+        ⊢ STerm ty_xlenbits -> M (STerm ty_xlenbits) :=
         let inline_fuel := 10%nat in
         fun _ a =>
           ⟨ θ1 ⟩ _  <- produce
@@ -140,7 +144,7 @@ Module Type RiscvPmpBlockVerifTotalVerifier
           pure (persist__term na θ4).
 
       Fixpoint sexec_block_addr (b : list AST) :
-        ⊢ STerm ty_xlenbits -> STerm ty_xlenbits -> SHeapSpec (STerm ty_xlenbits) :=
+        ⊢ STerm ty_xlenbits -> STerm ty_xlenbits -> M (STerm ty_xlenbits) :=
         fun _ ainstr apc =>
           match b with
           | nil       => pure apc
@@ -158,7 +162,7 @@ Module Type RiscvPmpBlockVerifTotalVerifier
       Definition sexec_triple_addr {Σ : LCtx}
         (req : Assertion (Σ ▻ ("a"::ty_xlenbits))) (b : list AST)
         (ens : Assertion (Σ ▻ ("a"::ty_xlenbits) ▻ ("an"::ty_xlenbits))) :
-        ⊢ SHeapSpec Unit :=
+        ⊢ M Unit :=
         fun w =>
           ⟨ θ0 ⟩ δ <- demonic_ctx id Σ ;;
           ⟨ θ1 ⟩ a <- demonic (Some "a") _ ;;
@@ -169,6 +173,8 @@ Module Type RiscvPmpBlockVerifTotalVerifier
           let δ3 := persist δ1 (θ2 ∘ θ3) in
           consume ens δ3.["an"∷ty_xlenbits ↦ na].
 
+      End Generic.
+
       (* This is a VC for triples, for doubles we probably need to talk
          about the continuation of a block. *)
       Definition sblock_verification_condition {Σ : LCtx}
@@ -176,7 +182,7 @@ Module Type RiscvPmpBlockVerifTotalVerifier
         (ens : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits)) : ⊢ 𝕊 :=
         fun w =>
           (* SHeapSpec does not perform a leakcheck. We could include one here. *)
-          SHeapSpec.run (sexec_triple_addr req b ens (w := w)).
+          SHeapSpec.run (sexec_triple_addr (M := SHeapSpec) req b ens w).
 
     End Symbolic.
 
@@ -185,8 +191,12 @@ Module Type RiscvPmpBlockVerifTotalVerifier
       Import CStoreT (evalStoreT).
       Import CHeapSpecM CHeapSpecM.notations.
 
+      Section Generic.
+
+      Context {M : Type -> Type} {cm : CHeapSpecM M}.
+
       Definition cexec_instruction (i : AST) :
-        Val ty_xlenbits -> CHeapSpec (Val ty_xlenbits) :=
+        Val ty_xlenbits -> M (Val ty_xlenbits) :=
         let inline_fuel := 10%nat in
         fun a =>
           _ <- produce
@@ -200,7 +210,7 @@ Module Type RiscvPmpBlockVerifTotalVerifier
           pure na.
 
       Fixpoint cexec_block_addr (b : list AST) :
-        Val ty_xlenbits -> Val ty_xlenbits -> CHeapSpec (Val ty_xlenbits) :=
+        Val ty_xlenbits -> Val ty_xlenbits -> M (Val ty_xlenbits) :=
         fun ainstr apc =>
           match b with
           | nil       => pure apc
@@ -213,7 +223,7 @@ Module Type RiscvPmpBlockVerifTotalVerifier
       Definition cexec_triple_addr {Σ : LCtx}
         (req : Assertion (Σ ▻ "a"∷ty_xlenbits)) (b : list AST)
         (ens : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits)) :
-        CHeapSpec unit :=
+        M unit :=
         lenv <- demonic_ctx Σ ;;
         a    <- demonic _ ;;
         _    <- produce req lenv.["a"∷ty_xlenbits ↦ a]  ;;
@@ -222,19 +232,23 @@ Module Type RiscvPmpBlockVerifTotalVerifier
 
       Import (hints) CStoreT.
 
+      Context {RM : forall {A}, relation A -> relation (M A)} {mm : MHeapSpecM M (@RM)}.
+
       #[export] Instance mon_cexec_instruction {i a} :
-        Proper (MHeapSpec eq) (cexec_instruction i a).
+        Proper (RM eq) (cexec_instruction i a).
       Proof. unfold cexec_instruction. solve_monotonic. Qed.
 
       #[export] Instance mon_cexec_block_addr {instrs ainstr apc} :
-        Proper (MHeapSpec eq) (cexec_block_addr instrs ainstr apc).
+        Proper (RM eq) (cexec_block_addr instrs ainstr apc).
       Proof. revert ainstr apc. induction instrs; cbn [cexec_block_addr]; solve_monotonic. Qed.
+
+      End Generic.
 
       Definition cblock_verification_condition {Σ : LCtx}
         (req : Assertion (Σ ▻ "a"∷ty_xlenbits)) (b : list AST)
         (ens : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits)) : Prop :=
         (* CHeapSpec.run does not perform a leakcheck. We could include one here. *)
-        CHeapSpec.run (cexec_triple_addr req b ens).
+        CHeapSpec.run (cexec_triple_addr (M := CHeapSpec) req b ens).
 
     End Shallow.
 
@@ -250,15 +264,22 @@ Module Type RiscvPmpBlockVerifTotalVerifier
 
       Import RiscvPmpShallowSoundness.
 
+      Section Generic.
+
+      Context {MT : TYPE -> TYPE} {M : Type -> Type}
+        {smT : SHeapSpecM MT} {cmM : CHeapSpecM M}
+        {RM : forall {AT A} (R : Rel AT A), Rel (MT AT) (M A)}
+        {rm : RHeapSpecM (@RM)}.
+
       #[export] Instance rexec_instruction (i : AST) {w} :
-        Related (RVal ty_xlenbits -> RHeapSpec (RVal ty_xlenbits))
+        Related (RVal ty_xlenbits -> RM (RVal ty_xlenbits))
           (cexec_instruction i) w (sexec_instruction (w := w) i).
       Proof.
         unfold cexec_instruction, sexec_instruction. solve_related.
       Qed.
 
       #[export] Instance rexec_block_addr (b : list AST) {w} :
-        Related (RVal ty_xlenbits -> RVal ty_xlenbits -> RHeapSpec (RVal ty_xlenbits))
+        Related (RVal ty_xlenbits -> RVal ty_xlenbits -> RM (RVal ty_xlenbits))
             (cexec_block_addr b) w
             (sexec_block_addr b (w := w)).
       Proof.
@@ -268,12 +289,14 @@ Module Type RiscvPmpBlockVerifTotalVerifier
       #[export] Instance rexec_triple_addr {Σ : LCtx}
         (req : Assertion (Σ ▻ "a"∷ty_xlenbits)) (b : list AST)
         (ens : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits)) {w} :
-        Related (RHeapSpec RUnit)
+        Related (RM RUnit)
             (cexec_triple_addr req b ens) w
-            (sexec_triple_addr req b ens (w := w)).
+            (sexec_triple_addr req b ens w).
       Proof.
         unfold cexec_triple_addr, sexec_triple_addr. solve_related.
       Qed.
+
+      End Generic.
 
       Lemma rblock_verification_condition {Σ : LCtx}
         (req : Assertion (Σ ▻ "a"∷ty_xlenbits)) (b : list AST)
@@ -355,7 +378,7 @@ Module Type RiscvPmpBlockVerifTotalVerifier
         stepTriple instrs a a PRE POST.
 
       Lemma sound_exec_instruction {instr} a Φ (h : SCHeap) :
-        cexec_instruction instr a Φ h ->
+        cexec_instruction (M := CHeapSpec) instr a Φ h ->
         ⊢ semTripleOneInstrStep (λ a, interpret_scheap h) instr
           (λ a an, ∃ h' : SCHeap, interpret_scheap h' ∧ ⌜Φ an h'⌝) a.
       Proof.
@@ -386,7 +409,7 @@ Module Type RiscvPmpBlockVerifTotalVerifier
       Qed.
 
       Lemma sound_exec_block_addr {instrs ainstr apc} Φ (h : SCHeap) :
-        cexec_block_addr instrs ainstr apc Φ h ->
+        cexec_block_addr (M := CHeapSpec) instrs ainstr apc Φ h ->
         ⊢ (stepTriple instrs ainstr apc (λ a, interpret_scheap h)
              (λ a an, ∃ h', interpret_scheap h' ∧ ⌜Φ an h'⌝))%I.
       Proof.
@@ -427,7 +450,7 @@ Module Type RiscvPmpBlockVerifTotalVerifier
       Qed.
 
       Lemma sound_cexec_triple_addr {Γ : LCtx} {pre post instrs} {ι : Valuation Γ} {a : Val ty_xlenbits} :
-        cexec_triple_addr pre instrs post (fun _ _ => True) []%list ->
+        cexec_triple_addr (M := CHeapSpec) pre instrs post (fun _ _ => True) []%list ->
         ⊢ semTripleBlock (λ a : Val ty_xlenbits, asn.interpret pre (ι.[("a"::ty_xlenbits) ↦ a])) a instrs
             (λ a na : Val ty_xlenbits, asn.interpret post (ι.[("a"::ty_xlenbits) ↦ a].[("an"::ty_xlenbits) ↦ na])).
       Proof.
@@ -479,7 +502,7 @@ Module Type RiscvPmpBlockVerifTotalVerifier
         apply (safeE_safe env.nil), postprocess2_sound in Hverif.
         apply LogicalSoundness.psafe_safe in Hverif; [|done].
         revert Hverif.
-        apply rexec_triple_addr.
+        apply (rexec_triple_addr (RM := @RHeapSpec)).
         - easy.
         - easy.
         - easy.
@@ -622,12 +645,15 @@ Module Type RiscvPmpBlockVerifTotalVerifier
     Section Symbolic.
 
       Import ModalNotations.
-      Import SHeapSpecM.
-      Import SHeapSpecM.notations.
+      Import SHeapSpecM SHeapSpecM.notations.
       Import asn.notations.
 
+      Section Generic.
+
+      Context {M : TYPE -> TYPE} {sm : SHeapSpecM M}.
+
       Fixpoint sexec_annotated_block_addr (b : list AnnotInstr) :
-        ⊢ STerm ty_xlenbits -> STerm ty_xlenbits -> SHeapSpec (STerm ty_xlenbits) :=
+        ⊢ STerm ty_xlenbits -> STerm ty_xlenbits -> M (STerm ty_xlenbits) :=
         fun w0 ainstr apc =>
           match b with
           | nil       => pure apc
@@ -663,7 +689,7 @@ Module Type RiscvPmpBlockVerifTotalVerifier
       Definition sexec_annotated_block_triple_addr {Σ : LCtx}
         (req : Assertion (Σ ▻ ("a"::ty_xlenbits))) (b : list AnnotInstr)
         (ens : Assertion (Σ ▻ ("a"::ty_xlenbits) ▻ ("an"::ty_xlenbits))) :
-        ⊢ SHeapSpec Unit :=
+        ⊢ M Unit :=
         fun _ =>
           ⟨ θ1 ⟩ lenv1 <- demonic_ctx id Σ ;;
           ⟨ θ2 ⟩ a2 <- demonic (Some "a") _ ;;
@@ -674,13 +700,15 @@ Module Type RiscvPmpBlockVerifTotalVerifier
           let lenv4 := persist lenv2 (θ3 ∘ θ4) in
           consume ens lenv4.["an"∷ty_xlenbits ↦ na].
 
+      End Generic.
+
       (* This is a VC for triples, for doubles we probably need to talk
        about the continuation of a block. *)
       Definition sannotated_block_verification_condition {Σ : LCtx}
         (req : Assertion (Σ ▻ "a"∷ty_xlenbits)) (b : list AnnotInstr)
         (ens : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits)) : ⊢ 𝕊 :=
         (* SHeapSpec does not perform a leakcheck. We could include one here. *)
-        fun w => SHeapSpec.run (sexec_annotated_block_triple_addr req b ens (w := w)).
+        fun w => SHeapSpec.run (sexec_annotated_block_triple_addr (M := SHeapSpec) req b ens w).
 
     End Symbolic.
 
@@ -688,8 +716,12 @@ Module Type RiscvPmpBlockVerifTotalVerifier
 
       Import CHeapSpecM CHeapSpecM.notations.
 
+      Section Generic.
+
+      Context {M : Type -> Type} {cm : CHeapSpecM M}.
+
       Fixpoint cexec_annotated_block_addr (b : list AnnotInstr) :
-        Val ty_xlenbits -> Val ty_xlenbits -> CHeapSpec (Val ty_xlenbits) :=
+        Val ty_xlenbits -> Val ty_xlenbits -> M (Val ty_xlenbits) :=
         fun ainstr apc =>
           match b with
           | nil       => pure apc
@@ -699,7 +731,7 @@ Module Type RiscvPmpBlockVerifTotalVerifier
                   _ <- assert_formula (ainstr = apc) ;;
                   apc' <- cexec_instruction i apc ;;
                   cexec_annotated_block_addr b' (bv.add ainstr bv_instrsize) apc'
-              | AnnotDebugBreak => debug error
+              | AnnotDebugBreak => error
               | AnnotLemmaInvocation l es =>
                   let args := evals es [env] in
                   _ <- call_lemma (lemma_environment l) args ;;
@@ -710,26 +742,30 @@ Module Type RiscvPmpBlockVerifTotalVerifier
       Definition cexec_annotated_block_triple_addr {Σ}
         (req : Assertion (Σ ▻ "a"∷ty_xlenbits)) (b : list AnnotInstr)
         (ens : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits)) :
-        CHeapSpec unit :=
+        M unit :=
         lenv <- demonic_ctx Σ ;;
         a  <- demonic _ ;;
         _  <- produce req lenv.["a"∷ty_xlenbits ↦ a]  ;;
         na <- cexec_annotated_block_addr b a a ;;
         consume ens lenv.["a"∷ty_xlenbits ↦ a].["an"∷ty_xlenbits ↦ na].
 
+      Context {RM : forall {A}, relation A -> relation (M A)} {mm : MHeapSpecM M (@RM)}.
+
       #[export] Instance mon_cexec_annotated_block_addr {instrs ainstr apc} :
-        Proper (MHeapSpec eq) (cexec_annotated_block_addr instrs ainstr apc).
+        Proper (RM eq) (cexec_annotated_block_addr instrs ainstr apc).
       Proof.
         revert ainstr apc.
         induction instrs; cbn [cexec_annotated_block_addr]; try solve_monotonic.
         destruct a; solve_monotonic.
       Qed.
 
+      End Generic.
+
       Definition cannotated_block_verification_condition {Σ : LCtx}
         (req : Assertion (Σ ▻ "a"∷ty_xlenbits)) (b : list AnnotInstr)
         (ens : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits)) : Prop :=
         (* SHeapSpec does not perform a leakcheck. We could include one here. *)
-        CHeapSpec.run (cexec_annotated_block_triple_addr req b ens).
+        CHeapSpec.run (cexec_annotated_block_triple_addr (M := CHeapSpec) req b ens).
 
     End Shallow.
 
@@ -744,8 +780,15 @@ Module Type RiscvPmpBlockVerifTotalVerifier
       Import iris.proofmode.proofmode.
       Import (hints) HeapSpec.
 
+      Section Generic.
+
+      Context {MT : TYPE -> TYPE} {M : Type -> Type}
+        {smT : SHeapSpecM MT} {cmM : CHeapSpecM M}
+        {RM : forall {AT A} (R : Rel AT A), Rel (MT AT) (M A)}
+        {rm : RHeapSpecM (@RM)}.
+
       #[export] Instance rexec_annotated_block_addr (b : list AnnotInstr) {w} :
-        Related (RVal ty_xlenbits -> RVal ty_xlenbits -> RHeapSpec (RVal ty_xlenbits))
+        Related (RVal ty_xlenbits -> RVal ty_xlenbits -> RM (RVal ty_xlenbits))
             (cexec_annotated_block_addr b) w
             (sexec_annotated_block_addr b (w := w)).
       Proof.
@@ -756,12 +799,14 @@ Module Type RiscvPmpBlockVerifTotalVerifier
       #[export] Instance rexec_annotated_block_triple_addr {Σ}
         (req : Assertion (Σ ▻ "a"∷ty_xlenbits)) (b : list AnnotInstr)
         (ens : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits)) {w} :
-        Related (RHeapSpec RUnit)
+        Related (RM RUnit)
             (cexec_annotated_block_triple_addr req b ens) w
-            (sexec_annotated_block_triple_addr req b ens (w := w)).
+            (sexec_annotated_block_triple_addr req b ens w).
       Proof.
         unfold cexec_annotated_block_triple_addr, sexec_annotated_block_triple_addr. solve_related.
       Qed.
+
+      End Generic.
 
       Lemma rannotated_block_verification_condition {Σ}
         (req : Assertion (Σ ▻ "a"∷ty_xlenbits)) (b : list AnnotInstr)
@@ -788,7 +833,7 @@ Module Type RiscvPmpBlockVerifTotalVerifier
 
       Lemma sound_exec_annotated_block_addr {instrs ainstr apc} (h : SCHeap) (POST : Val ty_xlenbits -> iProp Σ) :
         LemmaSem ->
-        cexec_annotated_block_addr instrs ainstr apc (fun res h' => interpret_scheap h' ⊢ POST res) h ->
+        cexec_annotated_block_addr (M := CHeapSpec) instrs ainstr apc (fun res h' => interpret_scheap h' ⊢ POST res) h ->
         (⊢ (stepTriple (filter_AST instrs) ainstr apc (λ a, interpret_scheap h) (λ a an, POST an)))%I.
       Proof.
         intros lemSem.
@@ -840,7 +885,7 @@ Module Type RiscvPmpBlockVerifTotalVerifier
 
       Lemma sound_cexec_annotated_block_triple_addr {Γ pre post a instrs} :
         LemmaSem ->
-        (cexec_annotated_block_triple_addr (Σ := Γ) pre instrs post (λ _ _ , True) []%list) ->
+        (cexec_annotated_block_triple_addr (M := CHeapSpec) (Σ := Γ) pre instrs post (λ _ _ , True) []%list) ->
         forall ι : Valuation Γ,
           ⊢ semTripleBlock (λ a : Val ty_xlenbits, asn.interpret pre (ι.[("a"::ty_xlenbits) ↦ a])) a (filter_AST instrs)
             (λ a na : Val ty_xlenbits, asn.interpret post (ι.[("a"::ty_xlenbits) ↦ a].[("an"::ty_xlenbits) ↦ na])).
@@ -863,7 +908,7 @@ Module Type RiscvPmpBlockVerifTotalVerifier
           { rewrite Einstrs. cbn. iIntros "$". }
           iApply "Himpl". iClear "Himpl".
           iApply (sound_exec_annotated_block_addr (apc := a) h2); auto.
-          eapply mon_cexec_annotated_block_addr.
+          eapply (mon_cexec_annotated_block_addr (RM := @MHeapSpec)).
           intros ? ? <- h3 Hcons.
           iIntros "Hh3".
           iPoseProof (consume_sound _ _ Hcons with "Hh3") as "[Hcons _]".
@@ -891,7 +936,7 @@ Module Type RiscvPmpBlockVerifTotalVerifier
             now iSpecialize ("H" with "Hpro"). }
           iApply "Himpl". iClear "Himpl".
           iApply (sound_exec_annotated_block_addr (apc := a) h2); auto.
-          eapply mon_cexec_annotated_block_addr.
+          eapply (mon_cexec_annotated_block_addr (RM := @MHeapSpec)).
           intros ? ? <- h3 Hcons.
           iIntros "Hh3".
           iPoseProof (consume_sound _ _ Hcons with "Hh3") as "[Hcons _]".
@@ -913,7 +958,7 @@ Module Type RiscvPmpBlockVerifTotalVerifier
         apply (safeE_safe env.nil), postprocess2_sound in Hverif.
         apply LogicalSoundness.psafe_safe in Hverif; [|done].
         revert Hverif.
-        apply rexec_annotated_block_triple_addr.
+        apply (rexec_annotated_block_triple_addr (RM := @RHeapSpec)).
         - easy.
         - easy.
         - easy.
