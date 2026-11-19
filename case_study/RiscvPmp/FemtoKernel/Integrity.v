@@ -78,6 +78,7 @@ Import ArchState (ArchState).
 
 Import RVPCOM.
 Import RVPV2.
+#[local] Typeclasses Opaque RVPCOM.ptsto_instrs RVPV2.ptsto_instrs.
 Import RVPINST2.
 Import RVPBASE2.
 Import RVPPRED2.
