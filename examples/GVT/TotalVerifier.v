@@ -223,13 +223,13 @@ Section BlockVerificationDerived.
 
     Import (hints) CStoreSpec.
 
-    #[export] Instance mono_cexec_instruction {i a} :
-      Monotonic (MHeapSpec eq) (cexec_instruction i a).
-    Proof. typeclasses eauto. Qed.
+    #[export] Instance mon_cexec_instruction {i a} :
+      Proper (MHeapSpec eq) (cexec_instruction i a).
+    Proof. unfold cexec_instruction. solve_monotonic. Qed.
 
-    #[export] Instance mono_cexec_block_addr {instrs ainstr apc} :
-      Monotonic (MHeapSpec eq) (cexec_block_addr instrs ainstr apc).
-    Proof. revert ainstr apc. induction instrs; cbn; typeclasses eauto. Qed.
+    #[export] Instance mon_cexec_block_addr {instrs ainstr apc} :
+      Proper (MHeapSpec eq) (cexec_block_addr instrs ainstr apc).
+    Proof. revert ainstr apc. induction instrs; cbn; solve_monotonic. Qed.
 
   End Shallow.
 
@@ -718,12 +718,12 @@ Section AnnotatedBlockVerification.
       (* SHeapSpec does not perform a leakcheck. We could include one here. *)
       CHeapSpec.run (cexec_annotated_block_triple_addr req b ens).
 
-    #[export] Instance mono_cexec_annotated_block_addr {instrs ainstr apc} :
-      Monotonic (MHeapSpec eq) (cexec_annotated_block_addr instrs ainstr apc).
+    #[export] Instance mon_cexec_annotated_block_addr {instrs ainstr apc} :
+      Proper (MHeapSpec eq) (cexec_annotated_block_addr instrs ainstr apc).
     Proof.
       revert ainstr apc.
-      induction instrs; cbn; try typeclasses eauto.
-      destruct a; typeclasses eauto.
+      induction instrs; cbn; try solve_monotonic.
+      destruct a; solve_monotonic.
     Qed.
 
   End Shallow.
@@ -845,7 +845,7 @@ Section AnnotatedBlockVerification.
         { rewrite Einstrs. cbn. iIntros "$". }
         iApply "Himpl". iClear "Himpl".
         iApply (sound_exec_annotated_block_addr (apc := a) h2); auto.
-        eapply mono_cexec_annotated_block_addr.
+        eapply mon_cexec_annotated_block_addr.
         intros ? ? <- h3 Hcons.
         iIntros "Hh3".
         iPoseProof (consume_sound _ _ Hcons with "Hh3") as "[Hcons _]".
@@ -873,7 +873,7 @@ Section AnnotatedBlockVerification.
           now iSpecialize ("H" with "Hpro"). }
         iApply "Himpl". iClear "Himpl".
         iApply (sound_exec_annotated_block_addr (apc := a) h2); auto.
-        eapply mono_cexec_annotated_block_addr.
+        eapply mon_cexec_annotated_block_addr.
         intros ? ? <- h3 Hcons.
         iIntros "Hh3".
         iPoseProof (consume_sound _ _ Hcons with "Hh3") as "[Hcons _]".

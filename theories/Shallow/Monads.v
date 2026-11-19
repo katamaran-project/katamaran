@@ -49,35 +49,35 @@ Import SignatureNotations ctx.notations env.notations.
 
 #[local] Set Implicit Arguments.
 
-(* A copy of [Proper] to be used in monotonicity proofs. Most of the instances
-   we define allow for more automation, but are weaker than what one would
-   normally use for [Proper] instances, hence the different type class. *)
-Section Monotonic.
-  Let U := Type.
-  Context {A B : U}.
+(* Monotonicity proofs use [Proper] and its automation for partial
+   applications. The [monotonic] hints decompose the remaining goals: lambdas,
+   matches and [::>]. They are kept out of [typeclass_instances]. *)
+Create HintDb monotonic.
+Ltac solve_monotonic := typeclasses eauto with typeclass_instances monotonic.
 
-  Class Monotonic (R : relation A) (m : A) : Prop :=
-    monotonic_prf : R m m.
-End Monotonic.
+Lemma proper_eq_respectful_intro {A B} {MB : relation B} {f : A -> B} :
+  (forall a, Proper MB (f a)) -> Proper (eq ==> MB) f.
+Proof. intros pf ? ? <-. apply pf. Qed.
 
-#[export] Hint Extern 1 (Monotonic _ (match ?p with existT _ _ => _ end)) =>
-  destruct p : typeclass_instances.
-#[export] Hint Extern 1 (Monotonic _ (match ?p with pair _ _ => _ end)) =>
-  destruct p : typeclass_instances.
-#[export] Hint Extern 1 (Monotonic _ (match ?p with left _ => _ | right _ => _ end)) =>
-  destruct p : typeclass_instances.
-
-#[export] Instance monotonic_eq_elim {A B} {MB : relation B} {f : A -> B} :
-  (forall a, Monotonic MB (f a)) -> Monotonic (eq ==> MB) f.
-Proof. unfold Monotonic. intros pf ? ? <-. auto. Qed.
-
-#[export] Instance monotonic_pointwise {A B} {MB : relation B} {f : A -> B} :
-  (forall a, Monotonic MB (f a)) -> Monotonic (A ::> MB) f.
+Lemma proper_pointwise_intro {A B} {MB : relation B} {f : A -> B} :
+  (forall a, Proper MB (f a)) -> Proper (A ::> MB) f.
 Proof. intros pf a. apply pf. Qed.
+Lemma proper_pointwise_to_eq {A B} {MB : relation B} {f : A -> B} :
+  Proper (A ::> MB) f -> Proper (eq ==> MB) f.
+Proof. intros pf ? ? <-. apply pf. Qed.
 
-#[export] Instance monotonic_eq_refl {A} {a : A} :
-  Monotonic eq a.
-Proof. easy. Qed.
+#[export] Hint Extern 1 (Proper (eq ==> _) (fun _ => _)) =>
+  class_apply @proper_eq_respectful_intro : monotonic.
+#[export] Hint Extern 1 (Proper (_ ::> _) (fun _ => _)) =>
+  class_apply @proper_pointwise_intro : monotonic.
+(* Lets partial application use instances stated with [::>]. *)
+#[export] Hint Resolve proper_pointwise_to_eq | 5 : monotonic.
+#[export] Hint Extern 1 (Proper _ (match ?p with existT _ _ => _ end)) =>
+  destruct p : monotonic.
+#[export] Hint Extern 1 (Proper _ (match ?p with pair _ _ => _ end)) =>
+  destruct p : monotonic.
+#[export] Hint Extern 1 (Proper _ (match ?p with left _ => _ | right _ => _ end)) =>
+  destruct p : monotonic.
 
 Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
   (Import W : WorldsMixin B P) (Import SP : SymPropOn B P W)
@@ -404,69 +404,56 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
       pure (vnew, h2).
 
     #[export] Instance mon_run :
-      Monotonic (MPureSpec eq ==> impl) run.
+      Proper (MPureSpec eq ==> impl) run.
     Proof. firstorder. Qed.
 
-    Lemma mon_pure' `{MA : relation A} :
-      Monotonic (MA ==> MPureSpec MA) pure.
+    #[export] Instance mon_pure `{MA : relation A} :
+      Proper (MA ==> MPureSpec MA) pure.
     Proof. firstorder. Qed.
 
-    #[export] Instance mon_pure `{MA : relation A} x :
-      Monotonic MA x -> Monotonic (MPureSpec MA) (pure x).
-    Proof. firstorder. Qed.
-
-    Lemma mon_bind' `{MA : relation A, RB : relation B} :
-      Monotonic (MPureSpec MA ==> (MA ==> MPureSpec RB) ==> MPureSpec RB) bind.
+    #[export] Instance mon_bind `{MA : relation A, RB : relation B} :
+      Proper (MPureSpec MA ==> (MA ==> MPureSpec RB) ==> MPureSpec RB) bind.
     Proof.
       intros ? ? rm ? ? rf ? ? rΦ. apply rm.
       intros ? ? ra. apply rf. apply ra. apply rΦ.
     Qed.
 
-    #[export] Instance mon_bind `{MA : relation A, RB : relation B}
-      (m : CPureSpec A) (f : A -> CPureSpec B) :
-      Monotonic (MPureSpec MA) m ->
-      Monotonic (MA ==> MPureSpec RB) f ->
-      Monotonic (MPureSpec RB) (bind m f).
-    Proof. intros rm rf. eapply mon_bind'; eauto. Qed.
-
     #[export] Instance mon_block `{MA : relation A} :
-      Monotonic (MPureSpec MA) block.
+      Proper (MPureSpec MA) block.
     Proof. easy. Qed.
-    #[export] Instance mon_debug `{MA : relation A} m :
-      Monotonic (MPureSpec MA) m -> Monotonic (MPureSpec MA) (debug m).
+    #[export] Instance mon_debug `{MA : relation A} :
+      Proper (MPureSpec MA ==> MPureSpec MA) debug.
     Proof. easy. Qed.
     #[export] Instance mon_error `{MA : relation A} :
-      Monotonic (MPureSpec MA) error.
+      Proper (MPureSpec MA) error.
     Proof. easy. Qed.
 
     #[export] Instance mon_angelic {σ} :
-      Monotonic (MPureSpec eq) (angelic σ).
+      Proper (MPureSpec eq) (angelic σ).
     Proof. intros ? ? Φ. apply ex_impl_morphism; firstorder. Qed.
     #[export] Instance mon_demonic {σ} :
-      Monotonic (MPureSpec eq) (demonic σ).
+      Proper (MPureSpec eq) (demonic σ).
     Proof. intros ? ? Φ. apply all_impl_morphism; firstorder. Qed.
 
     #[export] Instance mon_assert_pathcondition fml :
-      Monotonic (MPureSpec eq) (assert_pathcondition fml).
+      Proper (MPureSpec eq) (assert_pathcondition fml).
     Proof. firstorder. Qed.
     #[export] Instance mon_assume_pathcondition fml :
-      Monotonic (MPureSpec eq) (assume_pathcondition fml).
+      Proper (MPureSpec eq) (assume_pathcondition fml).
     Proof. firstorder. Qed.
 
     #[export] Instance mon_assert_formula fml :
-      Monotonic (MPureSpec eq) (assert_formula fml).
+      Proper (MPureSpec eq) (assert_formula fml).
     Proof. firstorder. Qed.
     #[export] Instance mon_assume_formula fml :
-      Monotonic (MPureSpec eq) (assume_formula fml).
+      Proper (MPureSpec eq) (assume_formula fml).
     Proof. firstorder. Qed.
 
-    #[export] Instance mon_angelic_binary `{MA : relation A} m1 m2 :
-      Monotonic (MPureSpec MA) m1 -> Monotonic (MPureSpec MA) m2 ->
-      Monotonic (MPureSpec MA) (angelic_binary m1 m2).
+    #[export] Instance mon_angelic_binary `{MA : relation A} :
+      Proper (MPureSpec MA ==> MPureSpec MA ==> MPureSpec MA) angelic_binary.
     Proof. firstorder. Qed.
-    #[export] Instance mon_demonic_binary `{MA : relation A} m1 m2 :
-      Monotonic (MPureSpec MA) m1 -> Monotonic (MPureSpec MA) m2 ->
-      Monotonic (MPureSpec MA) (demonic_binary m1 m2).
+    #[export] Instance mon_demonic_binary `{MA : relation A} :
+      Proper (MPureSpec MA ==> MPureSpec MA ==> MPureSpec MA) demonic_binary.
     Proof. firstorder. Qed.
 
     #[global] Typeclasses Opaque run pure bind block debug error angelic demonic
@@ -474,88 +461,85 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
       angelic_binary demonic_binary.
 
     #[export] Instance mon_angelic_ctx {N : Set} {Δ} :
-      Monotonic (MPureSpec eq) (@angelic_ctx N Δ).
-    Proof. induction Δ; cbn [angelic_ctx]; typeclasses eauto. Qed.
+      Proper (MPureSpec eq) (@angelic_ctx N Δ).
+    Proof. induction Δ; cbn [angelic_ctx]; solve_monotonic. Qed.
     #[export] Instance mon_demonic_ctx {N : Set} {Δ} :
-      Monotonic (MPureSpec eq) (@demonic_ctx N Δ).
-    Proof. induction Δ; cbn [demonic_ctx]; typeclasses eauto. Qed.
+      Proper (MPureSpec eq) (@demonic_ctx N Δ).
+    Proof. induction Δ; cbn [demonic_ctx]; solve_monotonic. Qed.
 
     #[export] Instance mon_angelic_list' {A} {x : A} {xs : list A} :
-      Monotonic (MPureSpec eq) (angelic_list' x xs).
-    Proof. revert x; induction xs; cbn [angelic_list']; typeclasses eauto. Qed.
+      Proper (MPureSpec eq) (angelic_list' x xs).
+    Proof. revert x; induction xs; cbn [angelic_list']; solve_monotonic. Qed.
     #[export] Instance mon_angelic_list {A} {xs : list A} :
-      Monotonic (MPureSpec eq) (angelic_list xs).
-    Proof. destruct xs; typeclasses eauto. Qed.
+      Proper (MPureSpec eq) (angelic_list xs).
+    Proof. destruct xs; solve_monotonic. Qed.
     #[export] Instance mon_demonic_list' {A} {x : A} {xs : list A} :
-      Monotonic (MPureSpec eq) (demonic_list' x xs).
-    Proof. revert x; induction xs; cbn [demonic_list']; typeclasses eauto. Qed.
+      Proper (MPureSpec eq) (demonic_list' x xs).
+    Proof. revert x; induction xs; cbn [demonic_list']; solve_monotonic. Qed.
     #[export] Instance mon_demonic_list {A} {xs : list A} :
-      Monotonic (MPureSpec eq) (demonic_list xs).
-    Proof. induction xs; typeclasses eauto. Qed.
+      Proper (MPureSpec eq) (demonic_list xs).
+    Proof. induction xs; solve_monotonic. Qed.
 
     #[export] Instance mon_angelic_finite F `{finite.Finite F} :
-      Monotonic (MPureSpec eq) (angelic_finite F).
-    Proof. typeclasses eauto. Qed.
+      Proper (MPureSpec eq) (angelic_finite F).
+    Proof. solve_monotonic. Qed.
     #[export] Instance mon_demonic_finite F `{finite.Finite F} :
-      Monotonic (MPureSpec eq) (demonic_finite F).
-    Proof. typeclasses eauto. Qed.
+      Proper (MPureSpec eq) (demonic_finite F).
+    Proof. solve_monotonic. Qed.
 
     #[export] Instance mon_angelic_pattern_match {N σ} (pat : Pattern (N:=N) σ) v :
-      Monotonic (MPureSpec eq) (@angelic_pattern_match _ _ pat v).
-    Proof. typeclasses eauto. Qed.
+      Proper (MPureSpec eq) (@angelic_pattern_match _ _ pat v).
+    Proof. unfold angelic_pattern_match. solve_monotonic. Qed.
     #[export] Instance mon_demonic_pattern_match {N σ} (pat : Pattern (N:=N) σ) v :
-      Monotonic (MPureSpec eq) (@demonic_pattern_match _ _ pat v).
-    Proof. typeclasses eauto. Qed.
+      Proper (MPureSpec eq) (@demonic_pattern_match _ _ pat v).
+    Proof. unfold demonic_pattern_match. solve_monotonic. Qed.
 
     #[export] Instance mon_new_pattern_match {N σ} (pat : Pattern (N:=N) σ) v :
-      Monotonic (MPureSpec eq) (@new_pattern_match _ _ pat v).
-    Proof. typeclasses eauto. Qed.
+      Proper (MPureSpec eq) (@new_pattern_match _ _ pat v).
+    Proof. unfold new_pattern_match. solve_monotonic. Qed.
 
     #[export] Instance mon_assert_eq_env {Δ E1 E2} :
-      Monotonic (MPureSpec eq) (@assert_eq_env Δ E1 E2).
-    Proof. induction E1; env.destroy E2; cbn; typeclasses eauto. Qed.
+      Proper (MPureSpec eq) (@assert_eq_env Δ E1 E2).
+    Proof. induction E1; env.destroy E2; cbn; solve_monotonic. Qed.
 
     #[export] Instance mon_assert_eq_nenv {N Δ E1 E2} :
-      Monotonic (MPureSpec eq) (@assert_eq_nenv N Δ E1 E2).
-    Proof. induction E1; env.destroy E2; cbn; typeclasses eauto. Qed.
+      Proper (MPureSpec eq) (@assert_eq_nenv N Δ E1 E2).
+    Proof. induction E1; env.destroy E2; cbn; solve_monotonic. Qed.
 
     #[export] Instance mon_assume_eq_env {Δ E1 E2} :
-      Monotonic (MPureSpec eq) (@assume_eq_env Δ E1 E2).
-    Proof. induction E1; env.destroy E2; cbn; typeclasses eauto. Qed.
+      Proper (MPureSpec eq) (@assume_eq_env Δ E1 E2).
+    Proof. induction E1; env.destroy E2; cbn; solve_monotonic. Qed.
 
     #[export] Instance mon_assume_eq_nenv {N Δ E1 E2} :
-      Monotonic (MPureSpec eq) (@assume_eq_nenv N Δ E1 E2).
-    Proof. induction E1; env.destroy E2; cbn; typeclasses eauto. Qed.
+      Proper (MPureSpec eq) (@assume_eq_nenv N Δ E1 E2).
+    Proof. induction E1; env.destroy E2; cbn; solve_monotonic. Qed.
 
     #[export] Instance mon_assert_eq_chunk {c1 c2} :
-      Monotonic (MPureSpec eq) (@assert_eq_chunk c1 c2).
-    Proof. revert c2; induction c1; intros []; cbn; typeclasses eauto. Qed.
+      Proper (MPureSpec eq) (@assert_eq_chunk c1 c2).
+    Proof. revert c2; induction c1; intros []; cbn; solve_monotonic. Qed.
 
     #[export] Instance mon_replay_aux {Σ} (P : 𝕊 Σ) (ι : Valuation Σ) :
-      Monotonic (MPureSpec eq) (replay_aux P ι).
-    Proof. induction P; typeclasses eauto. Qed.
+      Proper (MPureSpec eq) (replay_aux P ι).
+    Proof. induction P; cbn [replay_aux]; solve_monotonic. Qed.
 
     #[export] Instance mon_replay {Σ} (P : 𝕊 Σ) :
-      Monotonic (Valuation Σ ::> impl) (replay P).
-    Proof.
-      apply monotonic_pointwise. intros ι.
-      apply mon_run, mon_replay_aux.
-    Qed.
+      Proper (Valuation Σ ::> impl) (replay P).
+    Proof. unfold replay. solve_monotonic. Qed.
 
     #[export] Instance mon_produce_chunk c h :
-      Monotonic (MPureSpec eq) (produce_chunk c h).
+      Proper (MPureSpec eq) (produce_chunk c h).
     Proof. firstorder. Qed.
     #[export] Instance mon_consume_chunk c h :
-      Monotonic (MPureSpec eq) (consume_chunk c h).
-    Proof. unfold consume_chunk. typeclasses eauto. Qed.
+      Proper (MPureSpec eq) (consume_chunk c h).
+    Proof. unfold consume_chunk. solve_monotonic. Qed.
 
     #[export] Instance mon_read_register {τ} (reg : 𝑹𝑬𝑮 τ) :
-      Monotonic (SCHeap ::> MPureSpec eq) (read_register reg).
-    Proof. unfold read_register. typeclasses eauto. Qed.
+      Proper (SCHeap ::> MPureSpec eq) (read_register reg).
+    Proof. unfold read_register. solve_monotonic. Qed.
 
     #[export] Instance mon_write_register {τ} (reg : 𝑹𝑬𝑮 τ) :
-      Monotonic (Val τ ::> SCHeap ::> MPureSpec eq) (write_register reg).
-    Proof. unfold write_register. typeclasses eauto. Qed.
+      Proper (Val τ ::> SCHeap ::> MPureSpec eq) (write_register reg).
+    Proof. unfold write_register. solve_monotonic. Qed.
 
     #[global] Typeclasses Opaque angelic_ctx demonic_ctx angelic_list'
       demonic_list' angelic_list demonic_list angelic_finite demonic_finite
@@ -943,82 +927,71 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
       end.
 
     #[export] Instance mon_run :
-      Monotonic (MHeapSpec eq ==> impl) run.
+      Proper (MHeapSpec eq ==> impl) run.
     Proof. intros m1 m2 mm. now apply mm. Qed.
 
-    Lemma mon_lift_purespec' `{MA : relation A} :
-      Monotonic (MPureSpec MA ==> MHeapSpec MA) (lift_purespec).
+    #[export] Instance mon_lift_purespec `{MA : relation A} :
+      Proper (MPureSpec MA ==> MHeapSpec MA) (lift_purespec).
     Proof. intros ? ? rm ? ? rΦ h. apply rm. intros ? ? ra. now apply rΦ. Qed.
 
-    #[export] Instance mon_lift_purespec `{MA : relation A} m :
-      Monotonic (MPureSpec MA) m -> Monotonic (MHeapSpec MA) (lift_purespec m).
-    Proof. intros rm. now apply mon_lift_purespec'. Qed.
-
-    Lemma mon_pure' `{MA : relation A} :
-      Monotonic (MA ==> MHeapSpec MA) pure.
+    #[export] Instance mon_pure `{MA : relation A} :
+      Proper (MA ==> MHeapSpec MA) pure.
     Proof. firstorder. Qed.
 
-    #[export] Instance mon_pure `{MA : relation A} x :
-      Monotonic MA x -> Monotonic (MHeapSpec MA) (pure x).
-    Proof. firstorder. Qed.
-
-    Lemma mon_bind' `{MA : relation A, RB : relation B} :
-      Monotonic (MHeapSpec MA ==> (MA ==> MHeapSpec RB) ==> MHeapSpec RB) bind.
+    #[export] Instance mon_bind `{MA : relation A, RB : relation B} :
+      Proper (MHeapSpec MA ==> (MA ==> MHeapSpec RB) ==> MHeapSpec RB) bind.
     Proof.
       intros ? ? rm ? ? rf ? ? rΦ. apply rm. intros ? ? ra.
       apply rf. apply ra. intros ? ? rb. apply rΦ, rb.
     Qed.
 
-    #[export] Instance mon_bind `{MA : relation A, RB : relation B}
-      (m : CHeapSpec A) (f : A -> CHeapSpec B) :
-      Monotonic (MHeapSpec MA) m ->
-      Monotonic (MA ==> MHeapSpec RB) f ->
-      Monotonic (MHeapSpec RB) (bind m f).
-    Proof. intros rm rf. eapply mon_bind'; eauto. Qed.
-
     #[export] Instance mon_error `{MA : relation A} :
-      Monotonic (MHeapSpec MA) error.
+      Proper (MHeapSpec MA) error.
     Proof. now unfold error. Qed.
 
-    #[export] Instance mon_debug `{MA : relation A} m :
-      Monotonic (MHeapSpec MA) m -> Monotonic (MHeapSpec MA) (debug m).
+    #[export] Instance mon_debug `{MA : relation A} :
+      Proper (MHeapSpec MA ==> MHeapSpec MA) debug.
     Proof. now unfold debug. Qed.
 
-    #[export] Instance mon_angelic_binary `{MA : relation A} m1 m2 :
-      Monotonic (MHeapSpec MA) m1 -> Monotonic (MHeapSpec MA) m2 ->
-      Monotonic (MHeapSpec MA) (angelic_binary m1 m2).
+    #[export] Instance mon_angelic_binary `{MA : relation A} :
+      Proper (MHeapSpec MA ==> MHeapSpec MA ==> MHeapSpec MA) angelic_binary.
     Proof. firstorder. Qed.
 
-    #[export] Instance mon_demonic_binary `{MA : relation A} m1 m2 :
-      Monotonic (MHeapSpec MA) m1 -> Monotonic (MHeapSpec MA) m2 ->
-      Monotonic (MHeapSpec MA) (demonic_binary m1 m2).
+    #[export] Instance mon_demonic_binary `{MA : relation A} :
+      Proper (MHeapSpec MA ==> MHeapSpec MA ==> MHeapSpec MA) demonic_binary.
     Proof. firstorder. Qed.
 
     #[global] Typeclasses Opaque run lift_purespec pure bind debug angelic_binary
       demonic_binary.
 
     #[export] Instance mon_angelic σ :
-      Monotonic (MHeapSpec eq) (angelic σ).
-    Proof. typeclasses eauto. Qed.
+      Proper (MHeapSpec eq) (angelic σ).
+    Proof. unfold angelic. solve_monotonic. Qed.
     #[export] Instance mon_demonic σ :
-      Monotonic (MHeapSpec eq) (demonic σ).
-    Proof. typeclasses eauto. Qed.
+      Proper (MHeapSpec eq) (demonic σ).
+    Proof. unfold demonic. solve_monotonic. Qed.
+    #[export] Instance mon_angelic_ctx {N} Δ :
+      Proper (MHeapSpec eq) (@angelic_ctx N Δ).
+    Proof. unfold angelic_ctx. solve_monotonic. Qed.
+    #[export] Instance mon_demonic_ctx {N} Δ :
+      Proper (MHeapSpec eq) (@demonic_ctx N Δ).
+    Proof. unfold demonic_ctx. solve_monotonic. Qed.
 
     #[export] Instance mon_assert_formula fml :
-      Monotonic (MHeapSpec eq) (assert_formula fml).
+      Proper (MHeapSpec eq) (assert_formula fml).
     Proof. firstorder. Qed.
     #[export] Instance mon_assume_formula fml :
-      Monotonic (MHeapSpec eq) (assume_formula fml).
+      Proper (MHeapSpec eq) (assume_formula fml).
     Proof. firstorder. Qed.
 
-    #[export] Instance mon_produce_chunk c : Monotonic (MHeapSpec eq) (produce_chunk c).
+    #[export] Instance mon_produce_chunk c : Proper (MHeapSpec eq) (produce_chunk c).
     Proof.
       intros Φ1 Φ2 mΦ h.
       apply CPureSpec.mon_produce_chunk.
       intros ? ? ->. now apply mΦ.
     Qed.
 
-    #[export] Instance mon_consume_chunk c : Monotonic (MHeapSpec eq) (consume_chunk c).
+    #[export] Instance mon_consume_chunk c : Proper (MHeapSpec eq) (consume_chunk c).
     Proof.
       intros Φ1 Φ2 mΦ h.
       apply CPureSpec.mon_consume_chunk.
@@ -1026,7 +999,7 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
     Qed.
 
     #[export] Instance mon_read_register {τ} (reg : 𝑹𝑬𝑮 τ) :
-      Monotonic (MHeapSpec eq) (read_register reg).
+      Proper (MHeapSpec eq) (read_register reg).
     Proof.
       intros Φ1 Φ2 mΦ h.
       apply CPureSpec.mon_read_register.
@@ -1034,33 +1007,34 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
     Qed.
 
     #[export] Instance mon_write_register {τ} (reg : 𝑹𝑬𝑮 τ) (v : Val τ) :
-      Monotonic (MHeapSpec eq) (write_register reg v).
+      Proper (MHeapSpec eq) (write_register reg v).
     Proof.
       intros Φ1 Φ2 mΦ h.
       apply CPureSpec.mon_write_register.
       intros ? [] ->. now apply mΦ.
     Qed.
 
-    #[global] Typeclasses Opaque angelic demonic assert_formula assume_formula
-      produce_chunk consume_chunk read_register write_register.
+    #[global] Typeclasses Opaque angelic demonic angelic_ctx demonic_ctx
+      assert_formula assume_formula produce_chunk consume_chunk read_register
+      write_register.
 
     #[export] Instance mon_produce {Σ} (asn : Assertion Σ) ι :
-      Monotonic (MHeapSpec eq) (produce asn ι).
-    Proof. induction asn; cbn; typeclasses eauto. Qed.
+      Proper (MHeapSpec eq) (produce asn ι).
+    Proof. induction asn; cbn [produce]; solve_monotonic. Qed.
 
     #[export] Instance mon_consume {Σ} (asn : Assertion Σ) ι :
-      Monotonic (MHeapSpec eq) (consume asn ι).
-    Proof. induction asn; cbn; typeclasses eauto. Qed.
+      Proper (MHeapSpec eq) (consume asn ι).
+    Proof. induction asn; cbn [consume]; solve_monotonic. Qed.
 
     #[export] Instance mon_call_contract
       [Δ τ] (c : SepContract Δ τ) (args : CStore Δ) :
-      Monotonic (MHeapSpec eq) (call_contract c args).
-    Proof. destruct c; typeclasses eauto. Qed.
+      Proper (MHeapSpec eq) (call_contract c args).
+    Proof. destruct c; cbn [call_contract]; solve_monotonic. Qed.
 
     #[export] Instance mon_call_lemma
       [Δ] (lem : Lemma Δ) (vs : CStore Δ) :
-      Monotonic (MHeapSpec eq) (call_lemma lem vs).
-    Proof. destruct lem; typeclasses eauto. Qed.
+      Proper (MHeapSpec eq) (call_lemma lem vs).
+    Proof. destruct lem; cbn [call_lemma]; solve_monotonic. Qed.
 
     #[global] Typeclasses Opaque produce consume call_contract call_lemma.
 

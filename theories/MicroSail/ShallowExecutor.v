@@ -84,19 +84,19 @@ Module Type ShallowExecOn
 
   Abbreviation MonotonicExecCall exec_call :=
     (forall Δ τ (f : 𝑭 Δ τ) (δ : CStore Δ),
-       Monotonic (MHeapSpec eq) (exec_call Δ τ f δ)).
+       Proper (MHeapSpec eq) (exec_call Δ τ f δ)).
   Abbreviation MonotonicExecCallForeign exec_call_foreign :=
     (forall Δ τ (f : 𝑭𝑿 Δ τ) (δ : CStore Δ),
-       Monotonic (MHeapSpec eq) (exec_call_foreign Δ τ f δ)).
+       Proper (MHeapSpec eq) (exec_call_foreign Δ τ f δ)).
   Abbreviation MonotonicExecLemma exec_lemma :=
     (forall Δ (l : 𝑳 Δ) (δ : CStore Δ),
-       Monotonic (MHeapSpec eq) (exec_lemma Δ l δ)).
+       Proper (MHeapSpec eq) (exec_lemma Δ l δ)).
   Abbreviation MonotonicExecFail exec_fail :=
     (forall Γ τ (s : Val ty.string),
-       Monotonic (MStoreSpec Γ Γ eq) (exec_fail Γ τ s)).
+       Proper (MStoreSpec Γ Γ eq) (exec_fail Γ τ s)).
   Abbreviation MonotonicExec exec :=
     (forall Γ τ (s : Stm Γ τ),
-       Monotonic (MStoreSpec Γ Γ eq) (exec Γ τ s)).
+       Proper (MStoreSpec Γ Γ eq) (exec Γ τ s)).
 
   Module CStoreSpec.
 
@@ -145,59 +145,35 @@ Module Type ShallowExecOn
         fun Δ => lift_purespec (CPureSpec.demonic_ctx Δ).
       #[global] Arguments demonic_ctx {N Γ} Δ.
 
-      Lemma mon_evalStoreSpec' {Γ1 Γ2} `{MA : relation A} :
-        Monotonic (MStoreSpec Γ1 Γ2 MA ==> CStore Γ1 ::> MHeapSpec MA) evalStoreSpec.
+      #[export] Instance mon_evalStoreSpec {Γ1 Γ2} `{MA : relation A} :
+        Proper (MStoreSpec Γ1 Γ2 MA ==> CStore Γ1 ::> MHeapSpec MA) evalStoreSpec.
       Proof. intros ? ? rm δ ? ? rΦ. apply rm. intros ? ? ? _. now apply rΦ. Qed.
 
-      #[export] Instance mon_evalStoreSpec {Γ1 Γ2} `{MA : relation A} ma δ1 :
-        Monotonic (MStoreSpec Γ1 Γ2 MA) ma ->
-        Monotonic (MHeapSpec MA) (evalStoreSpec ma δ1).
-      Proof. intros rma. now apply mon_evalStoreSpec'. Qed.
-
-      Lemma mon_lift_purespec' `{MA : relation A} {Γ} :
-        Monotonic (MPureSpec MA ==> MStoreSpec Γ Γ MA) lift_purespec.
+      #[export] Instance mon_lift_purespec `{MA : relation A} {Γ} :
+        Proper (MPureSpec MA ==> MStoreSpec Γ Γ MA) lift_purespec.
       Proof. intros ? ? rm ? ? rΦ ? ?. apply rm. intros ? ? ?. now apply rΦ. Qed.
 
-      #[export] Instance mon_lift_purespec `{MA : relation A} {Γ} m :
-        Monotonic (MPureSpec MA) m -> Monotonic (MStoreSpec Γ Γ MA) (lift_purespec m).
-      Proof. intros rm. now apply mon_lift_purespec'. Qed.
-
-      Lemma mon_lift_heapspec' `{MA : relation A} {Γ} :
-        Monotonic (MHeapSpec MA ==> MStoreSpec Γ Γ MA) lift_heapspec.
+      #[export] Instance mon_lift_heapspec `{MA : relation A} {Γ} :
+        Proper (MHeapSpec MA ==> MStoreSpec Γ Γ MA) lift_heapspec.
       Proof. intros ? ? rm ? ? rΦ ?. apply rm. intros ? ? ?. now apply rΦ. Qed.
 
-      #[export] Instance mon_lift_heapspec `{MA : relation A} {Γ} m :
-        Monotonic (MHeapSpec MA) m -> Monotonic (MStoreSpec Γ Γ MA) (lift_heapspec m).
-      Proof. intros rm. now apply mon_lift_heapspec'. Qed.
-
-      Lemma mon_pure' `{MA : relation A} {Γ} :
-        Monotonic (MA ==> MStoreSpec Γ Γ MA) pure.
+      #[export] Instance mon_pure `{MA : relation A} {Γ} :
+        Proper (MA ==> MStoreSpec Γ Γ MA) pure.
       Proof. unfold pure. firstorder. Qed.
 
-      #[export] Instance mon_pure `{MA : relation A} {Γ}  x :
-        Monotonic MA x -> Monotonic (MStoreSpec Γ Γ MA) (pure x).
-      Proof. unfold pure. firstorder. Qed.
-
-      Lemma mon_bind' `{MA : relation A, RB : relation B} {Γ1 Γ2 Γ3} :
-        Monotonic (MStoreSpec Γ1 Γ2 MA ==> (MA ==> MStoreSpec Γ2 Γ3 RB) ==> MStoreSpec Γ1 Γ3 RB) bind.
+      #[export] Instance mon_bind `{MA : relation A, RB : relation B} {Γ1 Γ2 Γ3} :
+        Proper (MStoreSpec Γ1 Γ2 MA ==> (MA ==> MStoreSpec Γ2 Γ3 RB) ==> MStoreSpec Γ1 Γ3 RB) bind.
       Proof.
         intros ? ? rm ? ? rf ? ? rΦ. apply rm.
         intros ? ? ra. apply rf. apply ra. apply rΦ.
       Qed.
 
-      #[export] Instance mon_bind `{MA : relation A, RB : relation B} {Γ1 Γ2 Γ3}
-        (m : CStoreSpec Γ1 Γ2 A) (f : A -> CStoreSpec Γ2 Γ3 B) :
-        Monotonic (MStoreSpec Γ1 Γ2 MA) m ->
-        Monotonic (MA ==> MStoreSpec Γ2 Γ3 RB) f ->
-        Monotonic (MStoreSpec Γ1 Γ3 RB) (bind m f).
-      Proof. intros rm rf. eapply mon_bind'; eauto. Qed.
-
       #[export] Instance mon_error `{MA : relation A} {Γ1 Γ2} :
-        Monotonic (MStoreSpec Γ1 Γ2 MA) error.
+        Proper (MStoreSpec Γ1 Γ2 MA) error.
       Proof. easy. Qed.
 
       #[export] Instance mon_block `{MA : relation A} {Γ1 Γ2} :
-        Monotonic (MStoreSpec Γ1 Γ2 MA) block.
+        Proper (MStoreSpec Γ1 Γ2 MA) block.
       Proof. easy. Qed.
 
     End Basic.
@@ -235,6 +211,11 @@ Module Type ShallowExecOn
         now rewrite CPureSpec.wp_demonic_pattern_match.
       Qed.
 
+      #[export] Instance mon_demonic_pattern_match {N : Set} {Γ σ}
+        (pat : Pattern (N:=N) σ) (v : Val σ) :
+        Proper (MStoreSpec Γ Γ eq) (demonic_pattern_match pat v).
+      Proof. unfold demonic_pattern_match. solve_monotonic. Qed.
+
     End PatternMatching.
 
     Section State.
@@ -258,36 +239,34 @@ Module Type ShallowExecOn
         fun POST δ => POST tt (δ ⟪ x ↦ v ⟫).
       Global Arguments assign {Γ} x {σ xIn} v.
 
-      #[export] Instance mon_pushpop `{MA : relation A} {Γ1 Γ2 x σ} (v : Val σ)
-        (d : CStoreSpec (Γ1 ▻ x∷σ) (Γ2 ▻ x∷σ) A) :
-        Monotonic (MStoreSpec (Γ1 ▻ x∷σ) (Γ2 ▻ x∷σ) MA) d ->
-        Monotonic (MStoreSpec Γ1 Γ2 MA) (pushpop v d).
-      Proof. intros md P Q PQ ?. apply md. intros ? ? ma ?. now apply PQ. Qed.
+      #[export] Instance mon_pushpop `{MA : relation A} {Γ1 Γ2 x σ} (v : Val σ) :
+        Proper (MStoreSpec (Γ1 ▻ x∷σ) (Γ2 ▻ x∷σ) MA ==> MStoreSpec Γ1 Γ2 MA)
+          (pushpop v).
+      Proof. intros ? ? md P Q PQ ?. apply md. intros ? ? ma ?. now apply PQ. Qed.
 
-      #[export] Instance mon_pushspops `{MA : relation A} {Γ1 Γ2 Δ} (δΔ : CStore Δ)
-        (d : CStoreSpec (Γ1 ▻▻ Δ) (Γ2 ▻▻ Δ) A) :
-        Monotonic (MStoreSpec (Γ1 ▻▻ Δ) (Γ2 ▻▻ Δ) MA) d ->
-        Monotonic (MStoreSpec Γ1 Γ2 MA) (pushspops δΔ d).
-      Proof. intros md P Q PQ ?. apply md. intros ? ? ma ?. now apply PQ. Qed.
+      #[export] Instance mon_pushspops `{MA : relation A} {Γ1 Γ2 Δ} (δΔ : CStore Δ) :
+        Proper (MStoreSpec (Γ1 ▻▻ Δ) (Γ2 ▻▻ Δ) MA ==> MStoreSpec Γ1 Γ2 MA)
+          (pushspops δΔ).
+      Proof. intros ? ? md P Q PQ ?. apply md. intros ? ? ma ?. now apply PQ. Qed.
 
       #[export] Instance mon_get_local {Γ} :
-        Monotonic (MStoreSpec Γ Γ eq) get_local.
+        Proper (MStoreSpec Γ Γ eq) get_local.
       Proof. intros P Q PQ ?. now apply PQ. Qed.
 
       #[export] Instance mon_put_local {Γ1 Γ2} (δ : CStore Γ2) :
-        Monotonic (MStoreSpec Γ1 Γ2 eq) (put_local δ).
+        Proper (MStoreSpec Γ1 Γ2 eq) (put_local δ).
       Proof. intros P Q PQ ?. now apply PQ. Qed.
 
       #[export] Instance mon_eval_exp {Γ σ} (e : Exp Γ σ) :
-        Monotonic (MStoreSpec Γ Γ eq) (eval_exp e).
+        Proper (MStoreSpec Γ Γ eq) (eval_exp e).
       Proof. intros P Q PQ ?. now apply PQ. Qed.
 
       #[export] Instance mon_eval_exps {Γ} {σs : PCtx} (es : NamedEnv (Exp Γ) σs) :
-        Monotonic (MStoreSpec Γ Γ eq) (eval_exps es).
+        Proper (MStoreSpec Γ Γ eq) (eval_exps es).
       Proof. intros P Q PQ ?. now apply PQ. Qed.
 
       #[export] Instance mon_assign {Γ} x {σ} {xIn : x∷σ ∈ Γ} (v : Val σ) :
-        Monotonic (MStoreSpec Γ Γ eq) (assign x v).
+        Proper (MStoreSpec Γ Γ eq) (assign x v).
       Proof. intros P Q PQ ?. now apply PQ. Qed.
 
     End State.
@@ -362,7 +341,7 @@ Module Type ShallowExecOn
         (mexec_fail : MonotonicExecFail exec_fail).
 
       #[export] Instance mon_exec_aux : MonotonicExec exec_aux.
-      Proof. induction s; typeclasses eauto. Qed.
+      Proof. induction s; cbn [exec_aux]; solve_monotonic. Qed.
 
     End ExecAux.
     #[global] Arguments exec_aux {_} _ _ _ _ [Γ τ] !s.
@@ -385,9 +364,9 @@ Module Type ShallowExecOn
           CHeapSpec.consume ens (env.snoc lenv (result∷τ) v)
       end.
 
-    Lemma mon_exec_contract {Δ τ} (c : SepContract Δ τ) (s : Stm Δ τ) :
-      Monotonic (MHeapSpec eq) (exec_contract c s).
-    Proof. destruct c. typeclasses eauto. Qed.
+    #[export] Instance mon_exec_contract {Δ τ} (c : SepContract Δ τ) (s : Stm Δ τ) :
+      Proper (MHeapSpec eq) (exec_contract c s).
+    Proof. destruct c; cbn [exec_contract]. solve_monotonic. Qed.
 
   End WithExec.
 
@@ -447,31 +426,30 @@ Module Type ShallowExecOn
 
     Import (hints) CStoreSpec.
 
-    Lemma mon_exec_call_error_no_fuel : MonotonicExecCall exec_call_error_no_fuel.
-    Proof. typeclasses eauto. Qed.
+    #[export] Instance mon_exec_call_error_no_fuel : MonotonicExecCall exec_call_error_no_fuel.
+    Proof. solve_monotonic. Qed.
 
-    Lemma mon_cexec_call_foreign {SPEC : Specification} :
+    #[export] Instance mon_cexec_call_foreign {SPEC : Specification} :
       MonotonicExecCallForeign cexec_call_foreign.
-    Proof. typeclasses eauto. Qed.
+    Proof. solve_monotonic. Qed.
 
-    Lemma mon_cexec_lemma {SPEC : Specification} :
+    #[export] Instance mon_cexec_lemma {SPEC : Specification} :
       MonotonicExecLemma cexec_lemma.
-    Proof. typeclasses eauto. Qed.
+    Proof. unfold cexec_lemma, debug_lemma. solve_monotonic. Qed.
 
-    Lemma mon_cexec_fail {SPEC : Specification} : MonotonicExecFail cexec_fail.
-    Proof. unfold cexec_fail; destruct fail_rule_pre; typeclasses eauto. Qed.
+    #[export] Instance mon_cexec_fail {SPEC : Specification} : MonotonicExecFail cexec_fail.
+    Proof. unfold cexec_fail; destruct fail_rule_pre; solve_monotonic. Qed.
 
     #[export] Instance mon_cexec_call {SPEC : Specification} (fuel : nat) :
       MonotonicExecCall (cexec_call fuel).
     Proof.
-      induction fuel; intros; cbn; destruct CEnv;
-        unfold cexec_fail; destruct fail_rule_pre;
-        typeclasses eauto.
+      induction fuel; intros; cbn; unfold debug_call; destruct CEnv;
+        solve_monotonic.
     Qed.
 
-    Lemma mon_cexec {SPEC : Specification} (fuel : nat) :
+    #[export] Instance mon_cexec {SPEC : Specification} (fuel : nat) :
       MonotonicExec (cexec fuel).
-    Proof. unfold cexec, cexec_fail; destruct fail_rule_pre; typeclasses eauto. Qed.
+    Proof. unfold cexec. solve_monotonic. Qed.
 
   End WithSpec.
 
