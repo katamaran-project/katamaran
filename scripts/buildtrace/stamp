@@ -12,9 +12,13 @@ for arg in "$@"; do
   esac
 done
 [ -n "$compile" ] || file=
-# EPOCHREALTIME needs bash 5; older versions record whole seconds.
+# EPOCHREALTIME needs bash 5; older versions record whole seconds. Its decimal
+# sign follows the locale (LC_NUMERIC), so a comma is turned into a dot.
 start=${EPOCHREALTIME:-$(date +%s)}
+start=${start/,/.}
 "$@"
 status=$?
-[ -n "$file" ] && echo "$start ${EPOCHREALTIME:-$(date +%s)} $status $file" >>"$BUILDTRACE"
+end=${EPOCHREALTIME:-$(date +%s)}
+end=${end/,/.}
+[ -n "$file" ] && echo "$start $end $status $file" >>"$BUILDTRACE"
 exit "$status"
