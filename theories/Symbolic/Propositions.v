@@ -1869,9 +1869,9 @@ Module Type SymPropOn
       Definition uq_block {Σ} : UQSymProp Σ :=
         weakenInit SymProp.block.
 
-      (* Keeps all variables in the support. *)
-      Definition uq_keep {Σ} (P : SymProp Σ) : UQSymProp Σ :=
-        MkWeakened wkRefl (boxSb P) (boxSbLaws P).
+      Lemma In_enum_PatternCase {N σ} (pat : Pattern (N := N) σ) (pc : PatternCase pat) :
+        List.In pc (finite.enum (PatternCase pat)).
+      Proof. apply base.list_elem_of_In, finite.elem_of_enum. Qed.
 
       Program Definition uq_assertk {Σ} (fml : Formula Σ) (msg : AMessage Σ) :
         UQSymProp Σ -> UQSymProp Σ :=
@@ -1948,6 +1948,26 @@ Module Type SymPropOn
         intros; now destruct msg.
       Qed.
 
+      Definition uq_pattern_match {Σ σ} (t : Term Σ σ) (pat : Pattern σ)
+        (P : forall pc, UQSymProp (Σ ▻▻ PatternCaseCtx pc)) : UQSymProp Σ :=
+        liftBinOp (T1 := fun Σ => Term Σ σ)
+          (T2 := fun Σ => forall pc, UnderCtx SymProp (PatternCaseCtx pc) Σ)
+          (fun _ t' P' => pattern_match t' pat P') (fun _ _ _ _ _ => eq_refl)
+          (gen_occurs_check t)
+          (liftFinOp (finite.enum _) (In_enum_PatternCase pat)
+             (fun pc => elimWeakenedCtx (PatternCaseCtx pc) (P pc))).
+
+      Definition uq_pattern_match_var x {σ Σ} {xIn : (x∷σ ∈ Σ)%katamaran} (pat : Pattern σ)
+        (P : forall pc, UQSymProp (ctx.remove (ctx.in_cat_left (PatternCaseCtx pc) xIn))) : UQSymProp Σ :=
+        elimWeakenedVar (bIn := xIn)
+          (T1 := fun Σ => forall pc, UnderCtx SymProp (PatternCaseCtx pc) Σ)
+          (fun _ xIn' P' => pattern_match_var x (xIn := xIn') pat
+                              (fun pc => substSU (T := SymProp) (P' pc) (wkCatRemove xIn' (PatternCaseCtx pc))))
+          (liftFinOp (finite.enum _) (In_enum_PatternCase pat)
+             (fun pc => elimWeakenedCtx (PatternCaseCtx pc)
+                          (weakenWeakened (wkCatRemoveInv xIn (PatternCaseCtx pc)) (P pc)))).
+      Arguments uq_pattern_match_var x {σ Σ xIn} pat P.
+
       Fixpoint to_uqSymProp {Σ} (P : SymProp Σ) : UQSymProp Σ :=
         match P with
         | angelic_binary P1 P2 => uq_angelic_binary (to_uqSymProp P1) (to_uqSymProp P2)
@@ -1960,10 +1980,8 @@ Module Type SymPropOn
         | demonicv b P => uq_demonicv (to_uqSymProp P)
         | assert_vareq x t msg P => uq_assert_vareq x t msg (to_uqSymProp P)
         | assume_vareq x t P => uq_assume_vareq x t (to_uqSymProp P)
-        | pattern_match t pat P =>
-            uq_keep (pattern_match t pat (fun pc => from_uqSymProp (to_uqSymProp (P pc))))
-        | @pattern_match_var _ x _ xIn pat P =>
-            uq_keep (pattern_match_var x pat (fun pc => from_uqSymProp (to_uqSymProp (P pc))))
+        | pattern_match t pat P => uq_pattern_match t pat (fun pc => to_uqSymProp (P pc))
+        | pattern_match_var x pat P => uq_pattern_match_var x pat (fun pc => to_uqSymProp (P pc))
         | debug msg P => uq_debug msg (to_uqSymProp P)
         end.
 
@@ -2171,6 +2189,59 @@ Module Type SymPropOn
           now rewrite interpWk_wkRefl sub_comp_id_left inst_sub_wk1 in H.
       Qed.
 
+      Lemma uq_pattern_match_sound {Σ σ} (t : Term Σ σ) (pat : Pattern σ)
+        {P : forall pc, SymProp (Σ ▻▻ PatternCaseCtx pc)} {wP}
+        (HP : forall pc, WeakenedRefines (@IffSymProp _) (P pc) (wP pc)) :
+        WeakenedRefines (@IffSymProp _) (pattern_match t pat P) (uq_pattern_match t pat wP).
+      Proof.
+        refine (liftBinOp_weakenedRefines' (R1 := eq)
+                  (T2 := fun Σ => forall pc, UnderCtx SymProp (PatternCaseCtx pc) Σ)
+                  (R2 := fun P' _ => forall pc, IffSymProp (P' pc) (P pc))
+                  (fun t' _ => pattern_match t' pat P) (fun _ t' P' => pattern_match t' pat P')
+                  (fun _ _ _ _ _ => eq_refl) _ (oc_sound t) _).
+        - intros ? ? <- P' ? HP' ι; cbn.
+          destruct pattern_match_val; apply HP'.
+        - refine (liftFinOp_weakenedRefines (F := fun pc => UnderCtx SymProp (PatternCaseCtx pc))
+                    (fun pc => @IffSymProp _) P (fun pc => elimWeakenedCtx (PatternCaseCtx pc) (wP pc)) _
+                    (finite.enum _) (In_enum_PatternCase pat)).
+          intros pc. now apply elimWeakenedCtx_weakenedRefines.
+      Qed.
+
+      Lemma uq_pattern_match_var_sound x {σ Σ} {xIn : (x∷σ ∈ Σ)%katamaran} (pat : Pattern σ)
+        {P : forall pc, SymProp (ctx.remove (ctx.in_cat_left (PatternCaseCtx pc) xIn))} {wP}
+        (HP : forall pc, WeakenedRefines (@IffSymProp _) (P pc) (wP pc)) :
+        WeakenedRefines (@IffSymProp _) (pattern_match_var x pat P) (uq_pattern_match_var x pat wP).
+      Proof.
+        refine (elimWeakenedVar_weakenedRefines
+                  (T1 := fun Σ => forall pc, UnderCtx SymProp (PatternCaseCtx pc) Σ)
+                  (R1 := fun P' _ => forall pc,
+                       IffSymProp (substSU (T := SymProp) (P' pc) (wkCatRemove xIn (PatternCaseCtx pc))) (P pc))
+                  (R2 := @IffSymProp _)
+                  (v1 := fun pc => substSU (T := SymProp) (P pc) (wkCatRemoveInv xIn (PatternCaseCtx pc)))
+                  (fun _ xIn' P' => pattern_match_var x (xIn := xIn') pat
+                                      (fun pc => substSU (T := SymProp) (P' pc) (wkCatRemove xIn' (PatternCaseCtx pc))))
+                  (fun _ => pattern_match_var x pat P) _ _ _).
+        - intros Σ1 Σ2 xIn1 ζ P'; cbn.
+          f_equal. apply functional_extensionality_dep; intros pc.
+          repeat change (weaken_symprop ?P ?ζ) with (substSU P ζ).
+          rewrite <-substSU_trans.
+          change (transSU ?ζ1 ?ζ2) with (transWk ζ1 ζ2).
+          rewrite <-transWk_wkKeepCtx_wkCatRemove.
+          exact (eq_sym (substSU_trans (T := SymProp) (wkKeepCtx (weakenRemovePres ζ xIn1) (PatternCaseCtx pc))
+                           (wkCatRemove (weakenIn ζ xIn1) (PatternCaseCtx pc)) (P' pc))).
+        - intros P' ? HP' ι; cbn.
+          destruct pattern_match_val; apply HP'.
+        - refine (liftFinOp_weakenedRefines (F := fun pc => UnderCtx SymProp (PatternCaseCtx pc))
+                    (fun pc P' _ => IffSymProp (substSU (T := SymProp) P' (wkCatRemove xIn (PatternCaseCtx pc))) (P pc))
+                    (fun pc => substSU (T := SymProp) (P pc) (wkCatRemoveInv xIn (PatternCaseCtx pc)))
+                    (fun pc => elimWeakenedCtx (PatternCaseCtx pc)
+                                 (weakenWeakened (wkCatRemoveInv xIn (PatternCaseCtx pc)) (wP pc)))
+                    _ (finite.enum _) (In_enum_PatternCase pat)).
+          intros pc. apply (elimWeakenedCtx_weakenedRefines (T := SymProp) (PatternCaseCtx pc)).
+          exact (weakenWeakened_weakenedRefines (T := SymProp) _ _ (transWk_wkCatRemoveInv xIn (PatternCaseCtx pc))
+                   _ (HP pc)).
+      Qed.
+
       Lemma to_uqSymProp_sound {Σ} (P : SymProp Σ) ι :
             instprop (to_uqSymProp P) ι <-> instprop P ι.
       Proof.
@@ -2225,16 +2296,8 @@ Module Type SymPropOn
           refine (liftBinOp_weakenedRefines (R1 := eq) (λ Σ' : LCtx, pair)
                     (fun _ _ _ _ _ => eq_refl)
                     (oc_sound t) IHP).
-        - apply mkWeakenedRefines; intros ι; cbn [unboxSb boxSb].
-          rewrite instprop_substSU; change (interpSU ?ζ) with (interpWk ζ).
-          rewrite interpWk_wkRefl inst_sub_id; cbn.
-          destruct pattern_match_val as [pc ιpat].
-          destruct (H pc) as [? ? ? ? HR]; apply HR.
-        - apply mkWeakenedRefines; intros ι; cbn [unboxSb boxSb].
-          rewrite instprop_substSU; change (interpSU ?ζ) with (interpWk ζ).
-          rewrite interpWk_wkRefl inst_sub_id; cbn.
-          destruct pattern_match_val as [pc ιpat].
-          destruct (H pc) as [? ? ? ? HR]; apply HR.
+        - now apply uq_pattern_match_sound.
+        - now apply uq_pattern_match_var_sound.
         - unfold uq_debug.
           refine (liftUnOp_weakenedRefines' (λ Σ' P', debug (amsg.boxMsg b) P') (debug b) _ _ IHP);
             intuition.
