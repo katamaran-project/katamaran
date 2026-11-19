@@ -879,8 +879,8 @@ Module inv := invariants.
   Defined.
 
   Lemma adv_is_live y : (y ∈ advAddrs)%stdpp → (y ∈ liveAddrs)%stdpp.
-  Proof. rewrite liveAddrs_eq; unfold advAddrs, liveAddrs_def.
-         apply bv.seq_subseteq; now compute.
+  Proof. unfold advAddrs.
+         apply liveAddrs_seq_subseteq; now compute.
   Qed.
 
   Ltac case_if H :=
@@ -1526,9 +1526,7 @@ Module inv := invariants.
     iApply (big_sepL_mono with "Hlist"). intros ? ? Hsom. cbn.
     iIntros "$". iPureIntro.
     rewrite /= withinMMIO_one /not; apply mmio_ram_False.
-    rewrite liveAddrs_eq.
-    eapply bv.seq_subseteq, list_elem_of_lookup_2, Hsom;
-      change (bv.unsigned (bv.of_N minAddr)) with (Z.of_N minAddr); lia.
+    eapply liveAddrs_seq_subseteq, list_elem_of_lookup_2, Hsom; unfold maxAddr; lia.
   Qed.
 
   Lemma femtokernel_splitMemory `{sailGS Σ, iostate_preG IOState Σ} {μ : Memory} {s} {v} :

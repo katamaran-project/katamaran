@@ -1108,9 +1108,7 @@ Section Shared.
     iApply (big_sepL_mono with "Hlist"). intros ? ? Hsom. cbn.
     iIntros "$". iPureIntro.
     rewrite /= withinMMIO_one /not; apply mmio_ram_False.
-    rewrite liveAddrs_eq.
-    eapply bv.seq_subseteq, list_elem_of_lookup_2, Hsom;
-      change (bv.unsigned (bv.of_N minAddr)) with (Z.of_N minAddr); lia.
+    eapply liveAddrs_seq_subseteq, list_elem_of_lookup_2, Hsom; unfold maxAddr; lia.
   Qed.
 
   Lemma femtokernel_splitMemory {Σ} {mG : mcMemGS Σ} {μ : Memory} (secret : Val ty_xlenbits) :

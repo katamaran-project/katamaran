@@ -474,8 +474,8 @@ Section FemtoKernel.
   Defined.
 
   Lemma adv_is_live y : (y ∈ advAddrs)%stdpp → (y ∈ liveAddrs)%stdpp.
-  Proof. rewrite liveAddrs_eq; unfold advAddrs, liveAddrs_def.
-         apply bv.seq_subseteq; now compute.
+  Proof. unfold advAddrs.
+         apply liveAddrs_seq_subseteq; now compute.
   Qed.
 
   Ltac case_if H :=

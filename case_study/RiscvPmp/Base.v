@@ -141,6 +141,36 @@ Qed.
 Lemma NoDup_liveAddrs : NoDup liveAddrs.
 Proof. rewrite liveAddrs_eq. apply bv.NoDup_seq. now compute. Qed.
 
+Lemma map_pair_fst {A B} (f : A → B) (l : list A) :
+  (map (λ a, (a, f a)) l).*1 = l.
+Proof. induction l; f_equal/=; done. Qed.
+
+Lemma elem_of_liveAddrs (a : Addr) :
+  a ∈ liveAddrs ↔ (Z.of_N minAddr <= bv.unsigned a < Z.of_N maxAddr)%Z.
+Proof.
+  rewrite liveAddrs_eq /liveAddrs_def bv.elem_of_seq_bounds; last (compute; done).
+  change (bv.unsigned (bv.of_N minAddr)) with (Z.of_N minAddr).
+  unfold maxAddr. lia.
+Qed.
+
+Lemma liveAddrs_sub_list (a : Addr) (l : Z) :
+  (Z.of_N minAddr <= bv.unsigned a)%Z ->
+  (bv.unsigned a + l <= Z.of_N maxAddr)%Z ->
+  ∃ l1 l2, liveAddrs = l1 ++ bv.seq a l ++ l2.
+Proof.
+  intros. rewrite liveAddrs_eq. apply bv.seq_sub_list;
+    change (bv.unsigned (bv.of_N minAddr)) with (Z.of_N minAddr); unfold maxAddr in *; lia.
+Qed.
+
+Lemma liveAddrs_seq_subseteq (a : Addr) (l : Z) :
+  (Z.of_N minAddr <= bv.unsigned a)%Z ->
+  (bv.unsigned a + l <= Z.of_N maxAddr)%Z ->
+  bv.seq a l ⊆ liveAddrs.
+Proof.
+  intros Hlo Hhi. destruct (liveAddrs_sub_list a l Hlo Hhi) as (? & ? & ->).
+  by apply list_subseteq_app_r, list_subseteq_app_l.
+Qed.
+
 #[global] Arguments liveAddrs : simpl never.
 
 Definition addr_inc (x : bv 32) (n : nat) : bv 32 :=

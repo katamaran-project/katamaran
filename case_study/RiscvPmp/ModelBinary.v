@@ -432,9 +432,8 @@ Module Type RiscvPmpModel2
         (addr <ᵘ bv.of_N maxAddr) ->
         addr ∈ liveAddrs.
     Proof.
-      rewrite liveAddrs_eq; unfold liveAddrs_def, maxAddr.
       intros addr Hmin%bv.ule_iff_unsigned_le Hmax%bv.ult_iff_unsigned_lt.
-      apply bv.elem_of_seq_bounds; first done.
+      apply elem_of_liveAddrs.
       change (bv.unsigned (bv.of_N ?x)) with (Z.of_N x) in *; lia.
     Qed.
 
@@ -451,8 +450,7 @@ Module Type RiscvPmpModel2
       intros addr bytes Hrep Hmin%bv.ule_iff_unsigned_le Hmax%bv.ule_iff_unsigned_le.
       pose proof (bv.unsigned_bounds addr).
       rewrite -bv.unsigned_add_small -bv.of_Z_nat -bv.unsigned_of_Z_small in Hmax; [|lia..].
-      rewrite liveAddrs_eq.
-      apply bv.seq_sub_list; unfold maxAddr in *;
+      apply liveAddrs_sub_list; unfold maxAddr in *;
         change (bv.unsigned (bv.of_N ?x)) with (Z.of_N x) in *; lia.
     Qed.
 
