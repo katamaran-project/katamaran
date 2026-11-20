@@ -106,6 +106,15 @@ Module BinaryBlockVerifier
       | cons inst insts => (ptsto_instr a inst ∗ ptsto_instrs (bv.add a bv_instrsize) insts)%I
       | nil => True%I
       end.
+    #[global] Typeclasses Opaque ptsto_instrs.
+
+    Lemma ptsto_instrs_nil a : ptsto_instrs a [] ⊣⊢ True.
+    Proof. done. Qed.
+
+    Lemma ptsto_instrs_cons a instr instrs :
+      ptsto_instrs a (instr :: instrs)
+        ⊣⊢ ptsto_instr a instr ∗ ptsto_instrs (bv.add a bv_instrsize) instrs.
+    Proof. done. Qed.
 
     Lemma ptsto_instrs_equiv {a : Val ty_xlenbits} {instrs : list AST} :
       ptsto_instrs a instrs ⊣⊢
@@ -228,7 +237,8 @@ Module BinaryBlockVerifier
         iIntros (PRE a instr POST) "[Hpl Hpr] Hpro HPRE Htrip Hk".
       - cbn. iDestruct ("Htrip" with "HPRE") as "(_ & Htrip)".
         iSpecialize ("Htrip" with "[Hpro]").
-        { cbn. iDestruct "Hpro" as "($ & [$ _] & $)". }
+        { cbn. iDestruct "Hpro" as "($ & Hi & $)".
+          iEval (rewrite ptsto_instrs_cons ptsto_instrs_nil) in "Hi". iDestruct "Hi" as "[$ _]". }
         unfold WP2_loop at 2.
         iApply (semWP2_fun_loop with "Hpl Hpr").
         iIntros "Hpl Hpr" (Γon1 Γon2 δon1 δon2).
@@ -239,7 +249,8 @@ Module BinaryBlockVerifier
         iIntros ([] ? ? ?) "(<- & <- & H)"; auto.
         iDestruct "H" as "(%na & (Hpc & Hinstr & Hnpc) & Htrip)".
         iApply semWP2_call_inline.
-        iSpecialize ("Hk" with "[$Htrip $Hpc $Hnpc $Hinstr $Hpl $Hpr]").
+        iSpecialize ("Hk" with "[$Htrip $Hpc $Hnpc Hinstr $Hpl $Hpr]");
+          first (iEval (rewrite ptsto_instrs_cons ptsto_instrs_nil); by iFrame).
         iApply (semWP2_mono with "Hk").
         iIntros (? ? ? ?) "(<- & _ & $)"; auto.
       - cbn. iDestruct ("Htrip" with "HPRE") as "(_ & Htrip)". fold step_n.
@@ -264,7 +275,9 @@ Module BinaryBlockVerifier
           iExact "Htrip".
         + iModIntro.
           iIntros (an) "(HPOST & Hepi & Hpow)".
-          iApply ("Hk" with "[$HPOST $Hinstr $Hepi $Hpow]").
+          iApply ("Hk" with "[$HPOST $Hpow Hinstr Hepi]").
+          iDestruct "Hepi" as "($ & Hepi & $)".
+          iEval (rewrite ptsto_instrs_cons). iFrame.
         + iApply (semWP2_mono with "IH").
           iIntros (? ? ? ?) "(<- & _ & $)"; auto.
     Qed.
@@ -287,7 +300,8 @@ Module BinaryBlockVerifier
       iIntros "Hpl Hpr" (Γon1 Γon2 δon1 δon2).
       cbn. iDestruct ("Htrip" with "[$HPRE $Hpl $Hpr]") as "(_ & Htrip)".
       iSpecialize ("Htrip" with "[Hpro]").
-      { cbn. iDestruct "Hpro" as "($ & [$ _] & $)". }
+      { cbn. iDestruct "Hpro" as "($ & Hi & $)".
+        iEval (rewrite ptsto_instrs_cons ptsto_instrs_nil) in "Hi". iDestruct "Hi" as "[$ _]". }
       iApply semWP2_seq.
       iApply semWP2_call_inline_later.
       iModIntro.
@@ -295,7 +309,8 @@ Module BinaryBlockVerifier
       iIntros ([] ? ? ?) "(<- & <- & H)"; auto.
       iDestruct "H" as "(%na & (Hpc & Hinstr & Hnpc) & Htrip & Hoff)".
       iApply semWP2_call_inline.
-      iSpecialize ("Hk" with "[$Htrip $Hpc $Hnpc $Hinstr $Hoff]").
+      iSpecialize ("Hk" with "[$Htrip $Hpc $Hnpc Hinstr $Hoff]");
+        first (iEval (rewrite ptsto_instrs_cons ptsto_instrs_nil); by iFrame).
       iApply (semWP2_mono with "Hk").
       iIntros (? ? ? ?) "(<- & _ & $)"; auto.
     Qed.
@@ -403,18 +418,22 @@ Module BinaryBlockVerifier
       iInduction instrs as [|i instrs] "IH" forall (instr a apc POST);
         iIntros "Hp Hpro Htrip Hk"; cbn;
         iDestruct "Htrip" as "(<- & Htrip)";
-        iDestruct "Hpro" as "(Hpc & (Hinstr & Hinstrs) & Hnpc)";
+        iDestruct "Hpro" as "(Hpc & Hinstrs & Hnpc)";
+        iEval (rewrite RVPCOM.ptsto_instrs_cons) in "Hinstrs";
+        iDestruct "Hinstrs" as "(Hinstr & Hinstrs)";
         iSpecialize ("Htrip" with "[$Hpc $Hinstr $Hnpc]");
         iApply (WP2_loop_step_left with "Hp");
         iApply (RVPBASEl.semTWP_mono with "Htrip");
         iIntros ([v|m] δ) "H"; cbn; try done;
         iDestruct "H" as "(%na & (Hpc & Hinstr & Hnpc) & Htrip)";
         iIntros "Hp".
-      - iApply ("Hk" with "[$Htrip $Hpc $Hinstr $Hnpc $Hp]").
+      - iApply ("Hk" with "[$Htrip $Hpc $Hnpc $Hp Hinstr Hinstrs]").
+        iEval (rewrite RVPCOM.ptsto_instrs_cons). iFrame.
       - iApply ("IH" with "Hp [$Hpc $Hinstrs Hnpc] Htrip [Hinstr Hk]").
         + by iExists _.
         + iIntros (an) "(HPOST & (Hpc & Hinstrs & Hnpc) & Hp)".
-          iApply ("Hk" with "[$HPOST $Hpc $Hinstr $Hinstrs $Hnpc $Hp]").
+          iApply ("Hk" with "[$HPOST $Hpc $Hnpc $Hp Hinstr Hinstrs]").
+          iEval (rewrite RVPCOM.ptsto_instrs_cons). iFrame.
     Qed.
 
     Lemma WP2_loop_step_n_right {R : iProp Σ} (instr : AST) (instrs : list AST) (a apc : Val ty_xlenbits)
@@ -428,18 +447,22 @@ Module BinaryBlockVerifier
       iInduction instrs as [|i instrs] "IH" forall (instr a apc POST);
         iIntros "Hp Hpro Htrip Hk"; cbn;
         iDestruct "Htrip" as "(<- & Htrip)";
-        iDestruct "Hpro" as "(Hpc & (Hinstr & Hinstrs) & Hnpc)";
+        iDestruct "Hpro" as "(Hpc & Hinstrs & Hnpc)";
+        iEval (rewrite RVPCOM.ptsto_instrs_cons) in "Hinstrs";
+        iDestruct "Hinstrs" as "(Hinstr & Hinstrs)";
         iSpecialize ("Htrip" with "[$Hpc $Hinstr $Hnpc]");
         iApply (WP2_loop_step_right with "Hp");
         iApply (RVPBASEr.semTWP_mono with "Htrip");
         iIntros ([v|m] δ) "H"; cbn; try done;
         iDestruct "H" as "(%na & (Hpc & Hinstr & Hnpc) & Htrip)";
         iIntros "Hp".
-      - iApply ("Hk" with "[$Htrip $Hpc $Hinstr $Hnpc $Hp]").
+      - iApply ("Hk" with "[$Htrip $Hpc $Hnpc $Hp Hinstr Hinstrs]").
+        iEval (rewrite RVPCOM.ptsto_instrs_cons). iFrame.
       - iApply ("IH" with "Hp [$Hpc $Hinstrs Hnpc] Htrip [Hinstr Hk]").
         + by iExists _.
         + iIntros (an) "(HPOST & (Hpc & Hinstrs & Hnpc) & Hp)".
-          iApply ("Hk" with "[$HPOST $Hpc $Hinstr $Hinstrs $Hnpc $Hp]").
+          iApply ("Hk" with "[$HPOST $Hpc $Hnpc $Hp Hinstr Hinstrs]").
+          iEval (rewrite RVPCOM.ptsto_instrs_cons). iFrame.
     Qed.
 
     Lemma WP2_loop_semTripleBlock_left {R : iProp Σ} : ∀ PRE a instrs POST,

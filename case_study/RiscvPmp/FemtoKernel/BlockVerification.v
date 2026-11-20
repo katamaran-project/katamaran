@@ -1081,6 +1081,7 @@ Section Shared.
       rewrite bv.seq_add ?big_opL_app; [|lia..].
       destruct Hmeminstrs as [Hinstr Hmeminstrs].
       iDestruct "Hmem" as "[Hmema Hmema4]".
+      rewrite RVPCOM.ptsto_instrs_cons.
       iSplitL "Hmema".
       + iApply (intro_ptsto_instr with "Hmema"); auto; Lia.lia.
       + rewrite (@bv.add_comm _ a bv_instrsize).

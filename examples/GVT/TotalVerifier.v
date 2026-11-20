@@ -296,7 +296,16 @@ Section BlockVerificationDerived.
       | cons inst insts => (interp_ptsto_instr a inst ∗ ptsto_instrs (bv.add a bv_instrsize) insts)%I
       | nil => True%I
       end.
+    #[global] Typeclasses Opaque ptsto_instrs.
     (* Arguments ptsto_instrs {Σ H} a%_Z_scope instrs%_list_scope : simpl never. *)
+
+    Lemma ptsto_instrs_nil a : ptsto_instrs a [] ⊣⊢ True.
+    Proof. done. Qed.
+
+    Lemma ptsto_instrs_cons a instr instrs :
+      ptsto_instrs a (instr :: instrs)
+        ⊣⊢ interp_ptsto_instr a instr ∗ ptsto_instrs (bv.add a bv_instrsize) instrs.
+    Proof. done. Qed.
 
     Lemma ptsto_instrs_app {a : Val ty_xlenbits} {instrs1 instrs2 : list AST} :
       ptsto_instrs a (instrs1 ++ instrs2)
@@ -529,7 +538,8 @@ Section BlockVerificationDerived.
         iDestruct "H" as "(%na & (Hpc & Hinstr & Hnpc) & Htrip)".
         iApply semWP_call_inline.
         destruct instrs.
-        + cbn. now iApply ("Hk" with "[$Htrip $Hpc $Hinstr $Hnpc]").
+        + cbn. iApply ("Hk" with "[$Htrip $Hpc $Hnpc Hinstr]").
+            iEval (rewrite ptsto_instrs_cons ptsto_instrs_nil). by iFrame.
         + cbn. iDestruct "Htrip" as "(<- & Htrip)".
           iApply ("IH" $! (λ _, True)%I _ (λ a' an, ⌜a' = bv.add a bv_instrsize⌝ ∗ POST a an)%I with "[$Hpc $Hinstrs $Hnpc] [] [Htrip]");
             auto.
@@ -540,7 +550,8 @@ Section BlockVerificationDerived.
             iApply (step_n_mono with "H").
             iIntros (an) "$"; auto. }
           iIntros (an) "([-> HPOST] & Hpc & Hinstrs & Hnpc)".
-          iApply ("Hk" with "[$HPOST $Hpc $Hnpc $Hinstr $Hinstrs]").
+          iApply ("Hk" with "[$HPOST $Hpc $Hnpc Hinstr Hinstrs]").
+          iEval (rewrite ptsto_instrs_cons). iFrame.
     Qed.
   End Soundness.
 

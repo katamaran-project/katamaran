@@ -516,7 +516,8 @@ Module Type RiscvPmpBlockVerifTotalVerifier
           iDestruct "H" as "(%na & (Hpc & Hinstr & Hnpc) & Htrip)".
           iApply semWP_call_inline.
           destruct instrs.
-          + cbn. now iApply ("Hk" with "[$Htrip $Hpc $Hinstr $Hnpc]").
+          + cbn. iApply ("Hk" with "[$Htrip $Hpc $Hnpc Hinstr]").
+            iEval (rewrite ptsto_instrs_cons ptsto_instrs_nil). by iFrame.
           + cbn. iDestruct "Htrip" as "(<- & Htrip)".
             iApply ("IH" $! (λ _, True)%I _ (λ a' an, ⌜a' = bv.add a bv_instrsize⌝ ∗ POST a an)%I with "[$Hpc $Hinstrs $Hnpc] [] [Htrip]");
               auto.
@@ -527,7 +528,8 @@ Module Type RiscvPmpBlockVerifTotalVerifier
               iApply (step_n_mono with "H").
               iIntros (an) "$"; auto. }
             iIntros (an) "([-> HPOST] & Hpc & Hinstrs & Hnpc)".
-            iApply ("Hk" with "[$HPOST $Hpc $Hnpc $Hinstr $Hinstrs]").
+            iApply ("Hk" with "[$HPOST $Hpc $Hnpc Hinstr Hinstrs]").
+            iEval (rewrite ptsto_instrs_cons). iFrame.
       Qed.
     End Soundness.
 

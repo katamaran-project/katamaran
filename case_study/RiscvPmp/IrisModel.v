@@ -328,7 +328,19 @@ Module Type RiscvPmpIrisBaseCommon <: IrisPrelims RiscvPmpBase RiscvPmpProgram R
       | cons inst insts => (interp_ptsto_instr a inst ∗ ptsto_instrs (bv.add a bv_instrsize) insts)%I
       | nil => True%I
       end.
+    (* Iris proof-mode tactics must not unfold [ptsto_instrs] while searching for
+       instances: the instruction lists are unevaluated expressions whose size
+       grows exponentially when the search reduces them one instruction at a time. *)
+    #[global] Typeclasses Opaque ptsto_instrs.
     (* Arguments ptsto_instrs {Σ H} a%_Z_scope instrs%_list_scope : simpl never. *)
+
+    Lemma ptsto_instrs_nil a : ptsto_instrs a [] ⊣⊢ True.
+    Proof. done. Qed.
+
+    Lemma ptsto_instrs_cons a instr instrs :
+      ptsto_instrs a (instr :: instrs)
+        ⊣⊢ interp_ptsto_instr a instr ∗ ptsto_instrs (bv.add a bv_instrsize) instrs.
+    Proof. done. Qed.
 
     Lemma ptsto_instrs_app {a : Val ty_xlenbits} {instrs1 instrs2 : list AST} :
       ptsto_instrs a (instrs1 ++ instrs2)
