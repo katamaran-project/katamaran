@@ -240,6 +240,14 @@ Section Loop.
       transition TT_MRET archstate.
     Definition SRET (archstate : ArchState) : iProp Σ :=
       transition TT_SRET archstate.
+    (* [cbn]/[simpl] must not unfold the transition targets: their unfolding is
+       a large [asn.interpret] term, which makes every later tactic on the goal
+       slow. Unfold them explicitly where needed. *)
+    #[global] Arguments Execution : simpl never.
+    #[global] Arguments M_CSRMod : simpl never.
+    #[global] Arguments M_Trap : simpl never.
+    #[global] Arguments MRET : simpl never.
+    #[global] Arguments SRET : simpl never.
 
     (* LoopBody_post is not a "TransitionTarget" but simply groups the possibilities
        back together using disjunction. *)
