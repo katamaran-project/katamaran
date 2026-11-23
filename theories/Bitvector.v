@@ -1896,6 +1896,20 @@ Module bv.
       now rewrite <- of_Z_add, of_Z_nat, of_Z_unsigned.
     Qed.
 
+    Lemma seq_of_N_add {n} (a l1 l2 : N) :
+      seq (@of_N n a) (Z.of_N (l1 + l2)) =
+      (seq (of_N a) (Z.of_N l1) ++ seq (of_N (a + l1)) (Z.of_N l2))%list.
+    Proof.
+      rewrite N2Z.inj_add, seq_add by lia.
+      now rewrite of_Z_N, of_N_add.
+    Qed.
+
+    Lemma seq_of_N_app {n} (a b l1 l2 : N) :
+      b = (a + l1)%N ->
+      (seq (@of_N n a) (Z.of_N l1) ++ seq (of_N b) (Z.of_N l2))%list =
+      seq (of_N a) (Z.of_N (l1 + l2)).
+    Proof. intros ->. symmetry. apply seq_of_N_add. Qed.
+
     Lemma lookup_seq {n} (s : bv n) l k y :
       seq s l !! k = Some y <->
       y = add s (of_nat k) /\ (Z.of_nat k < l)%Z.

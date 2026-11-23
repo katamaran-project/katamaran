@@ -1433,7 +1433,9 @@ Module inv := invariants.
                                         bv.seq (bv.of_N mmio_handler_addr_block2) (Z.of_N mmio_handler_size_block2) ++
                                        (bv.seq (bv.of_N data_addr) (Z.of_N data_size) (* There is no data; conjunct is just here for conformity *)) ++ advAddrs.
   Proof.
-    rewrite liveAddrs_eq. by vm_compute.
+    rewrite liveAddrs_eq /liveAddrs_def /advAddrs -?nat_N_Z.
+    repeat (rewrite bv.seq_of_N_app; last reflexivity).
+    by congr (bv.seq (bv.of_N _) (Z.of_N _)).
   Qed.
 
   Lemma intro_ptstomem_word `{sailGS Σ, iostateG IOState Σ} v0 v1 v2 v3 (a : Val ty_word) :
