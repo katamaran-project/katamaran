@@ -1434,7 +1434,7 @@ Module inv := invariants.
                                        (bv.seq (bv.of_N data_addr) (Z.of_N data_size) (* There is no data; conjunct is just here for conformity *)) ++ advAddrs.
   Proof.
     rewrite liveAddrs_eq /liveAddrs_def /advAddrs -?nat_N_Z.
-    repeat (rewrite bv.seq_of_N_app; last reflexivity).
+    repeat erewrite bv.seq_of_N_app by reflexivity.
     by congr (bv.seq (bv.of_N _) (Z.of_N _)).
   Qed.
 
