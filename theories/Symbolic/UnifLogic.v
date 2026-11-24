@@ -2053,8 +2053,9 @@ Module Type UnifLogicOn
      Logical relations. Proving [ℛ⟦R⟧ v vs] by recursion on [R], [v] and [vs]
      is proving the fundamental lemma of the logical relation for this one
      pair of terms. Each case of that proof is a step of the solver:
-     - at [RA -> RB], [□ᵣ R] and [∀ᵣ], introduce related arguments, a future
-       world, or a value ([rimpl_intro], [rbox_intro], [rforall_intro]);
+     - at [RA -> RB], [□ᵣ R], [∀ᵣ] and [RMsg], introduce related arguments, a
+       future world, a value or a message ([rimpl_intro], [rbox_intro],
+       [rforall_intro], [rmsg_intro]);
      - a pair of applications [f a] versus [fs sa] is related if [f] and [fs]
        are related at some [RA -> R], and [a] and [sa] at [RA] ([rpeel]);
      - a pair of constants is related by a [Related] instance, like [Proper]
@@ -2301,6 +2302,10 @@ Module Type UnifLogicOn
       exact (bi.forall_elim (Ψ := fun K => ℛ⟦RA K⟧ (f K) (fs K)) K).
     Qed.
 
+    Lemma rmsg_intro {M : TYPE} `{R : Rel SA CA} {w} {Γ : Pred w} {v} {vs : Impl M SA w} :
+      (∀ m, Γ ⊢ ℛ⟦R⟧ v (vs m)) → Γ ⊢ ℛ⟦RMsg M R⟧ v vs.
+    Proof. intros H. unfold RMsg; cbn [RSat]. apply bi.forall_intro => m. apply H. Qed.
+
     Lemma rmsg_elim {M : TYPE} `{R : Rel SA CA} {w} {Γ : Pred w} {v} {vs : Impl M SA w} {m} :
       (Γ ⊢ ℛ⟦RMsg M R⟧ v vs) → Γ ⊢ ℛ⟦R⟧ v (vs m).
     Proof.
@@ -2323,6 +2328,16 @@ Module Type UnifLogicOn
       etrans; [apply bi.and_intro; [reflexivity|exact H]|].
       rewrite bi.and_exist_l. apply bi.exist_elim => e.
       apply (HQ e); unfold rext; [apply bi.and_elim_l|apply bi.and_elim_r].
+    Qed.
+
+    Lemma rprod_elim `{RA : Rel AT A, RB : Rel BT B} {w} {Γ Q : Pred w}
+      {a b} {sa : AT w} {sb : BT w} :
+      (Γ ⊢ ℛ⟦RProd RA RB⟧ (a, b) (sa, sb)) →
+      (∀ Γ' : Pred w, rext Γ' Γ → (Γ' ⊢ ℛ⟦RA⟧ a sa) → (Γ' ⊢ ℛ⟦RB⟧ b sb) → Γ' ⊢ Q) →
+      Γ ⊢ Q.
+    Proof.
+      intros H HQ. apply (HQ Γ); unfold rext; [reflexivity| |];
+        rewrite H; cbn [RProd RSat]; [apply bi.sep_elim_l|apply bi.sep_elim_r]; tc_solve.
     Qed.
 
     (* ---------------------------------------------------------------------- *)
@@ -2436,6 +2451,8 @@ Module Type UnifLogicOn
           nrefine (rbox_intro _); intros ?w ?ω ?Γ ?Hle
       | [ |- _ ⊢ @RSat _ _ (RForall _) _ _ _ ] =>
           nrefine (rforall_intro _); intro; cbv beta
+      | [ |- _ ⊢ @RSat _ _ (RMsg _ _) _ _ _ ] =>
+          nrefine (rmsg_intro _); intros ?m; cbv beta
       end.
 
     (* [rfun] synthesizes the relation [?RA -> R] of a function [f] versus
@@ -2460,8 +2477,8 @@ Module Type UnifLogicOn
       end.
 
     (* Matches on both sides: on the same closed term [x], [destruct x]; on
-       variables [x] and [sx] related at [RMatchResult p], destruct both and
-       relate the matched values. *)
+       variables [x] and [sx] related at [RMatchResult p] or [RProd RA RB],
+       destruct both and relate the matched values. *)
     Ltac2 rdestruct () : unit :=
       lazy_match! goal with
       | [ |- _ ⊢ @RSat _ _ _ (match ?x with _ => _ end) _ (match ?x with _ => _ end) ] =>
@@ -2478,6 +2495,14 @@ Module Type UnifLogicOn
           nrefine (rmatchresult_elim $hyp:hm _);
           let ha := Fresh.in_goal @Ha in
           intros ?e ?Γ ?Hle $ha; subst; cbn [eq_rect] in $ha
+      | [ _ : _ ⊢ @RSat _ _ (RProd ?ra ?rb) ?x _ ?sx
+          |- ?g ⊢ @RSat _ _ _ (match ?x with _ => _ end) _ (match ?sx with _ => _ end) ] =>
+          guard (Bool.and (Constr.is_var x) (Constr.is_var sx));
+          let hp := Fresh.in_goal @Hp in
+          assert ($hp : $g ⊢ ℛ⟦RProd $ra $rb⟧ $x $sx) by (rhyp_walk ());
+          destruct $x as [?a ?b], $sx as [?sa ?sb];
+          nrefine (rprod_elim $hyp:hp _);
+          intros ?Γ ?Hle ?Ha ?Hb
       end.
 
     (* One step. At a relational goal: cheap closing steps first, then an
