@@ -445,12 +445,12 @@ Module Type Soundness
     Lemma shallow_vcgen_soundness {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) :
       Shallow.ValidContract c body ->
       ProgLog.ValidContract c body.
-    Proof. apply vcgen_sound. Qed.
+    Proof. apply (vcgen_sound default_config). Qed.
 
     Lemma shallow_vcgen_fuel_soundness {Δ τ} (fuel : nat) (c : SepContract Δ τ) (body : Stm Δ τ) :
       Shallow.ValidContractWithFuel fuel c body ->
       ProgLog.ValidContract c body.
-    Proof. apply vcgen_sound. Qed.
+    Proof. apply (vcgen_sound default_config). Qed.
 
     (* Print Assumptions shallow_vcgen_soundnes. *)
 
