@@ -1491,10 +1491,13 @@ Module Type UnifLogicOn
       Related RUnit u w su :=
       refine_unit.
 
-    #[export] Instance refine_pair {AT A} {RA : Rel AT A} {BT B} {RB : Rel BT B} {w} :
-      Related (RA -> RB -> RProd RA RB) pair w (@pair (AT w) (BT w)).
+    (* The symbolic [pair] is a premise, so that instance search knows [AT],
+       [BT] and [w] before it unifies [?BT ?w] with e.g. [SStore Γ (wctx w)]. *)
+    #[export] Instance refine_pair {AT A} {RA : Rel AT A} {BT B} {RB : Rel BT B} {w}
+      {sp} {Hsp : TCEq sp (@pair (AT w) (BT w))} :
+      Related (RA -> RB -> RProd RA RB) pair w sp.
     Proof.
-      unfold Related.
+      apply TCEq_eq in Hsp. subst sp. unfold Related.
       crushPredEntails3.
       now constructor.
     Qed.
