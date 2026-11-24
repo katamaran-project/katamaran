@@ -83,7 +83,7 @@ Module RefineExecOn
     (* Instance search does not unfold the concrete operations, so their
        instances are indexed, and tried, by their head. *)
     #[export] Typeclasses Opaque CStoreT.assign CStoreT.bind
-      CStoreT.block CStoreT.eval_exp CStoreT.eval_exps
+      CStoreT.block CStoreT.debug CStoreT.eval_exp CStoreT.eval_exps
       CStoreT.evalStoreT CStoreT.get_local CStoreT.lift_heapspec
       CStoreT.lift_purespec CStoreT.pure CStoreT.pushpop
       CStoreT.pushspops CStoreT.put_local.
@@ -160,19 +160,13 @@ Module RefineExecOn
       iIntros (msg k ks) "Hk %s %ss Hs %h %hs Hh []".
     Qed.
 
-    Lemma refine_debug `{R : Rel AT A}
-      {Γ1 Γ2} {w0 : World} {f ms mc} :
-      ℛ⟦RStoreT Γ1 Γ2 R⟧ mc ms ⊢
-                   ℛ⟦RStoreT Γ1 Γ2 R⟧ mc (@SStoreT.debug AT Γ1 Γ2 w0 f ms).
+    #[export] Instance refine_debug `{R : Rel AT A} {Γ1 Γ2} {w : World} :
+      Related (RMsg _ (RStoreT Γ1 Γ2 R -> RStoreT Γ1 Γ2 R))
+        CStoreT.debug w (SStoreT.debug (w := w)).
     Proof.
-      iIntros "Hm %K %Ks HK %s %ss Hs %h %hs Hh HSP".
-      iApply ("Hm" with "HK Hs Hh [HSP]").
-      now iApply elim_debugPred.
+      unfold Related, RMsg, RStoreT, CStoreT.debug, SStoreT.debug; cbn [RSat].
+      apply bi.forall_intro; intros msg. solve_related.
     Qed.
-
-    #[export] Instance refine_compat_debug `{R : Rel AT A} {Γ1 Γ2} {w0 : World} {f} {mc ms} :
-      RelatedFrom (RStoreT Γ1 Γ2 R) mc w0 (@SStoreT.debug AT Γ1 Γ2 w0 f ms) _ :=
-      refine_debug.
 
     #[export] Instance refine_demonic_pattern_match {N : Set} (n : N -> LVar) {Γ σ} (pat : Pattern (N:=N) σ) {w} :
       Related (RVal σ -> RStoreT Γ Γ (RMatchResult pat))
@@ -356,21 +350,21 @@ Module RefineExecOn
 
     #[export] Instance refine_debug_lemma [Δ] (l : 𝑳 Δ) w :
       Related (RStore Δ -> RHeapSpec RUnit)
-        (SHAL.debug_lemma l) w (SYMB.debug_lemma cfg l (w := w)).
+        (SHAL.debug_lemma cfg l) w (SYMB.debug_lemma cfg l (w := w)).
     Proof.
       unfold SHAL.debug_lemma, SYMB.debug_lemma.
       destruct config_debug_lemma; solve_related.
     Qed.
 
     #[export] Instance refine_exec_lemma :
-      RefineExecLemma cexec_lemma (sexec_lemma cfg).
+      RefineExecLemma (cexec_lemma cfg) (sexec_lemma cfg).
     Proof.
       unfold cexec_lemma, sexec_lemma; intros. solve_related.
     Qed.
 
     #[export] Instance refine_debug_call [Δ τ] (f : 𝑭 Δ τ) w :
       Related (RStore Δ -> RHeapSpec RUnit)
-        (SHAL.debug_call f) w (SYMB.debug_call cfg f (w := w)).
+        (SHAL.debug_call cfg f) w (SYMB.debug_call cfg f (w := w)).
     Proof.
       unfold SHAL.debug_call, SYMB.debug_call.
       destruct config_debug_function; solve_related.
@@ -384,13 +378,13 @@ Module RefineExecOn
     Qed.
 
     #[export] Instance refine_exec_call (fuel : nat) :
-      RefineExecCall (cexec_call fuel) (sexec_call cfg fuel).
+      RefineExecCall (cexec_call cfg fuel) (sexec_call cfg fuel).
     Proof.
       induction fuel; intros; cbn; solve_related.
     Qed.
 
     #[export] Instance refine_exec (fuel : nat) :
-      RefineExec (cexec fuel) (sexec cfg fuel).
+      RefineExec (cexec cfg fuel) (sexec cfg fuel).
     Proof.
       unfold cexec, sexec; intros; solve_related.
     Qed.
@@ -407,7 +401,7 @@ Module RefineExecOn
     Context {SPEC : Specification}.
 
     #[export] Instance refine_vcgen (cfg : Config) (fuel : nat) {Γ τ} (c : SepContract Γ τ) (body : Stm Γ τ) w :
-      Related (RProp) (SHAL.vcgen fuel c body) w (SYMB.vcgen cfg fuel c body w).
+      Related (RProp) (SHAL.vcgen cfg fuel c body) w (SYMB.vcgen cfg fuel c body w).
     Proof.
       iApply HeapSpec.refine_run.
       iApply StoreT.refine_exec_contract.

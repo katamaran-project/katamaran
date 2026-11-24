@@ -396,21 +396,6 @@ Module Type SymbolicExecOn
 
   End VerificationConditions.
 
-  Section Configuration.
-
-    Record Config : Type :=
-      MkConfig
-        { config_debug_function : forall Δ τ, 𝑭 Δ τ -> bool;
-          config_debug_lemma : forall Δ, 𝑳 Δ -> bool;
-        }.
-
-    Definition default_config : Config :=
-      {| config_debug_function _ _ f := false;
-         config_debug_lemma _ l := false;
-      |}.
-
-  End Configuration.
-
   Definition SStoreT (Γ1 Γ2 : PCtx) (A : TYPE) : TYPE :=
     □(A -> SStore Γ2 -> SHeap -> 𝕊) -> SStore Γ1 -> SHeap -> 𝕊.
 

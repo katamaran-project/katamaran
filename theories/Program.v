@@ -221,6 +221,20 @@ Module Type ProgramMixin (Import B : Base)
     CallGraphWellFormed generic_call_graph.
   Proof. intros Δ τ f. now apply InvokedByStmList_WellFormed. Qed.
 
+  (* Which calls the executors mark with a debug node. *)
+  Record Config : Type :=
+    MkConfig
+      { config_debug_function : forall Δ τ, 𝑭 Δ τ -> bool;
+        config_debug_lemma : forall Δ, 𝑳 Δ -> bool;
+      }.
+  #[global] Arguments config_debug_function _ [Δ τ] f.
+  #[global] Arguments config_debug_lemma _ [Δ] l.
+
+  Definition default_config : Config :=
+    {| config_debug_function _ _ f := false;
+       config_debug_lemma _ l := false;
+    |}.
+
   Module AccessibleTactics.
     Ltac accessible_proof :=
       apply callgraph.accessible_intro;

@@ -337,6 +337,14 @@ Module Type Soundness
 
     End WithExec.
 
+    Section WithConfig.
+
+    Variable cfg : Config.
+
+    Lemma wp_debug_call {Δ τ} (f : 𝑭 Δ τ) args Φ h :
+      debug_call cfg f args Φ h <-> Φ tt h.
+    Proof. unfold debug_call. now destruct config_debug_function. Qed.
+
     Lemma sound_cexec_call_foreign : SoundExecCallForeign cexec_call_foreign.
     Proof.
       unfold SoundExecCallForeign, cexec_call_foreign.
@@ -352,10 +360,10 @@ Module Type Soundness
       apply bi.and_mono'; auto.
     Qed.
 
-    Lemma sound_cexec_lemma : SoundExecLemma cexec_lemma.
+    Lemma sound_cexec_lemma : SoundExecLemma (cexec_lemma cfg).
     Proof.
-      unfold SoundExecLemma, cexec_lemma. intros *.
-      now apply call_lemma_sound.
+      unfold SoundExecLemma, cexec_lemma, debug_lemma. intros *.
+      destruct config_debug_lemma; now apply call_lemma_sound.
     Qed.
 
     Lemma sound_cexec_fail : SoundExecFail cexec_fail.
@@ -370,9 +378,10 @@ Module Type Soundness
       - destruct HYP.
     Qed.
 
-    Lemma sound_cexec_call (fuel : nat) : SoundExecCall (cexec_call fuel).
+    Lemma sound_cexec_call (fuel : nat) : SoundExecCall (cexec_call cfg fuel).
     Proof.
-      induction fuel; unfold SoundExecCall, evalStoreT; cbn; intros.
+      induction fuel; unfold SoundExecCall, evalStoreT; cbn; intros;
+        cbv [CHeapSpec.bind] in H; rewrite wp_debug_call in H.
       - destruct (CEnv f) as [c|] eqn:?.
         + apply call_contract_sound in H.
           apply rule_stm_call with c; auto. clear Heqo.
@@ -410,7 +419,7 @@ Module Type Soundness
           * apply sound_cexec_fail.
     Qed.
 
-    Lemma sound_cexec (fuel : nat) : SoundExec (cexec fuel).
+    Lemma sound_cexec (fuel : nat) : SoundExec (cexec cfg fuel).
     Proof.
       apply exec_aux_sound.
       - apply sound_cexec_call_foreign.
@@ -420,7 +429,7 @@ Module Type Soundness
     Qed.
 
     Lemma vcgen_sound fuel {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) :
-      vcgen fuel c body ->
+      vcgen cfg fuel c body ->
       ProgLog.ValidContract c body.
     Proof.
       cbv [vcgen CHeapSpec.run ProgLog.ValidContract]. intros HYP ι.
@@ -430,6 +439,8 @@ Module Type Soundness
       intros ? _.
       apply bi.sep_elim_l; auto with typeclass_instances.
     Qed.
+
+    End WithConfig.
 
     Lemma shallow_vcgen_soundness {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) :
       Shallow.ValidContract c body ->

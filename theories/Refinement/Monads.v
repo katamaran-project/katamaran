@@ -1290,16 +1290,6 @@ Module Type RefinementMonadsOn
       iApply "rm"; auto.
     Qed.
 
-    (* [CHeapSpec.debug m] reduces to [m]. *)
-    #[export] Instance refine_compat_debug_reduced `{RA : Rel SA CA} {w msg} {mc ms} :
-      RelatedFrom (RHeapSpec RA) mc w (SHeapSpec.debug (w := w) msg ms) (ℛ⟦RHeapSpec RA⟧ mc ms) | 10.
-    Proof. unfold RelatedFrom. iIntros "H". iApply (refine_debug (RA := RA) $! msg mc ms with "H"). Qed.
-
-    (* A [debug] only on the concrete side. *)
-    #[export] Instance refine_compat_debug_concrete `{RA : Rel SA CA} {w} {mc ms} :
-      RelatedFrom (RHeapSpec RA) (CHeapSpec.debug mc) w ms (ℛ⟦RHeapSpec RA⟧ mc ms) | 10.
-    Proof. unfold RelatedFrom. now iIntros "H". Qed.
-
     #[export] Instance refine_assert_formula {w} :
       Related (RMsg _ (RFormula -> RHeapSpec RUnit))
         CHeapSpec.assert_formula w (SHeapSpec.assert_formula (w := w)).

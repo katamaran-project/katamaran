@@ -192,7 +192,7 @@ Module Type RiscvPmpBlockVerifTotalVerifier
           _ <- produce
                  (exec_instruction_prologue i)
                  [env].["a"∷_ ↦ a] ;;
-          _ <- evalStoreT (cexec inline_fuel (FunDef loop_body)) [env] ;;
+          _ <- evalStoreT (cexec default_config inline_fuel (FunDef loop_body)) [env] ;;
           na <- angelic _ ;;
           _ <- consume
                  (exec_instruction_epilogue i)

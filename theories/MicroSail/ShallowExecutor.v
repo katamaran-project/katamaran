@@ -124,6 +124,8 @@ Module Type ShallowExecOn
         fun POST δ h => FALSE.
       Definition block {Γ1 Γ2 A} : CStoreT Γ1 Γ2 A :=
         fun POST δ h => TRUE.
+      Definition debug {Γ1 Γ2 A} : CStoreT Γ1 Γ2 A -> CStoreT Γ1 Γ2 A :=
+        fun m => m.
 
       Definition demonic_pattern_match {N : Set} {Γ σ} (pat : Pattern (N:=N) σ) (v : Val σ) :
         CStoreT Γ Γ (MatchResult pat) :=
@@ -226,7 +228,7 @@ Module Type ShallowExecOn
               v <- exec_aux s ;;
               exec_aux (k v)
           | stm_debugk k =>
-              exec_aux k
+              debug (exec_aux k)
           end.
 
     End ExecAux.
@@ -264,6 +266,10 @@ Module Type ShallowExecOn
       #[export] Instance mon_block `{MA : relation A} {Γ1 Γ2} :
         Proper (MStoreT Γ1 Γ2 MA) block.
       Proof. easy. Qed.
+
+      #[export] Instance mon_debug `{MA : relation A} {Γ1 Γ2} :
+        Proper (MStoreT Γ1 Γ2 MA ==> MStoreT Γ1 Γ2 MA) debug.
+      Proof. now unfold debug. Qed.
 
       Lemma wp_demonic_pattern_match {N : Set} {Γ σ} (pat : Pattern (N:=N) σ) (v : Val σ)
         (Φ : MatchResult pat -> CStore Γ -> SCHeap -> Prop) (δ : CStore Γ) (h : SCHeap) :
@@ -352,8 +358,12 @@ Module Type ShallowExecOn
       fun Δ τ f args =>
         CHeapSpec.call_contract (CEnvEx f) args.
 
-    Definition debug_lemma [Δ] (f : 𝑳 Δ) (args : CStore Δ) : CHeapSpec unit :=
-      CHeapSpec.pure tt.
+    Variable cfg : Config.
+
+    Definition debug_lemma [Δ] (l : 𝑳 Δ) (args : CStore Δ) : CHeapSpec unit :=
+      if config_debug_lemma cfg l
+      then CHeapSpec.debug (CHeapSpec.pure tt)
+      else CHeapSpec.pure tt.
 
     Definition cexec_lemma {SPEC : Specification} : ExecLemma :=
       fun Δ l args =>
@@ -361,7 +371,9 @@ Module Type ShallowExecOn
         CHeapSpec.call_lemma (LEnv l) args.
 
     Definition debug_call [Δ τ] (f : 𝑭 Δ τ) (args : CStore Δ) : CHeapSpec unit :=
-      CHeapSpec.pure tt.
+      if config_debug_function cfg f
+      then CHeapSpec.debug (CHeapSpec.pure tt)
+      else CHeapSpec.pure tt.
 
     Definition cexec_fail {SPEC : Specification} : ExecFail :=
       fun Γ τ s => if fail_rule_pre then CStoreT.block else CStoreT.error.
@@ -410,34 +422,37 @@ Module Type ShallowExecOn
       MonotonicExecCallForeign cexec_call_foreign.
     Proof. solve_monotonic. Qed.
 
-    #[export] Instance mon_cexec_lemma {SPEC : Specification} :
-      MonotonicExecLemma cexec_lemma.
-    Proof. unfold cexec_lemma, debug_lemma. solve_monotonic. Qed.
+    #[export] Instance mon_cexec_lemma {SPEC : Specification} (cfg : Config) :
+      MonotonicExecLemma (cexec_lemma cfg).
+    Proof.
+      unfold cexec_lemma, debug_lemma; intros.
+      destruct config_debug_lemma; solve_monotonic.
+    Qed.
 
     #[export] Instance mon_cexec_fail {SPEC : Specification} : MonotonicExecFail cexec_fail.
     Proof. unfold cexec_fail; destruct fail_rule_pre; solve_monotonic. Qed.
 
-    #[export] Instance mon_cexec_call {SPEC : Specification} (fuel : nat) :
-      MonotonicExecCall (cexec_call fuel).
+    #[export] Instance mon_cexec_call {SPEC : Specification} (cfg : Config) (fuel : nat) :
+      MonotonicExecCall (cexec_call cfg fuel).
     Proof.
-      induction fuel; intros; cbn; unfold debug_call; destruct CEnv;
-        solve_monotonic.
+      induction fuel; intros; cbn; unfold debug_call;
+        destruct config_debug_function, CEnv; solve_monotonic.
     Qed.
 
-    #[export] Instance mon_cexec {SPEC : Specification} (fuel : nat) :
-      MonotonicExec (cexec fuel).
+    #[export] Instance mon_cexec {SPEC : Specification} (cfg : Config) (fuel : nat) :
+      MonotonicExec (cexec cfg fuel).
     Proof. unfold cexec. solve_monotonic. Qed.
 
   End Monotonicity.
 
-  Definition vcgen {SPEC : Specification} (inline_fuel : nat) {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
-    CHeapSpec.run (exec_contract (cexec inline_fuel) c body).
+  Definition vcgen {SPEC : Specification} (cfg : Config) (inline_fuel : nat) {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
+    CHeapSpec.run (exec_contract (cexec cfg inline_fuel) c body).
 
   Module Shallow.
 
     Definition ValidContractWithFuel {SPEC : Specification} {Δ τ} (fuel : nat)
       (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
-      vcgen fuel c body.
+      vcgen default_config fuel c body.
 
     Definition ValidContract {SPEC : Specification} {Δ τ} (c : SepContract Δ τ)
       (body : Stm Δ τ) : Prop :=
