@@ -235,12 +235,6 @@ Module RiscvPmpBlockVerifPartialVerifier
         na   <- cexec_block_addr b a a ;;
         consume ens lenv.["a"∷ty_xlenbits ↦ a].["an"∷ty_xlenbits ↦ na].
 
-      Definition cblock_verification_condition {Σ : LCtx}
-        (req : Assertion (Σ ▻ "a"∷ty_xlenbits)) (b : list AST)
-        (ens : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits)) : Prop :=
-        (* CHeapSpec.run does not perform a leakcheck. We could include one here. *)
-        CHeapSpec.run (cexec_triple_addr req b ens).
-
       Import (hints) CStoreT.
 
       #[export] Instance mon_cexec_instruction {i a} :
@@ -250,6 +244,12 @@ Module RiscvPmpBlockVerifPartialVerifier
       #[export] Instance mon_cexec_block_addr {instrs ainstr apc} :
         Proper (MHeapSpec eq) (cexec_block_addr instrs ainstr apc).
       Proof. revert ainstr apc. induction instrs; cbn [cexec_block_addr]; solve_monotonic. Qed.
+
+      Definition cblock_verification_condition {Σ : LCtx}
+        (req : Assertion (Σ ▻ "a"∷ty_xlenbits)) (b : list AST)
+        (ens : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits)) : Prop :=
+        (* CHeapSpec.run does not perform a leakcheck. We could include one here. *)
+        CHeapSpec.run (cexec_triple_addr req b ens).
 
     End Shallow.
 
@@ -610,12 +610,6 @@ Module RiscvPmpBlockVerifPartialVerifier
         na <- cexec_annotated_block_addr b a a ;;
         consume ens lenv.["a"∷ty_xlenbits ↦ a].["an"∷ty_xlenbits ↦ na].
 
-      Definition cannotated_block_verification_condition {Σ : LCtx}
-        (req : Assertion (Σ ▻ "a"∷ty_xlenbits)) (b : list AnnotInstr)
-        (ens : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits)) : Prop :=
-        (* SHeapSpec does not perform a leakcheck. We could include one here. *)
-        CHeapSpec.run (cexec_annotated_block_triple_addr req b ens).
-
       #[export] Instance mon_cexec_annotated_block_addr {instrs ainstr apc} :
         Proper (MHeapSpec eq) (cexec_annotated_block_addr instrs ainstr apc).
       Proof.
@@ -623,6 +617,12 @@ Module RiscvPmpBlockVerifPartialVerifier
         induction instrs; cbn [cexec_annotated_block_addr]; try solve_monotonic.
         destruct a; solve_monotonic.
       Qed.
+
+      Definition cannotated_block_verification_condition {Σ : LCtx}
+        (req : Assertion (Σ ▻ "a"∷ty_xlenbits)) (b : list AnnotInstr)
+        (ens : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits)) : Prop :=
+        (* SHeapSpec does not perform a leakcheck. We could include one here. *)
+        CHeapSpec.run (cexec_annotated_block_triple_addr req b ens).
 
     End Shallow.
 
