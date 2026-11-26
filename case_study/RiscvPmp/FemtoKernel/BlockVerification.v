@@ -151,6 +151,9 @@ Section BlockVerification.
 
   Definition instr_count (b : list AnnotInstr) : N :=
     N.of_nat (length (filter_AST b)).
+  (* Let [cbn]/[simpl] compute it: otherwise they leave [instr_count] applied
+     to the unfolded code of a block, a large term. *)
+  #[global] Arguments instr_count _ /.
 
   (* The value of term_counter_inc. *)
   Definition counter_inc (inhibited : bool) : bv 64 :=

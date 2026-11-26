@@ -330,9 +330,11 @@ Module Type RiscvPmpIrisBaseCommon <: IrisPrelims RiscvPmpBase RiscvPmpProgram R
       end.
     (* Iris proof-mode tactics must not unfold [ptsto_instrs] while searching for
        instances: the instruction lists are unevaluated expressions whose size
-       grows exponentially when the search reduces them one instruction at a time. *)
+       grows exponentially when the search reduces them one instruction at a time.
+       Likewise, [cbn]/[simpl] must not unfold it into a large term; rewrite with
+       [ptsto_instrs_cons]/[ptsto_instrs_nil] where needed. *)
     #[global] Typeclasses Opaque ptsto_instrs.
-    (* Arguments ptsto_instrs {Σ H} a%_Z_scope instrs%_list_scope : simpl never. *)
+    #[global] Arguments ptsto_instrs : simpl never.
 
     Lemma ptsto_instrs_nil a : ptsto_instrs a [] ⊣⊢ True.
     Proof. done. Qed.
@@ -347,7 +349,7 @@ Module Type RiscvPmpIrisBaseCommon <: IrisPrelims RiscvPmpBase RiscvPmpProgram R
         ⊣⊢ ptsto_instrs a instrs1 ∗ ptsto_instrs (bv.add a (bv.of_nat (length instrs1 * bytes_per_instr))) instrs2.
     Proof.
       iRevert (a).
-      iInduction instrs1 as [|i1 instrs1]; iIntros (a); cbn; iSplit.
+      iInduction instrs1 as [|i1 instrs1]; iIntros (a); cbn; rewrite ?ptsto_instrs_nil ?ptsto_instrs_cons; iSplit.
       - rewrite <- bv.add_of_nat_0_r. now iIntros "$".
       - rewrite <- bv.add_of_nat_0_r. now iIntros "(_ & $)".
       - iIntros "($ & H)".

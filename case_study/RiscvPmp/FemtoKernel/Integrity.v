@@ -351,7 +351,7 @@ Section Integrity.
       iIntros (an) "(Hpost & Hpc & Hinstrs & Hnpc)".
       iEval (cbn - [interp_ptstomem]) in "Hpost".
       iDestruct "Hpost" as "(Hshared & Hmstatus & Han & Hx1 & Hx5 & Hx10)".
-      case_match; iDestruct "Han" as "[-> _]".
+      case_match; iEval (cbn - [interp_ptstomem]) in "Han"; iDestruct "Han" as "[-> _]".
       - (* Power off the machine. *)
         iDestruct "HR" as "(Hnp & Hpow & Hph)".
         iPoseProof (contract_femtohandler_shutdown_verified__l (bv.of_N handler_shutdown_addr) (archstate_after femtokernel_handler_shutdown_check archstate) vmie) as "Htrip'".

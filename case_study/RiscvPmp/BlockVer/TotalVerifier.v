@@ -522,6 +522,7 @@ Module Type RiscvPmpBlockVerifTotalVerifier
           iApply ("Hk" with "[$Htrip $Hpro]").
         - cbn. iDestruct ("Htrip" with "HPRE") as "(_ & Htrip)".
           iDestruct "Hpro" as "(Hpc & Hinstrs & Hnpc)"; cbn.
+          iEval (rewrite ptsto_instrs_cons) in "Hinstrs".
           iDestruct "Hinstrs" as "(Hinstr & Hinstrs)".
           iSpecialize ("Htrip" with "[$]").
           unfold WP_loop at 4.

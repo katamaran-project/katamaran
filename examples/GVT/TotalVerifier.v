@@ -297,7 +297,7 @@ Section BlockVerificationDerived.
       | nil => True%I
       end.
     #[global] Typeclasses Opaque ptsto_instrs.
-    (* Arguments ptsto_instrs {Σ H} a%_Z_scope instrs%_list_scope : simpl never. *)
+    #[global] Arguments ptsto_instrs : simpl never.
 
     Lemma ptsto_instrs_nil a : ptsto_instrs a [] ⊣⊢ True.
     Proof. done. Qed.
@@ -312,7 +312,7 @@ Section BlockVerificationDerived.
       ⊣⊢ ptsto_instrs a instrs1 ∗ ptsto_instrs (bv.add a (bv.of_nat (length instrs1 * bytes_per_instr))) instrs2.
     Proof.
       iRevert (a).
-      iInduction instrs1 as [|i1 instrs1]; iIntros (a); cbn; iSplit.
+      iInduction instrs1 as [|i1 instrs1]; iIntros (a); cbn; rewrite ?ptsto_instrs_nil ?ptsto_instrs_cons; iSplit.
       - rewrite <- bv.add_of_nat_0_r. now iIntros "$".
       - rewrite <- bv.add_of_nat_0_r. now iIntros "(_ & $)".
       - iIntros "($ & H)".
@@ -544,6 +544,7 @@ Section BlockVerificationDerived.
         iApply ("Hk" with "[$Htrip $Hpro]").
       - cbn. iDestruct ("Htrip" with "HPRE") as "(_ & Htrip)".
         iDestruct "Hpro" as "(Hpc & Hinstrs & Hnpc)"; cbn.
+        iEval (rewrite ptsto_instrs_cons) in "Hinstrs".
         iDestruct "Hinstrs" as "(Hinstr & Hinstrs)".
         iSpecialize ("Htrip" with "[$]").
         unfold WP_loop at 4.

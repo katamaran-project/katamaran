@@ -107,6 +107,7 @@ Module BinaryBlockVerifier
       | nil => True%I
       end.
     #[global] Typeclasses Opaque ptsto_instrs.
+    #[global] Arguments ptsto_instrs : simpl never.
 
     Lemma ptsto_instrs_nil a : ptsto_instrs a [] ⊣⊢ True.
     Proof. done. Qed.
@@ -122,9 +123,9 @@ Module BinaryBlockVerifier
         ∗ @RVPCOM.ptsto_instrs _ memGS_right a instrs.
     Proof.
       revert a.
-      iInduction instrs as [|instr instrs] "IH";
-        cbn; auto.
-      iIntros (a). iSplit.
+      iInduction instrs as [|instr instrs] "IH"; iIntros (a);
+        rewrite ?ptsto_instrs_nil ?ptsto_instrs_cons ?RVPCOM.ptsto_instrs_nil ?RVPCOM.ptsto_instrs_cons; auto.
+      iSplit.
       - iIntros "([Hl Hr] & Hinstrs)".
         iDestruct ("IH" with "Hinstrs") as "[$ $]".
         iFrame "Hl Hr".
@@ -255,6 +256,7 @@ Module BinaryBlockVerifier
         iIntros (? ? ? ?) "(<- & _ & $)"; auto.
       - cbn. iDestruct ("Htrip" with "HPRE") as "(_ & Htrip)". fold step_n.
         iDestruct "Hpro" as "(Hpc & Hinstrs & Hnpc)"; cbn.
+        iEval (rewrite ptsto_instrs_cons) in "Hinstrs".
         iDestruct "Hinstrs" as "(Hinstr & Hinstrs)".
         iSpecialize ("Htrip" with "[$Hpc $Hinstr $Hnpc]").
         unfold WP2_loop at 4.
