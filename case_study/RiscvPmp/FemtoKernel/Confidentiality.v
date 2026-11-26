@@ -187,26 +187,56 @@ Section RelationalVerification.
   #[local] Ltac solve_leaf :=
     first [ reflexivity | refine (bi.sep_elim_l _ _) | solve_split_leaf ].
 
-  (* The binary assertion is a tree of pairs, while the goal is a pair of
-     trees. We transpose the two trees node by node instead of framing
-     each individual resource. *)
-  #[local] Ltac split_tree :=
-    first
-      [ lazymatch goal with
-        | |- ((?T1 ∗ ?T2) ⊢ (?L1 ∗ ?L2) ∗ (?R1 ∗ ?R2))%I =>
-            transitivity ((L1 ∗ R1) ∗ (L2 ∗ R2))%I;
-            [ apply bi.sep_mono | apply sep_sep_swap ]
-        end; split_tree
-      | solve_leaf ].
+  (* The number of leaves of a tree of separating conjunctions. *)
+  #[local] Ltac sep_size P :=
+    lazymatch P with
+    | bi_sep ?A ?B => let a := sep_size A in let b := sep_size B in constr:(a + b)
+    | _ => constr:(1)
+    end.
+  #[local] Ltac size_of P := let n := sep_size P in eval cbv in n.
+  #[local] Ltac is_lt m n := let b := eval cbv in (Nat.ltb m n) in constr_eq b true.
 
+  (* The binary assertion is a tree of pairs, while the goal is a pair of
+     trees. We transpose the trees node by node instead of framing each
+     individual resource, which is quadratic in the number of resources.
+     The trees may be associated differently, but their leaves have to come in
+     the same order: when the left subtrees do not have the same number of
+     leaves, the larger ones are reassociated until they do. Where the leaves
+     do not match, the subtree is framed by [solve_split_leaf]. *)
+  #[local] Ltac split_tree :=
+    lazymatch goal with
+    | |- ((?H1 ∗ _) ⊢ (?L1 ∗ _) ∗ (?R1 ∗ _))%I =>
+        let h := size_of H1 in let l := size_of L1 in let r := size_of R1 in
+        let m := eval cbv in (Nat.min h (Nat.min l r)) in
+        tryif (constr_eq h m; constr_eq l m; constr_eq r m)
+        then first [ etrans; [| apply sep_sep_swap];
+                     apply bi.sep_mono; [split_tree | split_tree]
+                   | solve_split_leaf ]
+        else (try (is_lt m h; etrans; [apply bi.sep_assoc' |]);
+              try (is_lt m l; etrans;
+                   [| apply bi.sep_mono_l, bi.equiv_entails_1_1, bi.sep_assoc]);
+              try (is_lt m r; etrans;
+                   [| apply bi.sep_mono_r, bi.equiv_entails_1_1, bi.sep_assoc]);
+              split_tree)
+    | |- _ => solve_leaf
+    end.
+
+  (* The converse of [split_tree]: combine a pair of trees into a tree of pairs. *)
   #[local] Ltac combine_tree :=
-    first
-      [ lazymatch goal with
-        | |- ((?L1 ∗ ?L2) ∗ (?R1 ∗ ?R2) ⊢ ?B1 ∗ ?B2)%I =>
-            transitivity ((L1 ∗ R1) ∗ (L2 ∗ R2))%I;
-            [ apply sep_sep_swap | apply bi.sep_mono ]
-        end; combine_tree
-      | solve_leaf ].
+    lazymatch goal with
+    | |- ((?L1 ∗ _) ∗ (?R1 ∗ _) ⊢ ?B1 ∗ _)%I =>
+        let l := size_of L1 in let r := size_of R1 in let b := size_of B1 in
+        let m := eval cbv in (Nat.min l (Nat.min r b)) in
+        tryif (constr_eq l m; constr_eq r m; constr_eq b m)
+        then first [ etrans; [apply sep_sep_swap |];
+                     apply bi.sep_mono; [combine_tree | combine_tree]
+                   | solve_split_leaf ]
+        else (try (is_lt m l; etrans; [apply bi.sep_mono_l, bi.sep_assoc' |]);
+              try (is_lt m r; etrans; [apply bi.sep_mono_r, bi.sep_assoc' |]);
+              try (is_lt m b; etrans; [| apply bi.equiv_entails_1_1, bi.sep_assoc]);
+              combine_tree)
+    | |- _ => solve_leaf
+    end.
 
   #[local] Ltac extract_leaf :=
     first
@@ -290,7 +320,7 @@ Section RelationalVerification.
     interp_ptstomem2 (bv.of_N data_addr) secret1 secret2 -∗
     asn_interpret_left femtokernel_handler_secret_write_pre (Σ__secret secret1) ∗
     asn_interpret_right femtokernel_handler_secret_write_pre (Σ__secret secret2).
-  Proof. solve_split_leaf. Qed.
+  Proof. solve_binary_split. Qed.
 
   Lemma femtokernel_handler_exit_pre_binary_split `{sailGS2 Σ} (archstate : ArchState) (vmie : Val ty_Minterrupts) :
     let Σ := (csrs_valuation archstate vmie).["a" ∷ ty_xlenbits ↦ bv.of_N handler_exit_addr] in
@@ -323,7 +353,7 @@ Section RelationalVerification.
     asn_interpret_right femtokernel_handler_secret_write_post (Σ secret2 na2) -∗
     ⌜na1 = na2⌝ ∗ asn.interpret femtokernel_handler_secret_write_post_rel (Σ__rel na1)
     ∗ interp_ptstomem2 (bv.of_N data_addr) secret1 secret2.
-  Proof. solve_split_leaf. Qed.
+  Proof. solve_binary_combine. Qed.
 
   Lemma femtokernel_handler_shutdown_check_pre_binary_split `{sailGS2 Σ} (x1 x5 x10 : Val ty_xlenbits) (archstate : ArchState) (vmie : Val ty_Minterrupts) :
     let Σ := (csrs_valuation archstate vmie).["x1" ∷ ty_xlenbits ↦ x1].["x5" ∷ ty_xlenbits ↦ x5].["x10" ∷ ty_xlenbits ↦ x10].["a" ∷ ty_xlenbits ↦ bv.of_N handler_shutdown_check_addr] in
@@ -461,7 +491,7 @@ Section RelationalVerification.
     interp_ptstomem2 (bv.of_N data_addr) secret1 secret2 -∗
     asn_interpret_left femtokernel_handler_dispatch_pre (Σ__secret secret1) ∗
     asn_interpret_right femtokernel_handler_dispatch_pre (Σ__secret secret2).
-  Proof. solve_split_leaf. Qed.
+  Proof. solve_binary_split. Qed.
 
   (* The not_zero and is_zero blocks have the same postcondition, so both
      executions can be recombined at the exit block, independently of the
@@ -682,7 +712,7 @@ Section RelationalVerification.
       iApply ("Hk" with "[//] Hhdispatch Hhnz Hhiz Hdata Hhexit Htrap Hnp Hpow"). }
     iApply (femtokernel_handler_exit_safe_rel
               (archstate_after femtokernel_handler_not_zero (archstate_after femtokernel_handler_dispatch archstate)) _ Hmpp).
-    iFrame "Hpc Hhexit Hmscratch HaccU Hmstatus Hgprs Hk Hinv Hnp Hpl Hpr"; cbn.
+    iEval cbn. iFrame "Hpc Hhexit Hmscratch HaccU Hmstatus Hgprs Hk Hinv Hnp Hpl Hpr".
     iSplitL "Hnpc"; first by iExists _.
     repeat iDestruct "Hshared" as "($ & Hshared)". iFrame "Hshared".
     now iPureIntro.
@@ -780,7 +810,7 @@ Section RelationalVerification.
       iDestruct "Hepi" as "(Hpc & Hinstrs & Hnpc)".
       iEval (cbn - [interp_ptstomem]) in "Hpost".
       iDestruct "Hpost" as "(Hshared & Hmstatus & Han & Hx1 & Hx5 & Hx10)".
-      case_match; iDestruct "Han" as "[-> _]".
+      case_match; iEval (cbn - [interp_ptstomem]) in "Han"; iDestruct "Han" as "[-> _]".
       + (* Power off both machines. *)
         iAssert (semTripleBlock
                    (λ a, asn.interpret femtokernel_handler_shutdown_pre (csrs_valuation (archstate_after femtokernel_handler_shutdown_check archstate) vmie).["a" ∷ ty_xlenbits ↦ a])
