@@ -253,8 +253,7 @@ Section BlockVerificationDerived.
     Import RiscvPmpSymbolicSoundness.StoreT.
     Import RiscvPmpShallowSoundness.
     Import RiscvPmpIrisInstanceWithContracts.
-    Import RiscvPmpSignature.HeapSpec.
-    Import HeapSpec.
+    Import (hints) HeapSpec.
 
     #[export] Instance rexec_instruction (i : AST) {w} :
       Related (RVal ty_xlenbits -> RHeapSpec (RVal ty_xlenbits))
@@ -642,7 +641,7 @@ Section AnnotatedBlockVerification.
     Import logicalrelation logicalrelation.notations.
     Import proofmode.
     Import iris.proofmode.proofmode.
-    Import RiscvPmpSignature.HeapSpec.
+    Import (hints) HeapSpec.
 
     #[export] Instance rexec_annotated_block_addr (b : list AnnotInstr) {w} :
       Related (RVal ty_xlenbits -> RVal ty_xlenbits -> RHeapSpec (RVal ty_xlenbits))
@@ -653,7 +652,7 @@ Section AnnotatedBlockVerification.
         cbn [cexec_annotated_block_addr sexec_annotated_block_addr]; solve_related.
     Qed.
 
-    Lemma rexec_annotated_block_triple_addr {Σ}
+    #[export] Instance rexec_annotated_block_triple_addr {Σ}
       (req : Assertion (Σ ▻ "a"∷ty_xlenbits)) (b : list AnnotInstr)
       (ens : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits)) {w} :
       Related (RHeapSpec RUnit)
@@ -670,8 +669,8 @@ Section AnnotatedBlockVerification.
           (cannotated_block_verification_condition req b ens)
           (sannotated_block_verification_condition req b ens w).
     Proof.
-      iApply HeapSpec.refine_run.
-      iApply rexec_annotated_block_triple_addr.
+      unfold cannotated_block_verification_condition, sannotated_block_verification_condition.
+      solve_related.
     Qed.
 
   End Relational.

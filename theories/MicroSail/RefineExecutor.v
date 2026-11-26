@@ -357,8 +357,7 @@ Module RefineExecOn
     #[export] Instance refine_vcgen (cfg : Config) (fuel : nat) {Γ τ} (c : SepContract Γ τ) (body : Stm Γ τ) w :
       Related (RProp) (SHAL.vcgen cfg fuel c body) w (SYMB.vcgen cfg fuel c body w).
     Proof.
-      iApply HeapSpec.refine_run.
-      iApply StoreT.refine_exec_contract.
+      unfold SHAL.vcgen, SYMB.vcgen. solve_related.
     Qed.
 
   End WithSpec.
